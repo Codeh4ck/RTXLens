@@ -17,7 +17,7 @@ namespace RTXLens.Plugins.GenericNvidia;
 public sealed class GenericNvidiaPluginFactory(NvidiaTelemetryReader reader) : ISensorPluginFactory, IConnectorSourceProvider
 {
     public string Id => GenericNvidiaPlugin.PluginId;
-    public string Name => "GenericNvidia";
+    public string Name => "Nvidia";
     public IWarningSource WarningSource { get; } = new GenericNvidiaWarningSource();
     public PluginCapability[] Capabilities => [PluginCapability.Telemetry, PluginCapability.Configuration, PluginCapability.Restart, PluginCapability.DeviceSelection];
 

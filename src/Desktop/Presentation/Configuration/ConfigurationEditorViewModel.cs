@@ -12,11 +12,14 @@ using RTXLens.Presentation.Infrastructure;
 
 namespace RTXLens.Presentation.Configuration;
 
-public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool localOnly = false) : ObservableObject
+public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool localOnly = false,
+    Func<ServiceConfiguration, ServiceConfiguration, Task>? recordChange = null) : ObservableObject
 {
     private ConfigurationSnapshot? _baseline;
     private PluginCatalog? _catalog;
     private double _streamInterval = 1000;
+    private double _eventLogRetentionDays = MonitoringOptions.DefaultLogRetentionDays;
+    private double _eventLogStorageMb = MonitoringOptions.DefaultLogStorageMb;
     private AsusDeviceInfo[] _devices = [];
     private NvidiaDeviceInfo[] _nvidiaDevices = [];
     private MsiDeviceInfo[] _msiDevices = [];
@@ -70,6 +73,30 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
             MarkDirty();
         }
     } }
+
+    public double EventLogRetentionDays
+    {
+        get => _eventLogRetentionDays;
+        set
+        {
+            if (Set(ref _eventLogRetentionDays, value))
+            {
+                MarkDirty();
+            }
+        }
+    }
+
+    public double EventLogStorageMb
+    {
+        get => _eventLogStorageMb;
+        set
+        {
+            if (Set(ref _eventLogStorageMb, value))
+            {
+                MarkDirty();
+            }
+        }
+    }
 
     public void SetCatalog(PluginCatalog catalog)
     {
@@ -196,11 +223,13 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
             {
                 ConnectorProfiles = ConnectorProfiles.Build(),
                 StreamIntervalMs = NumericInput.Integer(StreamIntervalMs, "Stream interval"),
+                EventLogRetentionDays = NumericInput.Integer(EventLogRetentionDays, "Event log retention"),
+                EventLogStorageMb = NumericInput.Integer(EventLogStorageMb, "Maximum log storage"),
                 Selections = [.. Selections.Select(selection => selection.Build())]
             };
             if (!monitoring.IsValid())
             {
-                throw new ArgumentException("Invalid stream interval or source selection. Check names, scopes, metrics and duplicate sources.");
+                throw new ArgumentException("Invalid streaming settings or source selections. Check the configured limits and source priorities.");
             }
 
             var candidate = _baseline.Configuration with
@@ -209,8 +238,14 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
                 Monitoring = monitoring,
                 Plugins = Plugins.ToDictionary(plugin => plugin.Id, plugin => plugin.Build(), StringComparer.Ordinal)
             };
+            var previous = _baseline.Configuration;
             var updated = await api().SetConfigurationAsync(candidate,
                 _baseline.Version ?? throw new InvalidOperationException("The service must support versioned configuration writes."), token);
+            if (recordChange is not null)
+            {
+                await recordChange(previous, updated.Configuration);
+            }
+
             Load(updated);
             Message = localOnly ? $"Applied to local simulation · revision {updated.Revision}" : $"Applied live · revision {updated.Revision}";
         }
@@ -282,6 +317,8 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
             Warnings.Load(snapshot.Configuration.Warnings);
             Warnings.Edited += MarkDirty;
             _streamInterval = snapshot.Configuration.Monitoring.StreamIntervalMs;
+            _eventLogRetentionDays = snapshot.Configuration.Monitoring.EventLogRetentionDays;
+            _eventLogStorageMb = snapshot.Configuration.Monitoring.EventLogStorageMb;
             foreach (var (id, settings) in snapshot.Configuration.Plugins)
             {
                 var name = _catalog?.Plugins.FirstOrDefault(plugin => plugin.Id == id)?.Name ?? id;
@@ -306,6 +343,8 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
             Message = snapshot.LastError ?? (localOnly ? "Changes apply only to this local simulation. The service and other consumers are unchanged."
                 : "Changes are applied live to the service and all consumers.");
             Raise(nameof(StreamIntervalMs));
+            Raise(nameof(EventLogRetentionDays));
+            Raise(nameof(EventLogStorageMb));
             Raise(nameof(RevisionText));
             Raise(nameof(NvidiaWarnings));
             Raise(nameof(HasNvidiaWarnings));
@@ -326,6 +365,7 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
 
         var original = _baseline.Configuration;
         IsDirty = !ConnectorProfiles.Matches(original.Monitoring.ConnectorProfiles) || !Warnings.Matches(original.Warnings) || !double.IsFinite(StreamIntervalMs) || Math.Abs(StreamIntervalMs - original.Monitoring.StreamIntervalMs) > 0.001
+            || EventLogRetentionDays != original.Monitoring.EventLogRetentionDays || EventLogStorageMb != original.Monitoring.EventLogStorageMb
             || Plugins.Count != original.Plugins.Count
             || Plugins.Any(plugin => !original.Plugins.TryGetValue(plugin.Id, out var settings) || !plugin.Matches(settings))
             || Selections.Count != original.Monitoring.Selections.Count

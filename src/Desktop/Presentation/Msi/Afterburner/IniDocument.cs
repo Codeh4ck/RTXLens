@@ -8,7 +8,7 @@ using System.Text.RegularExpressions;
 namespace RTXLens.Presentation.Msi.Afterburner;
 
 // A lossless editor: untouched lines and all original terminators round-trip byte for byte.
-public sealed partial class IniDocument
+public sealed class IniDocument
 {
     private readonly Encoding _encoding;
     private readonly byte[] _preamble;

@@ -2,8 +2,7 @@ using RTXLens.Plugins.Msi.Contracts.Safeguard;
 
 namespace RTXLens.SafeguardReporting;
 
-internal sealed record SafeguardReport(Guid Id, string ScriptId, DateTimeOffset StartedAt, int? Connector,
-    int? DelayMs, string Status, SafeguardTelemetry? Telemetry)
+internal sealed record SafeguardReport(Guid Id, string ScriptId, DateTimeOffset StartedAt, int? Connector, int? DelayMs, string Status, SafeguardTelemetry? Telemetry)
 {
     public string MachineName { get; init; } = Environment.MachineName;
     public DateTimeOffset? FinishedAt { get; init; }

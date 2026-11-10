@@ -232,7 +232,9 @@ public sealed partial class DeviceWarningProfilesView
             throw new ArgumentException("Enter a profile name and valid thresholds. A shutdown delay must be between 00:01 and 1439:59.");
         }
 
+        var previous = _catalog?.Profiles.FirstOrDefault(item => item.Id == profile.Id);
         await _runtime.SettingsProfileApi.SaveDeviceWarningProfileAsync(profile, _runtime.StopToken);
+        await _runtime.EventLog.RecordAsync($"Warning profile ({profile.Name})", previous, profile);
         await LoadAsync(profile.Id);
         Status.Text = $"Saved {profile.Name}.";
     });
@@ -242,6 +244,7 @@ public sealed partial class DeviceWarningProfilesView
         if (_draft is { } profile)
         {
             await _runtime.SettingsProfileApi.DeleteDeviceWarningProfileAsync(profile.Id, _runtime.StopToken);
+            await _runtime.EventLog.RecordAsync<DeviceWarningProfile?>($"Warning profile ({profile.Name})", profile, null);
             await LoadAsync();
             Status.Text = $"Deleted {profile.Name}.";
         }

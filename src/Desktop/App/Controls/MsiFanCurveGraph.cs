@@ -10,7 +10,7 @@ using Windows.Foundation;
 
 namespace RTXLens.App.Controls;
 
-internal sealed class MsiFanCurveGraph : Grid, IDisposable
+internal sealed partial class MsiFanCurveGraph : Grid, IDisposable
 {
     private readonly Canvas _plot = new() { Background = new SolidColorBrush(Colors.Transparent) };
     private readonly Canvas _live = new() { IsHitTestVisible = false };

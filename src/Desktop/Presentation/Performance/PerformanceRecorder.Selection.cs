@@ -11,7 +11,7 @@ public sealed partial class PerformanceRecorder
     {
         var settings = _settings.GetValueOrDefault("msi-psu");
         if (settings is not { Enabled: true }
-            || !snapshot.Plugins.Any(plugin => plugin.PluginId == "msi-psu" && plugin.State == PluginState.Ready))
+            || !snapshot.Plugins.Any(plugin => plugin is { PluginId: "msi-psu", State: PluginState.Ready }))
         {
             _activeMsiConnectors.Clear();
             return;

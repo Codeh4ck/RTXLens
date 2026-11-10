@@ -20,6 +20,7 @@
             <SolidColorBrush x:Key="MonitorCautionSurface" Color="#FFF1D8" />
             <SolidColorBrush x:Key="MonitorDanger" Color="#B12E48" />
             <SolidColorBrush x:Key="MonitorDangerSurface" Color="#FCE7EC" />
+            <SolidColorBrush x:Key="MonitorWireViewFaultSurface" Color="#702034" />
             <StaticResource x:Key="ExpanderHeaderBackground" ResourceKey="MonitorPanel" />
             <StaticResource x:Key="ExpanderHeaderForeground" ResourceKey="MonitorForeground" />
             <StaticResource x:Key="ExpanderHeaderForegroundPointerOver" ResourceKey="MonitorForeground" />
@@ -56,6 +57,7 @@
             <SolidColorBrush x:Key="MonitorCautionSurface" Color="#392B17" />
             <SolidColorBrush x:Key="MonitorDanger" Color="#FF819A" />
             <SolidColorBrush x:Key="MonitorDangerSurface" Color="#3A1E2B" />
+            <StaticResource x:Key="MonitorWireViewFaultSurface" ResourceKey="MonitorDangerSurface" />
             <StaticResource x:Key="ExpanderHeaderBackground" ResourceKey="MonitorPanel" />
             <StaticResource x:Key="ExpanderHeaderForeground" ResourceKey="MonitorForeground" />
             <StaticResource x:Key="ExpanderHeaderForegroundPointerOver" ResourceKey="MonitorForeground" />

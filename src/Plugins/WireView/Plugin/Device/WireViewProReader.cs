@@ -111,7 +111,7 @@ public sealed class WireViewProReader(ILogger<WireViewPlugin> logger) : IWireVie
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "Error probing or reading WireView on {Port}", portName);
+                    logger.LogDebug(ex, "Error probing or reading WireView on {Port}", portName);
                 }
 
                 DisposePort();
@@ -131,7 +131,7 @@ public sealed class WireViewProReader(ILogger<WireViewPlugin> logger) : IWireVie
 
         if (!Monitor.TryEnter(_portGate, LockTimeoutMs))
         {
-            logger.LogWarning("Could not acquire port lock on {Port}, skipping poll", PortName);
+            logger.LogDebug("Could not acquire port lock on {Port}, skipping poll", PortName);
             return null;
         }
 
@@ -433,7 +433,7 @@ public sealed class WireViewProReader(ILogger<WireViewPlugin> logger) : IWireVie
 
         if (!SupportedDevices.TryGetValue((vendorData[0], vendorData[1]), out var model))
         {
-            logger.LogWarning("Unsupported WireView device on {Port}: vendor {VendorId:X2}, product {ProductId:X2}",
+            logger.LogDebug("Unsupported WireView device on {Port}: vendor {VendorId:X2}, product {ProductId:X2}",
 
                 port.PortName, vendorData[0], vendorData[1]);
             return false;

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using RTXLens.Core.Diagnostics;
 using RTXLens.Plugins.Msi.Contracts.Configuration;
 using RTXLens.Plugins.Msi.Protocol;
 
@@ -6,11 +7,13 @@ namespace RTXLens.Plugins.Msi.Control;
 
 internal sealed class MsiFanControlSession(ILogger logger)
 {
+    internal const string ActivitySource = "MSI MPG Ai1300TS / Ai1600TS";
     private readonly MsiFanCurveController _curve = new();
     private bool _ownsFan;
     private bool _curveInitialized;
     private MsiFanControl _appliedControl;
     private int _appliedDuty;
+    private bool _restoreFailed;
 
     public int? TargetDuty { get; private set; }
     public string? Failure { get; private set; }
@@ -53,6 +56,8 @@ internal sealed class MsiFanControlSession(ILogger logger)
 
         if (!_ownsFan || _appliedControl != hardwareMode || _appliedDuty != duty)
         {
+            var returningToAutomatic = mode == MsiFanControl.Curve && _ownsFan && _appliedControl == MsiFanControl.Manual
+                && hardwareMode == MsiFanControl.Automatic;
             _ownsFan = true;
 
             exchange(MsiProtocol.FanRequest(hardwareMode == MsiFanControl.Automatic, duty), 1);
@@ -61,11 +66,22 @@ internal sealed class MsiFanControlSession(ILogger logger)
             _appliedDuty = duty;
 
             Verify(hardwareMode, duty, exchange);
+            if (hardwareMode == MsiFanControl.Automatic)
+            {
+                LogAutomaticRecovery();
+            }
+
+            if (returningToAutomatic)
+            {
+                logger.LogActivity(LogLevel.Information, "msi.fan-automatic", ActivitySource,
+                    "The fan curve handed fan control back to the PSU.");
+            }
         }
     }
 
     public void Fail(Exception exception, Func<byte[], int, byte[]> exchange)
     {
+        var firstFailure = Failure is null;
         Failure ??= exception.Message;
         TargetDuty = null;
 
@@ -75,10 +91,26 @@ internal sealed class MsiFanControlSession(ILogger logger)
         try
         {
             RestoreAutomatic(exchange);
+            if (firstFailure && exception is not OperationCanceledException)
+            {
+                logger.LogActivity(LogLevel.Warning, "msi.fan-fallback", ActivitySource,
+                    "Fan control encountered an error. The PSU is back in Automatic mode.", exception.GetType().Name,
+                    eventViewer: true);
+            }
         }
         catch (Exception restoreError)
         {
-            logger.LogError(restoreError, "Could not restore automatic MSI PSU fan control");
+            LogRestoreFailure(restoreError);
+        }
+    }
+
+    internal void LogRestoreFailure(Exception error)
+    {
+        if (!_restoreFailed)
+        {
+            _restoreFailed = true;
+            logger.LogActivity(LogLevel.Error, "msi.fan-restore-failed", ActivitySource,
+                "Could not restore Automatic PSU fan control.", eventViewer: true, exception: error);
         }
     }
 
@@ -134,6 +166,16 @@ internal sealed class MsiFanControlSession(ILogger logger)
 
         _ownsFan = false;
         _appliedControl = MsiFanControl.Unmanaged;
+        LogAutomaticRecovery();
+    }
+
+    private void LogAutomaticRecovery()
+    {
+        if (_restoreFailed)
+        {
+            _restoreFailed = false;
+            logger.LogActivity(LogLevel.Information, "msi.fan-automatic-restored", ActivitySource, "Automatic PSU fan control was restored.");
+        }
     }
 
     private static void Verify(MsiFanControl control, int duty, Func<byte[], int, byte[]> exchange)

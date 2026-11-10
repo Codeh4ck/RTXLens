@@ -17,9 +17,10 @@ public sealed record MsiFanCurve
     public MsiFanCurvePoint[] Points { get; init; } = [new(30, 50), new(75, 100)];
     public int ResponseDelaySeconds { get; init; } = 2;
 
-    // Accept older configuration files without writing the obsolete field back out.
+    // System.Text.Json binds the legacy constructor parameter to this instance property.
+    // Keep it null so the obsolete field is omitted when saving.
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? DecreaseDelaySeconds => null;
+    public int? DecreaseDelaySeconds { get; }
 
     public static int EffectiveDutyPercent(int duty) => duty is >= 0 and < 25 ? 0 : duty;
 

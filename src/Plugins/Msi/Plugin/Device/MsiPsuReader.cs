@@ -137,7 +137,7 @@ public sealed class MsiPsuReader(ILogger<MsiPsuReader> logger) : IMsiPsuReader
         }
         catch (Exception exception)
         {
-            logger.LogError(exception, "Could not restore automatic MSI PSU fan control");
+            _fan.LogRestoreFailure(exception);
         }
         finally
         {

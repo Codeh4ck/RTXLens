@@ -25,6 +25,7 @@ internal sealed partial class AppRuntime
 
         var window = new MsiFanCurveWindow(CurrentApi, Preferences,
             configuration.ReceiveMsiCurveUpdate,
+            RecordConfigurationChangeAsync,
             () =>
             {
                 var current = configuration.Plugins.FirstOrDefault(plugin => plugin.IsMsi)?.Msi;

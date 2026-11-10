@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using RTXLens.Contracts.Health;
+using RTXLens.Contracts.Diagnostics;
 using RTXLens.Contracts.Sensors;
 using RTXLens.Contracts.Discovery;
 
@@ -7,6 +8,8 @@ namespace RTXLens.Service;
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, UseStringEnumConverter = true)]
 [JsonSerializable(typeof(SensorSnapshot))]
+[JsonSerializable(typeof(ServiceLogEntry))]
+[JsonSerializable(typeof(ServiceLogPage))]
 [JsonSerializable(typeof(HealthResponse))]
 [JsonSerializable(typeof(Contracts.Updates.ServiceVersionResponse))]
 [JsonSerializable(typeof(PluginCatalog))]

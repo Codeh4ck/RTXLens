@@ -20,7 +20,8 @@ public sealed class MsiPluginFactory(TimeProvider clock, ILoggerFactory loggerFa
     public PluginCapability[] Capabilities => [PluginCapability.Telemetry, PluginCapability.Configuration, PluginCapability.Restart, PluginCapability.DeviceSelection];
     public PluginSettings CreateDefaultSettings() => MsiSettings.WithOptions(new PluginSettings(), new MsiOptions());
     public void ValidateSettings(PluginSettings settings) => MsiSettings.GetOptions(settings);
-    public ISensorPlugin Create(PluginSettings settings) => new MsiPlugin(settings, clock, new MsiPsuReader(loggerFactory.CreateLogger<MsiPsuReader>()));
+    public ISensorPlugin Create(PluginSettings settings) => new MsiPlugin(settings, clock,
+        new MsiPsuReader(loggerFactory.CreateLogger<MsiPsuReader>()), loggerFactory.CreateLogger<MsiPlugin>());
     public JsonElement ReadBootstrapOptions(IConfigurationSection section) => JsonSerializer.SerializeToElement(
         section.Get<MsiOptions>(binding => binding.ErrorOnUnknownConfiguration = true) ?? new MsiOptions(), MsiJsonContext.Default.MsiOptions);
 

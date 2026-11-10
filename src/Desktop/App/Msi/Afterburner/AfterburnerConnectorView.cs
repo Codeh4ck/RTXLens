@@ -6,7 +6,7 @@ using RTXLens.Presentation.Msi.Afterburner;
 
 namespace RTXLens.App.Msi.Afterburner;
 
-internal sealed class AfterburnerConnectorView : UserControl
+internal sealed partial class AfterburnerConnectorView : UserControl
 {
     private readonly CheckBox _enabled;
     private readonly RadioButton _lowPower;
@@ -27,10 +27,13 @@ internal sealed class AfterburnerConnectorView : UserControl
 
     internal int Connector { get; }
     internal bool HasPendingChanges => Saved is { } saved
-        && (_invalidNumericInput || (_enabled.IsChecked == true) != saved.AlarmConfigured || (_lowPower.IsChecked == true) != saved.LowPowerAction
-            || (_script.IsChecked == true && _scripts.SelectedItem is SafeguardScriptDefinition selected
-                && (_binding?.ScriptId != selected.Id || _binding?.Id != saved.ScriptBindingId))
-            || (double.IsFinite(_timeout.Value) ? (int?)checked((int)_timeout.Value) : null) != saved.AlarmTimeoutMs);
+                                       && (_invalidNumericInput || (_enabled.IsChecked == true) != saved.AlarmConfigured ||
+                                           (_lowPower.IsChecked == true) != saved.LowPowerAction
+                                           || (_script.IsChecked == true && _scripts.SelectedItem is SafeguardScriptDefinition selected
+                                                                         && (_binding?.ScriptId != selected.Id ||
+                                                                             _binding?.Id != saved.ScriptBindingId))
+                                           || (double.IsFinite(_timeout.Value) ? checked((int)_timeout.Value) : null) != saved.AlarmTimeoutMs);
+
     internal AfterburnerConnectorSettings Draft
     {
         get
@@ -82,17 +85,20 @@ internal sealed class AfterburnerConnectorView : UserControl
                 }
             }
         };
+
         _lowPower = new RadioButton
         {
             Name = "Connector" + connector + "LowPower",
             GroupName = "Connector" + connector + "Action",
             Content = "Run emergency low-power profile on alarm"
         };
+
         _script = new RadioButton
         {
             GroupName = _lowPower.GroupName,
             Content = "Run script"
         };
+
         _scripts = new ComboBox
         {
             PlaceholderText = "Select a Safeguard+ script",
@@ -105,11 +111,14 @@ internal sealed class AfterburnerConnectorView : UserControl
         var scriptActions = new Grid { ColumnSpacing = 8 };
         scriptActions.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         scriptActions.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
         Grid.SetColumn(_configure, 1);
+
         scriptActions.Children.Add(_scripts);
         scriptActions.Children.Add(_configure);
 
         _scriptStatus = new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
+
         var body = new StackPanel { Spacing = 10 };
         body.Children.Add(_enabled);
         body.Children.Add(_timeout);
@@ -118,6 +127,7 @@ internal sealed class AfterburnerConnectorView : UserControl
         body.Children.Add(scriptActions);
         body.Children.Add(_simulationWarning);
         body.Children.Add(_scriptStatus);
+
         Content = body;
 
         _timeout.ValueChanged += OnTimeoutChanged;
@@ -135,11 +145,11 @@ internal sealed class AfterburnerConnectorView : UserControl
         _scripts.SelectedItem = SafeguardScripts.All.FirstOrDefault(script => script.FileName == saved.BuiltInScriptFileName);
         _invalidNumericInput = false;
         _enabled.IsChecked = saved.AlarmConfigured;
-        _timeout.Value = saved.AlarmTimeoutMs is { } timeout ? timeout : double.NaN;
+        _timeout.Value = saved.AlarmTimeoutMs ?? double.NaN;
         _lowPower.IsChecked = saved.LowPowerAction;
         _script.IsChecked = !saved.LowPowerAction;
-        _scripts.PlaceholderText = saved.Application.Length > 0 && !saved.LowPowerAction && saved.ScriptBindingId is null
-            ? "Existing custom action (preserved)" : "Select a Safeguard+ script";
+        _scripts.PlaceholderText = saved.Application.Length > 0 && saved is { LowPowerAction: false, ScriptBindingId: null } ? "Existing custom action (preserved)" : "Select a Safeguard+ script";
+
         UpdateScriptControls();
     }
 
@@ -147,14 +157,16 @@ internal sealed class AfterburnerConnectorView : UserControl
     {
         var selected = _scripts.SelectedItem as SafeguardScriptDefinition;
         var enabled = _script.IsChecked == true;
+
         _scripts.IsEnabled = enabled;
         _configure.IsEnabled = enabled && selected is not null && _installation is not null;
         _simulationWarning.IsOpen = enabled && selected?.IsSimulation == true;
+
         if (enabled && selected is not null && _binding is { } binding && binding.ScriptId == selected.Id)
         {
             var delayLabel = selected.IsSimulation ? "Simulated shutdown delay" : "Shutdown delay";
-            _scriptStatus.Text = $"{delayLabel}: {binding.DelayMs:N0} ms" + (selected.SendsMail ? " · SMTP configured" : "")
-                + ". Run Afterburner as administrator.";
+            _scriptStatus.Text = $"{delayLabel}: {binding.DelayMs:N0} ms" + (selected.SendsMail ? " · SMTP configured" : "") + ". Run Afterburner as administrator.";
+
             _scriptStatus.Visibility = Visibility.Visible;
         }
         else
@@ -173,8 +185,9 @@ internal sealed class AfterburnerConnectorView : UserControl
 
         try
         {
-            var previous = _binding is { } existing && (existing.ScriptId == selected.Id || (selected.SendsMail && existing.MailId is not null))
-                ? existing : null;
+            var previous = _binding is { } existing
+                           && (existing.ScriptId == selected.Id || (selected.SendsMail && existing.MailId is not null)) ? existing : null;
+
             if (await new SafeguardScriptDialog(selected, previous).ShowAsync(XamlRoot, installation, Connector) is { } binding)
             {
                 _binding = binding;
@@ -190,12 +203,12 @@ internal sealed class AfterburnerConnectorView : UserControl
 
     internal void CommitPendingEdits() => _invalidNumericInput = !AfterburnerNumericInput.Commit(_timeout);
 
-    private void OnTimeoutChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
+    private static void OnTimeoutChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
     {
         if (double.IsFinite(args.NewValue))
         {
             var rounded = Math.Round(args.NewValue, MidpointRounding.AwayFromZero);
-            if (rounded != args.NewValue)
+            if (Math.Abs(rounded - args.NewValue) > 0.001)
             {
                 sender.Value = rounded;
             }

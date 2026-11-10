@@ -13,7 +13,7 @@ public sealed record SafeguardBinding(Guid Id, string ScriptId, int Version, int
         var definition = SafeguardScripts.Get(ScriptId);
         SafeguardScripts.ValidateDelay(DelayMs);
 
-        if (Id == Guid.Empty || Connector is not (1 or 2) || Version != definition.Version
+        if (Id == Guid.Empty || Connector is not (1 or 2) || Version != SafeguardScriptDefinition.Version
             || !Path.IsPathFullyQualified(AfterburnerPath)
             || !string.Equals(Path.GetFileName(AfterburnerPath), "MSIAfterburner.exe", StringComparison.OrdinalIgnoreCase)
             || definition.SendsMail != (MailId is { } id && id != Guid.Empty)

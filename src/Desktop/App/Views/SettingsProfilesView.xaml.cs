@@ -63,9 +63,12 @@ public sealed partial class SettingsProfilesView : UserControl
             throw new ArgumentException("Select a profile first.");
         }
 
+        var previous = _catalog;
         var settings = includeEdits ? Build(save) : null;
         var catalog = await _runtime.SettingsProfileApi.ApplySettingsProfileAsync(new SettingsProfileRequest(selected.Id, settings, save), _runtime.StopToken);
 
+        await _runtime.EventLog.RecordAsync("GPU chart profile", new { previous?.SelectedId, previous?.Effective },
+            new { SelectedId = (string?)catalog.SelectedId, catalog.Effective });
         LoadCatalog(catalog);
 
         Status.Text = save ? $"Saved and selected {settings!.Name}." : includeEdits ? "Applied for this service session." : $"Selected {selected.Name}.";

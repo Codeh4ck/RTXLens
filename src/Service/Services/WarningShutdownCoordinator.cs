@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Text.Json;
 using RTXLens.Contracts.Configuration;
+using RTXLens.Core.Diagnostics;
 using RTXLens.Service.Configuration;
 
 namespace RTXLens.Service.Services;
@@ -20,6 +21,7 @@ internal sealed class WindowsWarningShutdown : IWarningShutdown
             UseShellExecute = false,
             CreateNoWindow = true
         };
+
         foreach (var argument in new[] { "/s", "/t", "0", "/d", "p:0:0", "/c", "RTX Lens protection warning" })
         {
             start.ArgumentList.Add(argument);
@@ -33,8 +35,7 @@ internal sealed class WindowsWarningShutdown : IWarningShutdown
     }
 }
 
-internal sealed class WarningShutdownCoordinator(RuntimeConfigurationFile configurationFile, TimeProvider clock,
-    IWarningShutdown shutdown, ILogger<WarningShutdownCoordinator> logger)
+internal sealed class WarningShutdownCoordinator(RuntimeConfigurationFile configurationFile, TimeProvider clock, IWarningShutdown shutdown, ILogger<WarningShutdownCoordinator> logger)
 {
     private readonly Lock _gate = new();
     private readonly Dictionary<string, Countdown> _countdowns = new(StringComparer.Ordinal);
@@ -55,6 +56,13 @@ internal sealed class WarningShutdownCoordinator(RuntimeConfigurationFile config
         foreach (var warning in candidates)
         {
             remaining.Add(warning.Key);
+            if (!_countdowns.ContainsKey(warning.Key))
+            {
+                logger.LogActivity(LogLevel.Warning, "protection.shutdown-countdown", DeviceWarningEvaluator.SourceLabel(warning.Profile),
+                    $"Shutdown countdown started for {warning.Definition.Title}.",
+                    $"Delay: {warning.Profile.ShutdownAfterSeconds} seconds.");
+            }
+
             if (!_countdowns.TryGetValue(warning.Key, out var timer) || timer.Profile != warning.Profile
                 || timer.Limits != warning.Limits || warning.ObservedAt < timer.Last
                 || warning.ObservedAt - timer.Last > warning.MaxAge)
@@ -65,8 +73,7 @@ internal sealed class WarningShutdownCoordinator(RuntimeConfigurationFile config
             timer = timer with { Last = warning.ObservedAt };
             _countdowns[warning.Key] = timer;
 
-            if (_failed.Contains(warning.Key)
-                || warning.ObservedAt - timer.Start < TimeSpan.FromSeconds(warning.Profile.ShutdownAfterSeconds!.Value))
+            if (_failed.Contains(warning.Key) || warning.ObservedAt - timer.Start < TimeSpan.FromSeconds(warning.Profile.ShutdownAfterSeconds!.Value))
             {
                 continue;
             }
@@ -82,8 +89,14 @@ internal sealed class WarningShutdownCoordinator(RuntimeConfigurationFile config
 
         foreach (var key in _countdowns.Keys.Where(key => !remaining.Contains(key)).ToArray())
         {
+            var countdown = _countdowns[key];
             _countdowns.Remove(key);
-            _failed.Remove(key);
+
+            if (!_failed.Remove(key))
+            {
+                logger.LogActivity(LogLevel.Information, "protection.shutdown-cancelled", DeviceWarningEvaluator.SourceLabel(countdown.Profile),
+                    "Shutdown countdown cancelled because the warning is no longer confirmed.");
+            }
         }
     }
 
@@ -111,8 +124,7 @@ internal sealed class WarningShutdownCoordinator(RuntimeConfigurationFile config
     {
         try
         {
-            return File.Exists(ReasonPath)
-                ? JsonSerializer.Deserialize(File.ReadAllText(ReasonPath), AppJsonContext.Default.WarningShutdownReason) : null;
+            return File.Exists(ReasonPath) ? JsonSerializer.Deserialize(File.ReadAllText(ReasonPath), AppJsonContext.Default.WarningShutdownReason) : null;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -129,19 +141,25 @@ internal sealed class WarningShutdownCoordinator(RuntimeConfigurationFile config
         lock (_gate)
         {
             var recorded = false;
+
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(ReasonPath)!);
                 SettingsProfileStore.WriteAtomically(ReasonPath, JsonSerializer.Serialize(reason, AppJsonContext.Default.WarningShutdownReason));
+
                 recorded = true;
 
-                logger.LogWarning("Requesting Windows shutdown for {Warning} ({Profile}): {Detail}", reason.Warning, reason.ProfileName, reason.Detail);
+                logger.LogActivity(LogLevel.Warning, "protection.shutdown-requested", reason.Source,
+                    $"Requesting Windows shutdown for {reason.Warning}.", reason.ProfileName, eventViewer: true);
+
                 shutdown.Request();
+
                 return true;
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException or Win32Exception)
             {
-                logger.LogError(error, "Could not request warning shutdown");
+                logger.LogActivity(LogLevel.Error, "protection.shutdown-failed", reason.Source,
+                    "The service could not request Windows shutdown.", reason.Warning, eventViewer: true, exception: error);
 
                 if (recorded)
                 {

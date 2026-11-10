@@ -19,6 +19,7 @@ internal sealed partial class MsiFanCurveWindow : Window
     private readonly IMonitoringApi _api;
     private readonly Action<ConfigurationSnapshot, MsiFanCurve, string> _onSaved;
     private readonly Action _restoreDefaults;
+    private readonly Func<ServiceConfiguration, ServiceConfiguration, Task> _recordChange;
     private readonly MsiFanCurveGraph _graph = new();
     private readonly DispatcherQueueTimer _timer;
     private readonly CancellationTokenSource _stop = new();
@@ -32,11 +33,12 @@ internal sealed partial class MsiFanCurveWindow : Window
     public MsiSettingsEditorViewModel Model => _model;
     internal FrameworkElement ThemeRoot => Root;
 
-    internal MsiFanCurveWindow(IMonitoringApi api, AppPreferences preferences,
-        Action<ConfigurationSnapshot, MsiFanCurve, string> onSaved, Action restoreDefaults)
+    internal MsiFanCurveWindow(IMonitoringApi api, AppPreferences preferences, Action<ConfigurationSnapshot, MsiFanCurve, string> onSaved,
+        Func<ServiceConfiguration, ServiceConfiguration, Task> recordChange, Action restoreDefaults)
     {
         _api = api;
         _onSaved = onSaved;
+        _recordChange = recordChange;
         _restoreDefaults = restoreDefaults;
         InitializeComponent();
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "monitor.ico"));
@@ -47,8 +49,11 @@ internal sealed partial class MsiFanCurveWindow : Window
         _timer = Root.DispatcherQueue.CreateTimer();
         _timer.Interval = TimeSpan.FromSeconds(1);
         _timer.Tick += OnTick;
+
         Closed += OnClosed;
+
         Root.SizeChanged += (_, _) => LayoutEditor();
+
         SetActionsEnabled(false);
     }
 
@@ -91,6 +96,7 @@ internal sealed partial class MsiFanCurveWindow : Window
             }
 
             _graph.UpdateLive(snapshot);
+
             TemperatureValue.Text = $"{snapshot.TemperatureC:0} °C";
             FanRpmValue.Text = $"{snapshot.FanRpm:0} ({snapshot.FanDutyPercent}%)";
             RequestedDutyValue.Text = snapshot.TargetFanDutyPercent is { } target ? target + "%" : "-";
@@ -103,6 +109,7 @@ internal sealed partial class MsiFanCurveWindow : Window
             if (!_closed)
             {
                 _graph.UpdateLive(null);
+
                 TemperatureValue.Text = FanRpmValue.Text = RequestedDutyValue.Text = "-";
                 LiveStatus.Text = "Live PSU readings unavailable - " + exception.Message;
                 LiveStatus.Visibility = Visibility.Visible;
@@ -198,11 +205,15 @@ internal sealed partial class MsiFanCurveWindow : Window
 
         var options = settings.Options?.Deserialize(ClientJsonContext.Default.MsiOptions) ?? new MsiOptions();
         options.Validate();
+
         _baseline = baseline;
+
         _model.Edited -= OnEdited;
         _model = new MsiSettingsEditorViewModel(options with { FanControl = MsiFanControl.Curve });
         _model.Edited += OnEdited;
+
         Bindings.Update();
+
         _graph.SetModel(Model);
     }
 
@@ -234,8 +245,10 @@ internal sealed partial class MsiFanCurveWindow : Window
                 ["msi-psu"] = settings with { Options = JsonSerializer.SerializeToElement(options, ClientJsonContext.Default.MsiOptions) }
             };
 
-            var saved = await _api.SetConfigurationAsync(_baseline.Configuration with { Plugins = plugins },
-                version, _stop.Token);
+            var previous = _baseline.Configuration;
+            var saved = await _api.SetConfigurationAsync(previous with { Plugins = plugins }, version, _stop.Token);
+            await _recordChange(previous, saved.Configuration);
+
             _onSaved(saved, options.FanCurve, version);
 
             if (!_closed)
@@ -289,7 +302,7 @@ internal sealed partial class MsiFanCurveWindow : Window
                 rounded = 0;
             }
 
-            if (args.NewValue != rounded)
+            if (Math.Abs(args.NewValue - rounded) > 0.001)
             {
                 sender.Value = rounded;
             }
@@ -308,10 +321,14 @@ internal sealed partial class MsiFanCurveWindow : Window
     private void OnClosed(object sender, WindowEventArgs args)
     {
         _closed = true;
+
         _timer.Stop();
         _timer.Tick -= OnTick;
+
         _stop.Cancel();
+
         _model.Edited -= OnEdited;
+
         _graph.Dispose();
         _stop.Dispose();
     }

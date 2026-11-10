@@ -1,4 +1,7 @@
+using Microsoft.Extensions.Logging;
 using RTXLens.Contracts.Configuration;
+using RTXLens.Core.Diagnostics;
+using RTXLens.Plugins.Msi.Control;
 using RTXLens.Contracts.Enums;
 using RTXLens.Core.Plugins;
 using RTXLens.Plugins.Msi.Configuration;
@@ -10,7 +13,7 @@ using RTXLens.Plugins.Msi.Mapping;
 
 namespace RTXLens.Plugins.Msi;
 
-public sealed class MsiPlugin(PluginSettings settings, TimeProvider clock, IMsiPsuReader reader) : ISensorPlugin
+public sealed class MsiPlugin(PluginSettings settings, TimeProvider clock, IMsiPsuReader reader, ILogger<MsiPlugin>? logger = null) : ISensorPlugin
 {
     public const string PluginId = "msi-psu";
     private MsiOptions _options = MsiSettings.GetOptions(settings);
@@ -25,6 +28,8 @@ public sealed class MsiPlugin(PluginSettings settings, TimeProvider clock, IMsiP
             || _options.FanDutyPercent != options.FanDutyPercent || !_options.FanCurve.Matches(options.FanCurve))
         {
             reader.ReleaseFanControl();
+            logger?.LogActivity(LogLevel.Information, "msi.fan-settings-changed", MsiFanControlSession.ActivitySource,
+                "PSU fan settings applied.", $"Mode: {options.FanControl}.");
         }
 
         _options = options;

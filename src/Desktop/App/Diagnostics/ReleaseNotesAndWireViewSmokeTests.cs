@@ -169,7 +169,7 @@ internal static class ReleaseNotesAndWireViewSmokeTests
             .Where(dictionary => dictionary.ThemeDictionaries.ContainsKey(theme))
             .Select(dictionary => (ResourceDictionary)dictionary.ThemeDictionaries[theme]).Last();
         var danger = ((SolidColorBrush)palette["MonitorDanger"]).Color;
-        var surface = ((SolidColorBrush)palette["MonitorDangerSurface"]).Color;
+        var surface = ((SolidColorBrush)palette["MonitorWireViewFaultSurface"]).Color;
 
         var faultValue = model.FaultStatus.Value;
         var logValue = model.FaultLogStatus.Value;
@@ -201,12 +201,12 @@ internal static class ReleaseNotesAndWireViewSmokeTests
             var frame = VisualTreeQuery.Descendants<Border>(host).Single(border => border.Name == "HeadlineCard");
             var labels = VisualTreeQuery.Descendants<TextBlock>(frame).ToArray();
             var actual = ((SolidColorBrush)frame.BorderBrush).Color == danger
-                && ((SolidColorBrush)frame.Background).Color == surface
-                && labels.All(label => ((SolidColorBrush)label.Foreground).Color == danger);
+                && ((SolidColorBrush)frame.Background).Color == surface;
+            var whiteText = labels.All(label => ((SolidColorBrush)label.Foreground).Color == Microsoft.UI.Colors.White);
 
-            if (actual != highlighted)
+            if (actual != highlighted || whiteText != highlighted)
             {
-                throw new InvalidOperationException($"{metric.Label} must highlight its entire card only while faults are reported.");
+                throw new InvalidOperationException($"{metric.Label} must use a red card with white text only while faults are reported.");
             }
         }
     }

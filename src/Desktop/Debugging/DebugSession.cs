@@ -173,7 +173,10 @@ public sealed class DebugSession : ObservableObject
             _monitoringOverride = new MonitoringOptions
             {
                 ConnectorProfiles = configuration.Monitoring.ConnectorProfiles,
-                StreamIntervalMs = configuration.Monitoring.StreamIntervalMs, Selections = [.. configuration.Monitoring.Selections]
+                StreamIntervalMs = configuration.Monitoring.StreamIntervalMs,
+                EventLogRetentionDays = configuration.Monitoring.EventLogRetentionDays,
+                EventLogStorageMb = configuration.Monitoring.EventLogStorageMb,
+                Selections = [.. configuration.Monitoring.Selections]
             };
         }
         finally
@@ -322,7 +325,10 @@ public sealed class DebugSession : ObservableObject
         var monitoring = new MonitoringOptions
         {
             ConnectorProfiles = sourceMonitoring.ConnectorProfiles,
-            StreamIntervalMs = sourceMonitoring.StreamIntervalMs, Selections = [.. sourceMonitoring.Selections]
+            StreamIntervalMs = sourceMonitoring.StreamIntervalMs,
+            EventLogRetentionDays = sourceMonitoring.EventLogRetentionDays,
+            EventLogStorageMb = sourceMonitoring.EventLogStorageMb,
+            Selections = [.. sourceMonitoring.Selections]
         };
 
         var configuration = new ConfigurationSnapshot(_revision, new ServiceConfiguration { Plugins = settings, Monitoring = monitoring, Warnings = _warningOverride ?? _liveConfiguration.Configuration.Warnings },

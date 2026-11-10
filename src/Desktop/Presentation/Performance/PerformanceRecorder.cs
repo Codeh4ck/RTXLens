@@ -198,7 +198,7 @@ public sealed partial class PerformanceRecorder(TimeProvider? timeProvider = nul
             }
 
             RefreshAvailability();
-            if (!_traces.Values.Any(state => state.Selected && state.Available && IsActiveConnector(state.Trace)))
+            if (!_traces.Values.Any(state => state is { Selected: true, Available: true } && IsActiveConnector(state.Trace)))
             {
                 throw new InvalidOperationException("Select at least one available metric before recording.");
             }

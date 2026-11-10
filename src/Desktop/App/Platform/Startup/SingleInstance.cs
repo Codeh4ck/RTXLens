@@ -9,16 +9,17 @@ internal sealed partial class SingleInstance : IDisposable
 
     public SingleInstance(bool diagnostic = false)
     {
-        _mutex = new Mutex(false, @"Local\RTXLens.App." + Environment.UserName + (diagnostic ? ".SmokeTest" : string.Empty), out var created);
+        var name = $@"Local\{DesktopBuild.InstanceName}.{Environment.UserName}";
+        _mutex = new Mutex(false, name + (diagnostic ? ".SmokeTest" : string.Empty), out var created);
         IsFirst = created;
     }
 
     public static void ShowExisting()
     {
-        var window = NativeMethods.FindWindowW(null, "RTX Lens");
+        var window = NativeMethods.FindWindowW(null, DesktopBuild.WindowTitle);
         if (window != 0)
         {
-            var message = NativeMethods.RegisterWindowMessageW("RTXLens.App.Show");
+            var message = NativeMethods.RegisterWindowMessageW(DesktopBuild.ShowMessageName);
             NativeMethods.PostMessageW(window, message, 0, 0);
         }
     }

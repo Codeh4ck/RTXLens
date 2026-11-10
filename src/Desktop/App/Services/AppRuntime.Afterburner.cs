@@ -8,7 +8,7 @@ internal sealed partial class AppRuntime
 {
     internal AfterburnerSettingsWindow? AfterburnerWindow { get; private set; }
 
-    internal async Task<bool> IsAfterburnerInstalledAsync()
+    internal static async Task<bool> IsAfterburnerInstalledAsync()
     {
         try
         {
