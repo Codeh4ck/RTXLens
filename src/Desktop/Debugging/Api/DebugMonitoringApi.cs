@@ -6,7 +6,6 @@ using RTXLens.Contracts.Enums;
 using RTXLens.Contracts.Health;
 using RTXLens.Contracts.Sensors;
 using RTXLens.Debugging.Models;
-using RTXLens.Debugging.Catalog;
 using RTXLens.Plugins.Asus.Contracts.Common;
 using RTXLens.Plugins.Msi.Contracts.Devices;
 using RTXLens.Plugins.WireView.Contracts.Common;
@@ -35,7 +34,22 @@ public sealed class DebugMonitoringApi(DebugSession session, TimeProvider clock)
         return Task.FromResult(Current.Configuration);
     }
 
-    public Task<DeviceConfig> GetWireViewConfigurationAsync(CancellationToken token) => Task.FromResult(DebugDeviceDefaults.WireView());
+    public Task<DeviceConfig> GetWireViewConfigurationAsync(CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        var configuration = session.GetSimulatedWireViewConfiguration()
+            ?? throw new IOException("The simulated WireView is not available.");
+
+        // Refresh should reload the editor even when the saved values are unchanged.
+        return Task.FromResult(configuration with { });
+    }
+
+    public Task<DeviceConfig> ApplyWireViewConfigurationAsync(DeviceConfig changes, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        return Task.FromResult(session.ApplySimulatedWireViewConfiguration(changes));
+    }
+
     public Task<RTXLens.Plugins.GenericNvidia.Contracts.Devices.NvidiaDeviceInfo[]> GetNvidiaDevicesAsync(CancellationToken token) =>
         Task.FromResult<RTXLens.Plugins.GenericNvidia.Contracts.Devices.NvidiaDeviceInfo[]>([new(session.Plugins.Single(plugin => plugin.Id == "generic-nvidia").DeviceId, "DEBUG GeForce RTX GPU", "debug-nvidia")]);
 

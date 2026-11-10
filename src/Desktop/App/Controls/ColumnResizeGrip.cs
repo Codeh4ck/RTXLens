@@ -3,7 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace RTXLens.App.Controls;
 
-public sealed class ColumnResizeGrip : Grid
+public sealed partial class ColumnResizeGrip : Grid
 {
     public ColumnResizeGrip()
     {

@@ -39,6 +39,7 @@ internal static class DebugSessionTests
         runner.Run(ResetAllDiscardsLocalConfigurationAndOverrides);
         runner.Run(ResolvesSelectionsAgainstTheEffectiveReadings);
         await runner.RunAsync(ConfigurationAndDeviceCommandsRemainLocalAsync);
+        await runner.RunAsync(WireViewSettingsAreEditableOnlyForTheCurrentSimulatedDeviceAsync);
     }
 
     private static void StartsDisabledAndBuildsAllPluginsWithoutAService()
@@ -276,6 +277,43 @@ internal static class DebugSessionTests
         await api.ClearWireViewFaultsAsync(new ClearFaultsRequest { FaultStatusMask = ushort.MaxValue }, CancellationToken.None);
         TestAssert.Equal("debug.invalid", api.Address.Host);
         TestAssert.Throws<InvalidOperationException>(() => session.SetConfiguration(original.Configuration, original.Version!));
+    }
+
+    private static async Task WireViewSettingsAreEditableOnlyForTheCurrentSimulatedDeviceAsync()
+    {
+        var session = Simulated();
+        var wireView = session.Plugins.Single(plugin => plugin.Id == "wireview-pro2");
+        var api = new DebugMonitoringApi(session, TimeProvider.System);
+        var initial = await api.GetWireViewConfigurationAsync(CancellationToken.None);
+        var display = initial.Display ?? throw new InvalidOperationException("The editor requires a complete display configuration.");
+
+        TestAssert.Throws<ArgumentException>(() => session.ApplySimulatedWireViewConfiguration(
+            initial with { WireOcpFaultThresholdA = 9.25 }));
+
+        var changes = initial with { FriendlyName = "Edited in simulation", Display = display with { Rotation = 1 } };
+        var saved = await api.ApplyWireViewConfigurationAsync(changes, CancellationToken.None);
+
+        TestAssert.Equal(changes.FriendlyName, saved.FriendlyName);
+        TestAssert.Equal(changes.Display, saved.Display);
+        var reloaded = await api.GetWireViewConfigurationAsync(CancellationToken.None);
+        TestAssert.Equal(saved, reloaded);
+        TestAssert.False(ReferenceEquals(saved, reloaded), "Refresh must return a new snapshot so the editor discards unsaved edits.");
+        TestAssert.Throws<InvalidOperationException>(() => session.ApplySimulatedWireViewConfiguration(changes));
+
+        wireView.ModeIndex = (int)DebugSourceMode.Override;
+        TestAssert.Equal(null, session.GetSimulatedWireViewConfiguration());
+        TestAssert.Throws<InvalidOperationException>(() => session.ApplySimulatedWireViewConfiguration(saved));
+
+        wireView.ModeIndex = (int)DebugSourceMode.Simulated;
+        wireView.DeviceId = "debug-wireview-replacement";
+        TestAssert.Throws<InvalidOperationException>(() => session.ApplySimulatedWireViewConfiguration(saved));
+
+        session.Enabled = false;
+        session.Enabled = true;
+        var restarted = await api.GetWireViewConfigurationAsync(CancellationToken.None);
+        TestAssert.Equal(initial.FriendlyName, restarted.FriendlyName);
+        TestAssert.Equal(display, restarted.Display);
+        TestAssert.True(initial.EditToken != restarted.EditToken, "A new simulation must reject drafts from the previous session.");
     }
 
     private static DebugSession Simulated()

@@ -469,11 +469,19 @@ internal sealed partial class AppRuntime
         var panel = Dashboard.Panels.FirstOrDefault(item => item.IsWireView);
         var api = CurrentApi;
         var device = panel?.DeviceText;
+        var simulation = IsWireViewDeviceSimulated;
         panel?.SetDeviceConfigurationStatus("Reading device settings...");
         try
         {
-            var configuration = await api.GetWireViewConfigurationAsync(StopToken);
-            if (panel is not { IsReporting: true } || panel.DeviceText != device || !ReferenceEquals(api, CurrentApi)
+            var configuration =
+#if TELEMETRY_DEBUG
+                Debug.Enabled && !simulation
+                    ? _liveWireViewConfiguration ?? throw new IOException("No live WireView settings are cached. Disable simulation to read the device.")
+                    :
+#endif
+                    await api.GetWireViewConfigurationAsync(StopToken);
+
+            if (panel is not { IsReporting: true } || panel.DeviceText != device || simulation != IsWireViewDeviceSimulated || !ReferenceEquals(api, CurrentApi)
                 || !ReferenceEquals(panel, Dashboard.Panels.FirstOrDefault(item => item.IsWireView)))
             {
                 return;
@@ -484,8 +492,8 @@ internal sealed partial class AppRuntime
                 _liveWireViewConfiguration = configuration;
             }
 #endif
-            panel?.SetDeviceConfiguration(configuration);
-            OperationCompleted?.Invoke("WireView device settings read");
+            panel.SetDeviceConfiguration(configuration, simulation ? "Simulated WireView settings loaded." : null);
+            OperationCompleted?.Invoke(simulation ? "Simulated WireView settings loaded" : "WireView device settings read");
         }
         catch (Exception exception) when (exception is HttpRequestException or MonitoringApiException or IOException
             or OperationCanceledException or System.Text.Json.JsonException)

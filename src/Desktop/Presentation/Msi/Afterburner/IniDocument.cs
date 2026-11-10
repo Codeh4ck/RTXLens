@@ -191,31 +191,26 @@ public sealed class IniDocument
 
     private static (Encoding, byte[], string) DecodeEncoding(byte[] bytes)
     {
-        if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+        switch (bytes.Length)
         {
-            return (new UTF8Encoding(false, true), [0xEF, 0xBB, 0xBF], "UTF-8 BOM");
-        }
-
-        if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
-        {
-            return (new UnicodeEncoding(false, false, true), [0xFF, 0xFE], "UTF-16 LE");
-        }
-
-        if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
-        {
-            return (new UnicodeEncoding(true, false, true), [0xFE, 0xFF], "UTF-16 BE");
-        }
-
-        try
-        {
-            var utf8 = new UTF8Encoding(false, true);
-            _ = utf8.GetString(bytes);
-            return (utf8, [], "UTF-8 / ASCII");
-        }
-        catch (DecoderFallbackException)
-        {
-            // One-to-one byte mapping keeps legacy ANSI files intact without guessing their code page.
-            return (Encoding.GetEncoding(28591), [], "ANSI (original bytes preserved)");
+            case >= 3 when bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF:
+                return (new UTF8Encoding(false, true), [0xEF, 0xBB, 0xBF], "UTF-8 BOM");
+            case >= 2 when bytes[0] == 0xFF && bytes[1] == 0xFE:
+                return (new UnicodeEncoding(false, false, true), [0xFF, 0xFE], "UTF-16 LE");
+            case >= 2 when bytes[0] == 0xFE && bytes[1] == 0xFF:
+                return (new UnicodeEncoding(true, false, true), [0xFE, 0xFF], "UTF-16 BE");
+            default:
+                try
+                {
+                    var utf8 = new UTF8Encoding(false, true);
+                    _ = utf8.GetString(bytes);
+                    return (utf8, [], "UTF-8 / ASCII");
+                }
+                catch (DecoderFallbackException)
+                {
+                    // One-to-one byte mapping keeps legacy ANSI files intact without guessing their code page.
+                    return (Encoding.GetEncoding(28591), [], "ANSI (original bytes preserved)");
+                }
         }
     }
 

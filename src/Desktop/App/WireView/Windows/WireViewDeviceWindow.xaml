@@ -4,35 +4,57 @@
     xmlns:controls="using:RTXLens.App.Controls"
     Title="RTX Lens · WireView device settings">
     <Grid x:Name="Root" Background="{ThemeResource MonitorBackground}" Padding="20" RowDefinitions="Auto,*" RowSpacing="14">
-        <StackPanel Spacing="8">
-            <TextBlock Text="WireView device settings" Style="{StaticResource MonitorHeading}" />
-            <TextBlock Text="Read only - firmware thresholds and fan settings. Device writes are not supported." Style="{StaticResource MonitorCaption}" />
-        </StackPanel>
-        <Border Grid.Row="1" Style="{StaticResource MonitorCard}">
-            <Grid RowDefinitions="Auto,*" RowSpacing="14">
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                    <StackPanel Spacing="8">
-                        <StackPanel Orientation="Horizontal" Spacing="9">
-                            <controls:WidgetIcon IconName="settings" Width="28" Height="28" />
-                            <TextBlock Text="Device configuration" Style="{StaticResource MonitorSectionHeading}" VerticalAlignment="Center" />
-                        </StackPanel>
-                        <TextBlock x:Name="StatusText" Style="{StaticResource MonitorCaption}" TextWrapping="Wrap" />
+        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="14">
+            <StackPanel Spacing="6">
+                <StackPanel Orientation="Horizontal" Spacing="9">
+                    <controls:WidgetIcon IconName="settings" Width="32" Height="32" />
+                    <TextBlock Text="WireView device settings" Style="{StaticResource MonitorHeading}" VerticalAlignment="Center" />
+                </StackPanel>
+                <TextBlock x:Name="FirmwareText" Text="Firmware: unavailable" Style="{StaticResource MonitorSectionHeading}" />
+                <TextBlock x:Name="SettingsDescription" Text="Apply saves your changes to the WireView." Style="{StaticResource MonitorCaption}" TextWrapping="Wrap" />
+                <TextBlock x:Name="StatusText" Style="{StaticResource MonitorCaption}" TextWrapping="Wrap" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+                <Button x:Name="RefreshButton" Click="Refresh_Click" AutomationProperties.Name="Refresh device settings">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <Image Width="16" Height="16">
+                            <Image.Source>
+                                <SvgImageSource UriSource="ms-appx:///Assets/Icons/refresh.svg" />
+                            </Image.Source>
+                        </Image>
+                        <TextBlock Text="Refresh" VerticalAlignment="Center" />
                     </StackPanel>
-                    <Button x:Name="RefreshButton" Grid.Column="1" Click="Refresh_Click" VerticalAlignment="Center" AutomationProperties.Name="Refresh device settings">
-                        <StackPanel Orientation="Horizontal" Spacing="7">
-                            <Image Width="16" Height="16">
-                                <Image.Source>
-                                    <SvgImageSource UriSource="ms-appx:///Assets/Icons/refresh.svg" />
-                                </Image.Source>
-                            </Image>
-                            <TextBlock Text="Refresh" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                </Grid>
-                <ScrollViewer x:Name="SettingsScroll" Grid.Row="1" Padding="0,0,20,0" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                    <StackPanel x:Name="RowsHost" Spacing="8" />
-                </ScrollViewer>
-            </Grid>
-        </Border>
+                </Button>
+                <Button x:Name="ApplyButton" Click="Apply_Click" IsEnabled="False" AutomationProperties.Name="Apply device settings">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <Image Width="16" Height="16">
+                            <Image.Source>
+                                <SvgImageSource UriSource="ms-appx:///Assets/Icons/wireview-apply.svg" />
+                            </Image.Source>
+                        </Image>
+                        <TextBlock Text="Apply" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+            <InfoBar x:Name="ApplyResult" Grid.Row="1" Grid.ColumnSpan="2" Margin="0,8,0,0" IsOpen="False" IsClosable="True">
+                <InfoBar.Resources>
+                    <ResourceDictionary>
+                        <ResourceDictionary.ThemeDictionaries>
+                            <ResourceDictionary x:Key="Default">
+                                <SolidColorBrush x:Key="InfoBarSuccessSeverityBackgroundBrush" Color="#143F2B" />
+                                <SolidColorBrush x:Key="InfoBarSuccessSeverityIconBackground" Color="#64E5A7" />
+                            </ResourceDictionary>
+                            <ResourceDictionary x:Key="Light">
+                                <SolidColorBrush x:Key="InfoBarSuccessSeverityBackgroundBrush" Color="#DDF5E7" />
+                                <SolidColorBrush x:Key="InfoBarSuccessSeverityIconBackground" Color="#14734A" />
+                            </ResourceDictionary>
+                        </ResourceDictionary.ThemeDictionaries>
+                    </ResourceDictionary>
+                </InfoBar.Resources>
+            </InfoBar>
+        </Grid>
+        <ScrollViewer x:Name="SettingsScroll" Grid.Row="1" Padding="0,0,20,0" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="RowsHost" Spacing="12" />
+        </ScrollViewer>
     </Grid>
 </Window>

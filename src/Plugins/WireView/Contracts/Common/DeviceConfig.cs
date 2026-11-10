@@ -1,7 +1,15 @@
 namespace RTXLens.Plugins.WireView.Contracts.Common;
 
-public class DeviceConfig
+public sealed record DeviceConfig
 {
+    public static IReadOnlyList<string> AveragingOptions { get; } = Array.AsReadOnly(new[]
+    {
+        "22ms", "44ms", "89ms", "177ms", "354ms", "709ms", "1417ms", "2834ms", "5668ms"
+    });
+
+    public string? EditToken { get; init; }
+    public byte? FirmwareVersion { get; init; }
+    public DeviceDisplayConfig? Display { get; init; }
     public int Version { get; init; }
     public string FriendlyName { get; init; } = string.Empty;
     public byte BacklightDuty { get; init; }

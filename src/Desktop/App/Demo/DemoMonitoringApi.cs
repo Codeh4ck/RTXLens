@@ -19,11 +19,13 @@ namespace RTXLens.App.Demo;
 
 internal sealed class DemoMonitoringApi : IMonitoringApi
 {
-    public Task<Contracts.Updates.ServiceVersionResponse?> GetVersionAsync(CancellationToken token) =>
-        Task.FromResult<Contracts.Updates.ServiceVersionResponse?>(new(1, "1.0.0"));
-
     private readonly Lock _gate = new();
     private readonly DateTimeOffset _started = DateTimeOffset.UtcNow;
+    private readonly Core.ConnectorProfileResolver _profiles = RTXLens.Debugging.Processing.SimulationConnectorProfiles.CreateResolver();
+    private long _sequence;
+    private readonly Warnings.WarningEngine _warnings = new(RTXLens.Debugging.Catalog.DebugWarningCatalog.Registry);
+    private readonly HashSet<string> _unavailable = [];
+
     private ConfigurationSnapshot _configuration = new(1, new ServiceConfiguration
     {
         Monitoring = new() { ConnectorProfiles = RTXLens.Debugging.Processing.SimulationConnectorProfiles.CreateResolver().CreateDefaults() },
@@ -35,10 +37,9 @@ internal sealed class DemoMonitoringApi : IMonitoringApi
             ["generic-nvidia"] = new() { Options = JsonSerializer.SerializeToElement(new RTXLens.Plugins.GenericNvidia.Contracts.Configuration.GenericNvidiaOptions(), ClientJsonContext.Default.GenericNvidiaOptions) }
         }
     }, Version: "demo:1");
-    private readonly Core.ConnectorProfileResolver _profiles = RTXLens.Debugging.Processing.SimulationConnectorProfiles.CreateResolver();
-    private long _sequence;
-    private readonly Warnings.WarningEngine _warnings = new(RTXLens.Debugging.Catalog.DebugWarningCatalog.Registry);
-    private readonly HashSet<string> _unavailable = [];
+
+    public Task<Contracts.Updates.ServiceVersionResponse?> GetVersionAsync(CancellationToken token) =>
+        Task.FromResult<Contracts.Updates.ServiceVersionResponse?>(new(1, "1.0.0"));
 
     internal void SetDeviceAvailable(string pluginId, bool available)
     {
@@ -69,7 +70,9 @@ internal sealed class DemoMonitoringApi : IMonitoringApi
             }
 
             var options = settings.Options?.Deserialize(ClientJsonContext.Default.MsiOptions) ?? new MsiOptions();
+
             const double temperature = 48;
+
             var duty = MsiFanDuty(options, temperature);
 
             return Task.FromResult(new RTXLens.Plugins.Msi.Contracts.Telemetry.MsiSnapshot(
@@ -92,9 +95,9 @@ internal sealed class DemoMonitoringApi : IMonitoringApi
             var upperIndex = Array.FindIndex(options.FanCurve.Points, point => point.TemperatureC >= temperature);
             var upper = options.FanCurve.Points[upperIndex < 0 ? ^1 : upperIndex];
             var lower = options.FanCurve.Points[Math.Max(0, upperIndex - 1)];
+
             duty = upperIndex <= 0 ? upper.DutyPercent
-                : (int)Math.Round(lower.DutyPercent + (temperature - lower.TemperatureC)
-                    / (upper.TemperatureC - lower.TemperatureC) * (upper.DutyPercent - lower.DutyPercent),
+                : (int)Math.Round(lower.DutyPercent + ((temperature - lower.TemperatureC) / (upper.TemperatureC - lower.TemperatureC) * (upper.DutyPercent - lower.DutyPercent)),
                     MidpointRounding.AwayFromZero);
         }
 
@@ -112,7 +115,13 @@ internal sealed class DemoMonitoringApi : IMonitoringApi
         {
             return Task.FromResult(new PluginCatalog(1, [
                 .. _configuration.Configuration.Plugins.Select(pair => new PluginInfo(pair.Key,
-                    pair.Key == "wireview-pro2" ? "WireView Pro 2" : pair.Key == "msi-psu" ? "MSI MPG Ai1300TS" : pair.Key == "generic-nvidia" ? "GenericNvidia" : "ASUS ROG Astral",
+                    pair.Key switch
+                    {
+                        "wireview-pro2" => "WireView Pro 2",
+                        "msi-psu" => "MSI MPG Ai1300TS",
+                        "generic-nvidia" => "GenericNvidia",
+                        _ => "ASUS ROG Astral"
+                    },
                     pair.Value.Enabled,
                     pair.Value.Enabled ? PluginState.Ready : PluginState.Disabled, DateTimeOffset.UtcNow, "Simulated hardware",
                     pair.Key == "wireview-pro2"
@@ -146,6 +155,7 @@ internal sealed class DemoMonitoringApi : IMonitoringApi
 
             var revision = _configuration.Revision + 1;
             _configuration = new ConfigurationSnapshot(revision, configuration, Version: "demo:" + revision);
+
             return Task.FromResult(_configuration);
         }
     }
@@ -181,11 +191,13 @@ internal sealed class DemoMonitoringApi : IMonitoringApi
             var readings = new List<SensorReading>();
             var health = new List<PluginHealth>();
             var wave = Math.Sin((now - _started).TotalSeconds * 0.6);
+
             foreach (var (id, settings) in configuration.Configuration.Plugins)
             {
                 var reporting = settings.Enabled && !unavailable.Contains(id);
                 health.Add(new PluginHealth(id, !settings.Enabled ? PluginState.Disabled : reporting ? PluginState.Ready : PluginState.NoDevice,
                     reporting ? now : null, reporting ? "DEMO telemetry" : "DEMO device not connected"));
+
                 if (!reporting)
                 {
                     continue;
@@ -198,20 +210,23 @@ internal sealed class DemoMonitoringApi : IMonitoringApi
                         var sum = 0d;
                         for (var pin = 1; pin <= 6; pin++)
                         {
-                            var current = connector == 1 ? 5.6 + pin * 0.1 + wave * 0.4 : 0;
+                            var current = connector == 1 ? 5.6 + (pin * 0.1) + (wave * 0.4) : 0;
                             sum += current;
                             readings.Add(new SensorReading(new SensorIdentity(id, "demo-psu", SensorComponent.PsuPin, SensorMetric.Current,
                                 pin, connector.ToString()), SensorUnit.Amperes, current, now));
                         }
+
                         readings.Add(new SensorReading(new SensorIdentity(id, "demo-psu", SensorComponent.PsuConnector, SensorMetric.Current,
                             ConnectorId: connector.ToString()), SensorUnit.Amperes, sum, now));
                     }
                     var options = settings.Options?.Deserialize(ClientJsonContext.Default.MsiOptions) ?? new MsiOptions();
                     var duty = MsiFanDuty(options, 48 + wave);
+
                     AddPsu(SensorMetric.Temperature, 48 + wave);
                     AddPsu(SensorMetric.FanSpeed, duty * 21, 1);
                     AddPsu(SensorMetric.FanDuty, duty, 1);
                     AddPsu(SensorMetric.FanAutomatic, duty == 0 ? 1 : 0, 1);
+
                     continue;
 
                     void AddPsu(SensorMetric metric, double value, int? channel = null) => readings.Add(new SensorReading(
@@ -220,18 +235,26 @@ internal sealed class DemoMonitoringApi : IMonitoringApi
 
                 var device = id == "wireview-pro2" ? "demo-com3" : "demo-gpu0";
                 var total = 0d;
+
                 for (var pin = 1; id != "generic-nvidia" && pin <= 6; pin++)
                 {
-                    var current = 5.8 + pin * 0.09 + wave * 0.8;
+                    var current = 5.8 + (pin * 0.09) + (wave * 0.8);
                     total += current;
+
                     Add(SensorComponent.GpuPin, SensorMetric.Current, current, pin);
-                    Add(SensorComponent.GpuPin, SensorMetric.Voltage, 12.02 - pin * 0.005, pin);
+                    Add(SensorComponent.GpuPin, SensorMetric.Voltage, 12.02 - (pin * 0.005), pin);
                     Add(SensorComponent.GpuPin, SensorMetric.Power, current * 12, pin);
                 }
-                if (id == "generic-nvidia") total = 36;
+
+                if (id == "generic-nvidia")
+                {
+                    total = 36;
+                }
+
                 Add(SensorComponent.GpuConnector, SensorMetric.Voltage, 12, 1);
                 Add(SensorComponent.GpuConnector, SensorMetric.Power, total * 12, 1);
                 Add(SensorComponent.GpuConnector, SensorMetric.Current, total, 1);
+
                 if (id == "wireview-pro2")
                 {
                     Add(SensorComponent.MonitorBoard, SensorMetric.Temperature, 38 + wave, 1);
@@ -250,18 +273,22 @@ internal sealed class DemoMonitoringApi : IMonitoringApi
                         Add(SensorComponent.GpuFan, SensorMetric.FanDuty, 45, 2);
                     }
 
-                    Add(SensorComponent.GpuCore, SensorMetric.Clock, 2780 + wave * 50);
+                    Add(SensorComponent.GpuCore, SensorMetric.Clock, 2780 + (wave * 50));
                     Add(SensorComponent.GpuMemory, SensorMetric.Clock, 14000);
-                    Add(SensorComponent.GpuCore, SensorMetric.Temperature, 67 + wave * 2);
-                    Add(SensorComponent.GpuMemory, SensorMetric.Temperature, 76 + wave * 2);
+                    Add(SensorComponent.GpuCore, SensorMetric.Temperature, 67 + (wave * 2));
+                    Add(SensorComponent.GpuMemory, SensorMetric.Temperature, 76 + (wave * 2));
                     Add(SensorComponent.GpuFan, SensorMetric.FanSpeed, 1450, 1);
                     Add(SensorComponent.GpuFan, SensorMetric.FanSpeed, 1480, 2);
-                    Add(SensorComponent.GpuCore, SensorMetric.Utilization, 93 + wave * 2);
+                    Add(SensorComponent.GpuCore, SensorMetric.Utilization, 93 + (wave * 2));
                     Add(SensorComponent.GpuMemory, SensorMetric.Utilization, 48);
                     Add(SensorComponent.GpuMemory, SensorMetric.MemoryUsed, 15900);
                     Add(SensorComponent.GpuMemory, SensorMetric.MemoryFree, 16868);
                     Add(SensorComponent.GpuMemory, SensorMetric.MemoryTotal, 32768);
-                    if (id == "asus-astral") Add(SensorComponent.GpuBoard, SensorMetric.Power, total * 12 + 38);
+
+                    if (id == "asus-astral")
+                    {
+                        Add(SensorComponent.GpuBoard, SensorMetric.Power, (total * 12) + 38);
+                    }
                 }
 
                 continue;
@@ -272,7 +299,9 @@ internal sealed class DemoMonitoringApi : IMonitoringApi
 
             var snapshot = new SensorSnapshot(1, ++_sequence, now, [.. readings], [.. health], [], configuration.Revision);
             snapshot = _profiles.Resolve(snapshot, configuration.Configuration);
+
             yield return snapshot with { Warnings = _warnings.Evaluate(snapshot, configuration.Configuration, now) };
+            
             await Task.Delay(configuration.Configuration.Monitoring.StreamIntervalMs, token);
         }
     }

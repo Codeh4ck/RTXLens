@@ -17,7 +17,7 @@ public sealed record EventLogRow(ServiceLogEntry Entry, EventLogColumnWidths Wid
     private static Visibility Visible(bool visible) => visible ? Visibility.Visible : Visibility.Collapsed;
 }
 
-public sealed class EventLogColumnWidths : INotifyPropertyChanged
+public sealed partial class EventLogColumnWidths : INotifyPropertyChanged
 {
     private readonly double[] _widths = [165, 115, 175, 400];
     private bool _messageResized;
