@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "releaseTag": "v1.0.7",
-  "desktop": "1.0.7",
-  "service": "1.0.7",
-  "widget": "1.0.7"
+  "releaseTag": "v1.0.8",
+  "desktop": "1.0.8",
+  "service": "1.0.8",
+  "widget": "1.0.8"
 }

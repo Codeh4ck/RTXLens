@@ -11,7 +11,7 @@ public sealed record SafeguardParameterDefinition(string Name, string Label, Saf
 public sealed record SafeguardScriptDefinition(string Id, string Name, string FileName,
     IReadOnlyDictionary<string, SafeguardParameterDefinition> Parameters)
 {
-    public int Version => 1;
+    public static int Version => 1;
     public bool SendsMail => Parameters.ContainsKey("Host");
     public bool IsSimulation => Id == SafeguardScripts.Simulation;
     public override string ToString() => Name;

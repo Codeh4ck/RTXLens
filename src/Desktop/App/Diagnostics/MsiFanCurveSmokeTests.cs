@@ -56,7 +56,7 @@ internal static class MsiFanCurveSmokeTests
         {
             var latest = await api.GetConfigurationAsync(default);
             var options = latest.Configuration.Plugins["msi-psu"].Options!.Value.Deserialize(ClientJsonContext.Default.MsiOptions)!;
-            return options.FanControl == MsiFanControl.Curve && options.FanCurve.Points.Length == 3;
+            return options is { FanControl: MsiFanControl.Curve, FanCurve.Points.Length: 3 };
         });
 
         await Task.Delay(1200);
@@ -65,7 +65,7 @@ internal static class MsiFanCurveSmokeTests
         runtime.SetDemoDeviceAvailable("msi-psu", false);
         await WaitAsync(() => Task.FromResult(
             VisualTreeQuery.Descendants<TextBlock>(window.ThemeRoot).Any(text =>
-                text.Name == "LiveStatus" && text.Visibility == Visibility.Visible
+                text is { Name: "LiveStatus", Visibility: Visibility.Visible }
                 && text.Text.Contains("No current MSI PSU snapshot is available."))));
 
         if (!ReferenceEquals(window, runtime.FanCurveWindow)
@@ -80,7 +80,7 @@ internal static class MsiFanCurveSmokeTests
         runtime.SetDemoDeviceAvailable("msi-psu", true);
         await WaitAsync(() => Task.FromResult(
             VisualTreeQuery.Descendants<TextBlock>(window.ThemeRoot).Any(text =>
-                text.Name == "LiveStatus" && text.Visibility == Visibility.Collapsed)));
+                text is { Name: "LiveStatus", Visibility: Visibility.Collapsed })));
 
         // Saving an outdated draft must show the API conflict rather than close the app.
         var beforeConflict = await api.GetConfigurationAsync(default);
@@ -88,11 +88,11 @@ internal static class MsiFanCurveSmokeTests
         Invoke(window.ThemeRoot, "Apply");
         await WaitAsync(() => Task.FromResult(
             VisualTreeQuery.Descendants<InfoBar>(window.ThemeRoot).Any(bar =>
-                bar.Name == "EditorError" && bar.IsOpen && bar.Message.Contains("Demo configuration changed"))));
+                bar is { Name: "EditorError", IsOpen: true } && bar.Message.Contains("Demo configuration changed"))));
         Invoke(window.ThemeRoot, "Revert / reload");
         await WaitAsync(() => Task.FromResult(
             VisualTreeQuery.Descendants<InfoBar>(window.ThemeRoot).Any(bar =>
-                bar.Name == "EditorError" && !bar.IsOpen)));
+                bar is { Name: "EditorError", IsOpen: false })));
 
         await WaitAsync(() => Task.FromResult(
             VisualTreeQuery.Descendants<NumberBox>(window.ThemeRoot).Any(input => input.Header as string == "Temp (°C)")));
@@ -207,7 +207,7 @@ internal static class MsiFanCurveSmokeTests
         if (!values.Any(text => text.Text == "Temp.")
             || !values.Any(text => text.Name == "TemperatureValue" && text.Text.EndsWith("°C"))
             || !values.Any(text => text.Name == "FanRpmValue" && text.Text.Contains("(0%)"))
-            || !values.Any(text => text.Name == "RequestedDutyValue" && text.Text == "0%")
+            || !values.Any(text => text is { Name: "RequestedDutyValue", Text: "0%" })
             || VisualTreeQuery.Descendants<Border>(window.ThemeRoot).Count(border =>
                 border.Name is "TemperatureBadge" or "FanRpmBadge" or "RequestedDutyBadge") != 3)
         {

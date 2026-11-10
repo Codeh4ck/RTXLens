@@ -1,4 +1,5 @@
 using Microsoft.UI.Dispatching;
+using RTXLens.App.Platform;
 using RTXLens.App.Platform.Startup;
 using RTXLens.App.Platform.Tray;
 using RTXLens.Client.Http;
@@ -16,6 +17,9 @@ internal sealed partial class AppRuntime
 {
     private readonly CancellationTokenSource _stop = new();
     private readonly PreferencesStore _store;
+    private AppPreferences _lastSavedPreferences;
+    private readonly SemaphoreSlim _preferenceSaveGate = new(1);
+    internal DesktopEventLog EventLog { get; }
     private readonly bool _diagnostic;
     private readonly DispatcherQueue _dispatcher;
     private readonly SemaphoreSlim _connectionGate = new(1);
@@ -41,6 +45,7 @@ internal sealed partial class AppRuntime
         ? WinRT.Interop.WindowNative.GetWindowHandle(window) : 0;
 
     public bool IsDemo { get; }
+    internal bool CanRegisterStartup => !DesktopBuild.IsDebug && !IsDemo;
     public AppPreferences Preferences => Settings.Value;
     public AppSettingsViewModel Settings { get; }
     private readonly DashboardViewModel _liveDashboard = new();
@@ -76,9 +81,9 @@ internal sealed partial class AppRuntime
 #endif
         _dispatcher = dispatcher;
         _diagnostic = diagnostic;
-        var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RTXLens");
+        var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), DesktopBuild.DataDirectoryName);
         string? migrationError = null;
-        if (!diagnostic && !IsDemo)
+        if (!diagnostic && CanRegisterStartup)
         {
             try
             {
@@ -91,13 +96,20 @@ internal sealed partial class AppRuntime
         }
 
         _store = new PreferencesStore(Path.Combine(directory, diagnostic ? "smoke-preferences.json" : demo ? "demo-preferences.json" : "preferences.json"));
-        Settings = new AppSettingsViewModel(_store.Load());
+        _lastSavedPreferences = _store.Load();
+        Settings = new AppSettingsViewModel(_lastSavedPreferences);
+        EventLog = new DesktopEventLog(Path.Combine(directory,
+            diagnostic ? "smoke-events.json" : demo ? "demo-events.json" : "desktop-events.json"));
         _startupEnabled = Settings.Value.StartWithWindows;
         Settings.Message = migrationError ?? _store.LastError ?? string.Empty;
         Settings.Changed += PreferencesChanged;
         InitializeUpdates(directory);
-        InitializeSafeguard();
-        _liveConfiguration = new ConfigurationEditorViewModel(() => _api);
+        if (!DesktopBuild.IsDebug)
+        {
+            InitializeSafeguard();
+        }
+
+        _liveConfiguration = new ConfigurationEditorViewModel(() => _api, recordChange: RecordConfigurationChangeAsync);
         _timer = dispatcher.CreateTimer();
         _timer.Interval = TimeSpan.FromMilliseconds(250);
         _timer.Tick += (_, _) => RenderLatest();
@@ -120,7 +132,7 @@ internal sealed partial class AppRuntime
             }
         };
 
-        if (!IsDemo && Preferences.StartWithWindows)
+        if (CanRegisterStartup && Preferences.StartWithWindows)
         {
             try
             {
@@ -190,12 +202,13 @@ internal sealed partial class AppRuntime
             DebugConsole?.ApplyAppearance(preferences);
 #endif
             _refresh = true;
-            if (!IsDemo && _startupEnabled != preferences.StartWithWindows)
+            if (CanRegisterStartup && _startupEnabled != preferences.StartWithWindows)
             {
                 StartupRegistration.SetEnabled(preferences.StartWithWindows);
                 _startupEnabled = preferences.StartWithWindows;
             }
-            await _store.SaveAsync(preferences, StopToken);
+            await SavePreferencesAsync(preferences, StopToken);
+
             if (_address != preferences.ServiceAddress)
             {
                 await ConnectAsync();
@@ -206,6 +219,25 @@ internal sealed partial class AppRuntime
             Settings.Message = exception.Message;
         }
     }
+
+    private async Task SavePreferencesAsync(AppPreferences preferences, CancellationToken token = default)
+    {
+        await _preferenceSaveGate.WaitAsync(token);
+        try
+        {
+            await _store.SaveAsync(preferences, token);
+            var previous = _lastSavedPreferences;
+            _lastSavedPreferences = preferences;
+            await EventLog.RecordAsync("App settings", previous, preferences);
+        }
+        finally
+        {
+            _preferenceSaveGate.Release();
+        }
+    }
+
+    internal Task RecordConfigurationChangeAsync(Contracts.Configuration.ServiceConfiguration before,
+        Contracts.Configuration.ServiceConfiguration after) => EventLog.RecordAsync("Service configuration", before, after);
 
     private async Task ConnectAsync()
     {
@@ -437,11 +469,19 @@ internal sealed partial class AppRuntime
         var panel = Dashboard.Panels.FirstOrDefault(item => item.IsWireView);
         var api = CurrentApi;
         var device = panel?.DeviceText;
+        var simulation = IsWireViewDeviceSimulated;
         panel?.SetDeviceConfigurationStatus("Reading device settings...");
         try
         {
-            var configuration = await api.GetWireViewConfigurationAsync(StopToken);
-            if (panel is not { IsReporting: true } || panel.DeviceText != device || !ReferenceEquals(api, CurrentApi)
+            var configuration =
+#if TELEMETRY_DEBUG
+                Debug.Enabled && !simulation
+                    ? _liveWireViewConfiguration ?? throw new IOException("No live WireView settings are cached. Disable simulation to read the device.")
+                    :
+#endif
+                    await api.GetWireViewConfigurationAsync(StopToken);
+
+            if (panel is not { IsReporting: true } || panel.DeviceText != device || simulation != IsWireViewDeviceSimulated || !ReferenceEquals(api, CurrentApi)
                 || !ReferenceEquals(panel, Dashboard.Panels.FirstOrDefault(item => item.IsWireView)))
             {
                 return;
@@ -452,8 +492,8 @@ internal sealed partial class AppRuntime
                 _liveWireViewConfiguration = configuration;
             }
 #endif
-            panel?.SetDeviceConfiguration(configuration);
-            OperationCompleted?.Invoke("WireView device settings read");
+            panel.SetDeviceConfiguration(configuration, simulation ? "Simulated WireView settings loaded." : null);
+            OperationCompleted?.Invoke(simulation ? "Simulated WireView settings loaded" : "WireView device settings read");
         }
         catch (Exception exception) when (exception is HttpRequestException or MonitoringApiException or IOException
             or OperationCanceledException or System.Text.Json.JsonException)
@@ -561,6 +601,6 @@ internal sealed partial class AppRuntime
             catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
         }
         _http?.Dispose();
-        await _store.SaveAsync(Preferences);
+        await SavePreferencesAsync(Preferences);
     }
 }

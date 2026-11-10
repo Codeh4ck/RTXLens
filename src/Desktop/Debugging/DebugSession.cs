@@ -6,11 +6,13 @@ using RTXLens.Contracts.Enums;
 using RTXLens.Contracts.Health;
 using RTXLens.Contracts.Monitoring;
 using RTXLens.Contracts.Sensors;
+using RTXLens.Debugging.Catalog;
 using RTXLens.Debugging.Models;
 using RTXLens.Debugging.Processing;
 using RTXLens.Debugging.ViewModels;
 using RTXLens.Plugins.Asus.Contracts.Configuration;
 using RTXLens.Plugins.Msi.Contracts.Configuration;
+using RTXLens.Plugins.WireView.Contracts.Common;
 using RTXLens.Presentation.Infrastructure;
 using RTXLens.Warnings;
 
@@ -25,6 +27,8 @@ public sealed class DebugSession : ObservableObject
     private PluginCatalog _liveCatalog = new(1, []);
     private ConfigurationSnapshot _liveConfiguration = new(0, new ServiceConfiguration());
     private SensorSnapshot? _liveSnapshot;
+    private DeviceConfig? _wireViewConfiguration;
+    private string? _wireViewDeviceId;
     private readonly Dictionary<string, PluginSettings> _configurationOverrides = new(StringComparer.Ordinal);
     private readonly DebugAsusAlerts _asus = new();
     private bool _batch;
@@ -49,6 +53,8 @@ public sealed class DebugSession : ObservableObject
                 return;
             }
 
+            _wireViewConfiguration = null;
+            _wireViewDeviceId = null;
             _asus.Reset();
             _warningEngine = new WarningEngine(Catalog.DebugWarningCatalog.Registry);
             _revision++;
@@ -107,6 +113,12 @@ public sealed class DebugSession : ObservableObject
         {
             Plugins.Single(plugin => plugin.Id == id).Reset();
             _configurationOverrides.Remove(id);
+
+            if (id == "wireview-pro2")
+            {
+                _wireViewConfiguration = null;
+                _wireViewDeviceId = null;
+            }
         }
         finally
         {
@@ -141,6 +153,38 @@ public sealed class DebugSession : ObservableObject
         Edited(true, "asus-astral");
     }
 
+    public DeviceConfig? GetSimulatedWireViewConfiguration()
+    {
+        var wireView = Plugins.Single(plugin => plugin.Id == "wireview-pro2");
+        if (!Enabled || wireView is not { IsSimulated: true, Installed: true, Enabled: true, State: PluginState.Ready })
+        {
+            return null;
+        }
+
+        if (_wireViewConfiguration is null || _wireViewDeviceId != wireView.DeviceId)
+        {
+            _wireViewDeviceId = wireView.DeviceId;
+            _wireViewConfiguration = DebugDeviceDefaults.WireView() with { EditToken = Guid.NewGuid().ToString("N") };
+        }
+
+        return _wireViewConfiguration;
+    }
+
+    public DeviceConfig ApplySimulatedWireViewConfiguration(DeviceConfig changes)
+    {
+        var current = GetSimulatedWireViewConfiguration()
+            ?? throw new InvalidOperationException("The simulated WireView is not available.");
+        if (changes.EditToken != current.EditToken)
+        {
+            throw new InvalidOperationException("Simulated settings changed. Refresh before applying your changes.");
+        }
+
+        WireViewSettingsValidation.Validate(current, changes, current.FirmwareVersion.GetValueOrDefault());
+
+        _wireViewConfiguration = changes with { EditToken = Guid.NewGuid().ToString("N") };
+        return _wireViewConfiguration;
+    }
+
     public void SetConfiguration(ServiceConfiguration configuration, string version)
     {
         if (version != Version)
@@ -173,7 +217,10 @@ public sealed class DebugSession : ObservableObject
             _monitoringOverride = new MonitoringOptions
             {
                 ConnectorProfiles = configuration.Monitoring.ConnectorProfiles,
-                StreamIntervalMs = configuration.Monitoring.StreamIntervalMs, Selections = [.. configuration.Monitoring.Selections]
+                StreamIntervalMs = configuration.Monitoring.StreamIntervalMs,
+                EventLogRetentionDays = configuration.Monitoring.EventLogRetentionDays,
+                EventLogStorageMb = configuration.Monitoring.EventLogStorageMb,
+                Selections = [.. configuration.Monitoring.Selections]
             };
         }
         finally
@@ -322,7 +369,10 @@ public sealed class DebugSession : ObservableObject
         var monitoring = new MonitoringOptions
         {
             ConnectorProfiles = sourceMonitoring.ConnectorProfiles,
-            StreamIntervalMs = sourceMonitoring.StreamIntervalMs, Selections = [.. sourceMonitoring.Selections]
+            StreamIntervalMs = sourceMonitoring.StreamIntervalMs,
+            EventLogRetentionDays = sourceMonitoring.EventLogRetentionDays,
+            EventLogStorageMb = sourceMonitoring.EventLogStorageMb,
+            Selections = [.. sourceMonitoring.Selections]
         };
 
         var configuration = new ConfigurationSnapshot(_revision, new ServiceConfiguration { Plugins = settings, Monitoring = monitoring, Warnings = _warningOverride ?? _liveConfiguration.Configuration.Warnings },

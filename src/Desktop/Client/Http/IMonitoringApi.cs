@@ -32,6 +32,8 @@ public interface IMonitoringApi
     Task<ConfigurationSnapshot> GetConfigurationAsync(CancellationToken token);
     Task<ConfigurationSnapshot> SetConfigurationAsync(ServiceConfiguration configuration, string version, CancellationToken token);
     Task<DeviceConfig> GetWireViewConfigurationAsync(CancellationToken token);
+    Task<DeviceConfig> ApplyWireViewConfigurationAsync(DeviceConfig changes, CancellationToken token) =>
+        Task.FromException<DeviceConfig>(new NotSupportedException("Device settings can only be saved to a connected WireView."));
     Task<AsusDeviceInfo[]> GetAsusDevicesAsync(CancellationToken token);
     Task<NvidiaDeviceInfo[]> GetNvidiaDevicesAsync(CancellationToken token) => Task.FromResult(Array.Empty<NvidiaDeviceInfo>());
     Task<MsiDeviceInfo[]> GetMsiDevicesAsync(CancellationToken token);

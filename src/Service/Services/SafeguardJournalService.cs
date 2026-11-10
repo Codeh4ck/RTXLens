@@ -6,6 +6,7 @@ using MailKit.Net.Smtp;
 using MailKit.Security;
 using MimeKit;
 using RTXLens.Contracts.Sensors;
+using RTXLens.Core.Diagnostics;
 using RTXLens.Plugins.Msi.Contracts.Safeguard;
 using RTXLens.SafeguardReporting;
 
@@ -16,6 +17,8 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
     private readonly SafeguardTelemetryBuffer _telemetry = new();
     private readonly Lock _telemetryFiles = new();
     private SafeguardExecutionNotice[]? _notices;
+    private readonly DateTimeOffset _startedAt = clock.GetUtcNow();
+    private readonly Dictionary<Guid, string> _loggedStatus = new();
 
     public SafeguardExecutionNotice[]? Notices => Volatile.Read(ref _notices);
 
@@ -25,8 +28,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
     {
         await base.StopAsync(cancellationToken);
 
-        if (!OperatingSystem.IsWindows() || cancellationToken.IsCancellationRequested
-            || !Directory.Exists(SafeguardStorage.DefaultRoot))
+        if (!OperatingSystem.IsWindows() || cancellationToken.IsCancellationRequested || !Directory.Exists(SafeguardStorage.DefaultRoot))
         {
             return;
         }
@@ -42,7 +44,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
         }
         catch (Exception error) when (IsRecordError(error))
         {
-            logger.LogWarning("Could not save Safeguard+ telemetry during service shutdown ({Type}).", error.GetType().Name);
+            logger.LogWarning("Could not save Safeguard+ telemetry during service shutdown ({Type})", error.GetType().Name);
         }
     }
 
@@ -75,8 +77,9 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
             }
             catch (Exception error) when (IsRecordError(error))
             {
-                logger.LogWarning("Safeguard+ journal could not be read or updated ({Type}).", error.GetType().Name);
+                logger.LogWarning("Safeguard+ journal could not be read or updated ({Type})", error.GetType().Name);
                 storage = null;
+
                 await Task.Delay(TimeSpan.FromSeconds(15), clock, token);
             }
         }
@@ -117,15 +120,65 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
 
                 var status = SafeguardStorage.DisplayStatus(execution, now);
                 notices.Add(new(id, execution.Name, execution.Connector, execution.StartedAt, status));
+
+                ObserveExecution(execution, status);
             }
             catch (Exception error) when (IsRecordError(error))
             {
-                logger.LogWarning("Could not read Safeguard+ execution {ExecutionId} ({Type}).", id, error.GetType().Name);
+                logger.LogWarning("Could not read Safeguard+ execution {ExecutionId} ({Type})", id, error.GetType().Name);
+            }
+        }
+
+        if (_loggedStatus.Count > notices.Count)
+        {
+            var retained = notices.Select(notice => notice.Id).ToHashSet();
+            foreach (var id in _loggedStatus.Keys.Where(id => !retained.Contains(id)).ToArray())
+            {
+                _loggedStatus.Remove(id);
             }
         }
 
         Volatile.Write(ref _notices, notices.OrderBy(notice => notice.StartedAt).ThenBy(notice => notice.Id).ToArray());
         return Task.CompletedTask;
+    }
+
+    private void ObserveExecution(SafeguardExecution execution, string status)
+    {
+        var seen = _loggedStatus.TryGetValue(execution.Id, out var previous);
+        if (seen && previous == status)
+        {
+            return;
+        }
+
+        _loggedStatus[execution.Id] = status;
+        if (!seen && execution.StartedAt < _startedAt && execution.FinishedAt is { } finished && finished < _startedAt)
+        {
+            return;
+        }
+
+        var detail = $"Connector {execution.Connector}. Execution {execution.Id:N}.";
+        if (!seen && execution.ScriptId != SafeguardScripts.Simulation)
+        {
+            logger.LogActivity(LogLevel.Warning, "safeguard.triggered", "Safeguard+",
+                "An Afterburner Safeguard+ action was triggered.", detail, eventViewer: true);
+        }
+
+        switch (status)
+        {
+            case "Simulated":
+                logger.LogActivity(LogLevel.Information, "safeguard.simulated", "Safeguard+", "Simulation completed.", detail);
+                break;
+            case "Shutdown requested":
+                logger.LogActivity(LogLevel.Information, "safeguard.shutdown-requested", "Safeguard+", "The action requested Windows shutdown.", detail);
+                break;
+            case "Shutdown request failed":
+            case "Shutdown request unconfirmed":
+            case "Script verification failed":
+            case "Simulation email queue failed":
+            case "Interrupted":
+                logger.LogActivity(LogLevel.Error, "safeguard.action-failed", "Safeguard+", status + ".", detail, eventViewer: true);
+                break;
+        }
     }
 
     [SupportedOSPlatform("windows")]
@@ -140,15 +193,14 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
 
             try
             {
-                if (!File.Exists(storage.Location("telemetry", id))
-                    && storage.Read<SafeguardMailEvent>("outbox", id) is { } job && job.ExecutionId == id)
+                if (!File.Exists(storage.Location("telemetry", id)) && storage.Read<SafeguardMailEvent>("outbox", id) is { } job && job.ExecutionId == id)
                 {
                     CaptureTelemetry(storage, id, job.StartedAt);
                 }
             }
             catch (Exception error) when (IsRecordError(error))
             {
-                logger.LogWarning("Could not read the Safeguard+ mail job {ExecutionId} ({Type}).", id, error.GetType().Name);
+                logger.LogWarning("Could not read the Safeguard+ mail job {ExecutionId} ({Type})", id, error.GetType().Name);
             }
         }
     }
@@ -180,7 +232,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
         }
         catch (Exception error) when (IsRecordError(error))
         {
-            logger.LogWarning("Could not store or read Safeguard+ telemetry for {ExecutionId} ({Type}).",
+            logger.LogWarning("Could not store or read Safeguard+ telemetry for {ExecutionId} ({Type})",
                 id, error.GetType().Name);
         }
 
@@ -243,9 +295,10 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
                 return;
             }
 
-            var previous = request.PreviousMailId is { } previousId
-                ? storage.Read<SafeguardMailCredential>("mail", previousId) : null;
+            var previous = request.PreviousMailId is { } previousId ? storage.Read<SafeguardMailCredential>("mail", previousId) : null;
+
             string? encryptedPassword = null;
+
             if (request.Settings.Authenticate)
             {
                 if (request.EncryptedInput is { } encryptedInput)
@@ -269,11 +322,13 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
 
             SafeguardScripts.ValidateMail(request.Settings, encryptedPassword is not null);
             var credentials = new SafeguardMailCredential(request.Settings, encryptedPassword);
+
             if (request.SendTest)
             {
                 var preview = request.Preview;
                 var script = SafeguardScripts.Get(preview?.ScriptId ?? SafeguardScripts.Notify);
-                if (!script.SendsMail || preview is not null && preview.Connector is not (1 or 2))
+
+                if (!script.SendsMail || (preview is not null && preview.Connector is not (1 or 2)))
                 {
                     throw new ArgumentException("Select a Safeguard+ email action and connector.");
                 }
@@ -283,14 +338,16 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
                     SafeguardScripts.ValidateDelay(preview.DelayMs);
                 }
 
-                var report = new SafeguardReport(id, script.Id, request.CreatedAt, preview?.Connector,
-                    preview?.DelayMs, "SMTP test", _telemetry.CaptureAt(request.CreatedAt))
+                var report = new SafeguardReport(id, script.Id, request.CreatedAt, preview?.Connector, preview?.DelayMs, "SMTP test", _telemetry.CaptureAt(request.CreatedAt))
                 {
                     IsTestEmail = true,
-                    ScriptVersion = script.Version
+                    ScriptVersion = SafeguardScriptDefinition.Version
                 };
+
                 await SendAsync(credentials, "RTX Lens Safeguard+ test email", CreateReportBody(report), null, token);
+
                 result = new(true, "SMTP server accepted the test email.");
+                logger.LogActivity(LogLevel.Information, "safeguard.email-test-accepted", "Safeguard+", result.Message);
             }
             else
             {
@@ -327,9 +384,14 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
             }
 
             attempt = (delivery?.Attempts ?? 0) + 1;
+
             if (job.StartedAt < now.AddDays(-7))
             {
                 storage.Write("delivery", id, new SafeguardDelivery("Delivery expired", attempt - 1, now));
+
+                logger.LogActivity(LogLevel.Error, "safeguard.email-expired", "Safeguard+",
+                    "Email delivery expired after retrying.", $"Execution {id:N}.", eventViewer: true);
+
                 DeleteMailJob(storage, id);
                 return;
             }
@@ -346,26 +408,45 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
             }
 
             binding.Validate();
+
             var script = SafeguardScripts.Get(binding.ScriptId);
-            var mail = storage.Read<SafeguardMailCredential>("mail", mailId)
-                ?? throw new InvalidDataException("Saved SMTP configuration is unavailable.");
+
+            var mail = storage.Read<SafeguardMailCredential>("mail", mailId) ?? throw new InvalidDataException("Saved SMTP configuration is unavailable.");
             var execution = storage.Read<SafeguardExecution>("history", id);
             var status = execution is null ? "Triggered" : SafeguardStorage.DisplayStatus(execution, now);
+
             var telemetry = CaptureTelemetry(storage, id, job.StartedAt);
-            var report = execution is not null ? SafeguardReport.ForExecution(execution, status, telemetry)
-                : new SafeguardReport(id, script.Id, job.StartedAt, binding.Connector, binding.DelayMs, status, telemetry)
-                {
-                    ScriptVersion = script.Version
-                };
+
+            var report = execution is not null
+                ? SafeguardReport.ForExecution(execution, status, telemetry)
+                : new SafeguardReport(id, script.Id, job.StartedAt, binding.Connector, binding.DelayMs, status, telemetry) { ScriptVersion = SafeguardScriptDefinition.Version };
+
             var subject = script.IsSimulation ? "RTX Lens Safeguard+ simulation" : "RTX Lens Safeguard+ triggered";
             await SendAsync(mail, subject, CreateReportBody(report), id, token);
+
             storage.Write("delivery", id, new SafeguardDelivery("Accepted by SMTP server", attempt, now));
+
+            logger.LogActivity(LogLevel.Information, "safeguard.email-accepted", "Safeguard+", "SMTP server accepted the Safeguard+ email.",
+                $"Execution {id:N}.");
+
+            if (telemetry is null)
+            {
+                logger.LogActivity(LogLevel.Warning, "safeguard.telemetry-missing", "Safeguard+",
+                    "No sensor snapshot was available for the email report.", $"Execution {id:N}.");
+            }
+
             DeleteMailJob(storage, id);
         }
         catch (Exception error) when (!token.IsCancellationRequested && IsMailError(error))
         {
             var wait = TimeSpan.FromMinutes(Math.Min(60, Math.Pow(2, Math.Min(attempt - 1, 6))));
             storage.Write("delivery", id, new SafeguardDelivery("Retry pending", attempt, now + wait, DescribeMailError(error)));
+
+            if (attempt == 1)
+            {
+                logger.LogActivity(LogLevel.Warning, "safeguard.email-retry", "Safeguard+",
+                    "Safeguard+ email could not be sent. The service will retry.", $"Execution {id:N}.");
+            }
         }
     }
 
@@ -385,7 +466,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
         }
         catch (Exception error) when (IsRecordError(error))
         {
-            logger.LogWarning("Could not clean up Safeguard+ mail job {ExecutionId} ({Type}).", id, error.GetType().Name);
+            logger.LogWarning("Could not clean up Safeguard+ mail job {ExecutionId} ({Type})", id, error.GetType().Name);
         }
     }
 
@@ -399,25 +480,33 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
     private static async Task SendAsync(SafeguardMailCredential mail, string subject, MimeEntity body, Guid? id, CancellationToken token)
     {
         var settings = mail.Settings;
+
         SafeguardScripts.ValidateMail(settings, mail.EncryptedPassword is not null);
+
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
         deadline.CancelAfter(TimeSpan.FromSeconds(12));
 
-        using var message = new MimeMessage { Subject = subject, Body = body };
+        using var message = new MimeMessage();
+        message.Subject = subject;
+        message.Body = body;
+
         if (id is { } executionId)
         {
             message.MessageId = $"safeguard-{executionId:N}@rtxlens.com";
         }
 
         message.From.Add(MailboxAddress.Parse(settings.Sender));
+
         foreach (var recipient in settings.Recipients)
         {
             message.To.Add(MailboxAddress.Parse(recipient));
         }
 
         using var client = new SmtpClient();
+
         var mode = settings.Security == "Implicit TLS" ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
         await client.ConnectAsync(settings.Host, settings.Port, mode, deadline.Token);
+
         if (settings.Authenticate)
         {
             var bytes = ProtectedData.Unprotect(Convert.FromBase64String(mail.EncryptedPassword!), null, DataProtectionScope.CurrentUser);

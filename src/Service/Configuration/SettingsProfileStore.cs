@@ -16,13 +16,13 @@ internal sealed class SettingsProfileStore
     private string _selectedId = "auto";
     private SettingsProfile? _session;
 
-    public SettingsProfileStore(IConfiguration configuration, ILogger<SettingsProfileStore> logger)
+    public SettingsProfileStore(IConfiguration configuration, ILogger<SettingsProfileStore> logger, string? defaultDirectory = null)
     {
         var executable = new DirectoryInfo(AppContext.BaseDirectory);
         var desktop = executable.Name.Equals("Service", StringComparison.OrdinalIgnoreCase)
             ? Path.Combine(executable.Parent!.FullName, "Desktop")
             : executable.FullName;
-        _directory = Path.GetFullPath(configuration["SettingsProfiles:Directory"] ?? Path.Combine(desktop, "config"));
+        _directory = Path.GetFullPath(configuration["SettingsProfiles:Directory"] ?? defaultDirectory ?? Path.Combine(desktop, "config"));
 
         try
         {

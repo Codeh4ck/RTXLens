@@ -39,7 +39,7 @@ public sealed partial class PluginSettingsView : UserControl
 
     internal async Task RefreshAfterburnerAvailabilityAsync()
     {
-        _afterburnerDetected = await _runtime.IsAfterburnerInstalledAsync();
+        _afterburnerDetected = await AppRuntime.IsAfterburnerInstalledAsync();
         UpdateAfterburnerButton();
     }
 
@@ -55,7 +55,7 @@ public sealed partial class PluginSettingsView : UserControl
     {
         if (AfterburnerIntegrationButton is { } button)
         {
-            button.IsEnabled = Model.IsMsi && Model.Enabled && _afterburnerDetected;
+            button.IsEnabled = Model is { IsMsi: true, Enabled: true } && _afterburnerDetected;
             ToolTipService.SetToolTip(button, !Model.Enabled ? "Enable the MSI plugin first."
                 : !_afterburnerDetected ? "Afterburner was not detected. Install or start it, then reopen MSI configuration."
                 : "Configure Afterburner Safeguard+ in a separate window.");

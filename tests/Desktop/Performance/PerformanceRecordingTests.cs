@@ -233,7 +233,7 @@ internal static class PerformanceRecordingTests
         clock.Advance(1);
         recorder.Accept(Snapshot(0, 0.5));
         TestAssert.True(recorder.ReadFrame(null, new Dictionary<string, int>()).Series
-            .Any(series => series.Trace.Identity.PluginId == "msi-psu" && series.Trace.Identity.ConnectorId == "1"),
+            .Any(series => series.Trace.Identity is { PluginId: "msi-psu", ConnectorId: "1" }),
             "A previously recorded connector must remain reviewable.");
         recorder.Stop();
         TestAssert.True(recorder.CompletedSession().Series.All(series => series.Samples.Length == 2),
@@ -241,7 +241,7 @@ internal static class PerformanceRecordingTests
 
         TestAssert.Throws<InvalidOperationException>(() => recorder.Start());
         var secondConnector = recorder.ReadFrame(null, new Dictionary<string, int>()).Series
-            .Where(series => series.Trace.Identity.PluginId == "msi-psu" && series.Trace.Identity.ConnectorId == "2");
+            .Where(series => series.Trace.Identity is { PluginId: "msi-psu", ConnectorId: "2" });
         recorder.SelectMany(secondConnector.Select(series => series.Trace.Key), true);
         recorder.Start();
         recorder.Accept(Snapshot(0, 0.5));

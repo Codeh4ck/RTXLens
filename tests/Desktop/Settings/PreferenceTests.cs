@@ -22,7 +22,7 @@ internal static class PreferenceTests
         {
             var store = new PreferencesStore(path);
             var settings = new AppSettingsViewModel(store.Load());
-            TestAssert.True(settings.RememberWindowSize && settings.RememberWindowPosition,
+            TestAssert.True(settings is { RememberWindowSize: true, RememberWindowPosition: true },
                 "Both remember settings must be enabled by default.");
 
             settings.SaveWindowPlacement("main", new WindowPlacement(1100, 800, -1300, 50));
@@ -31,7 +31,7 @@ internal static class PreferenceTests
             await store.SaveAsync(settings.Value);
 
             var reloaded = new AppSettingsViewModel(store.Load());
-            TestAssert.True(reloaded.RememberWindowSize && !reloaded.RememberWindowPosition, "Position is independent of the size mode.");
+            TestAssert.True(reloaded is { RememberWindowSize: true, RememberWindowPosition: false }, "Position is independent of the size mode.");
             TestAssert.Equal(new WindowPlacement(1100, 800, -1300, 50), reloaded.Value.WindowPlacements!["main"]);
             TestAssert.Equal(new WindowPlacement(700, 440, 100, 200), reloaded.Value.WindowPlacements!["release-notes"]);
             reloaded.RememberWindowPosition = true;

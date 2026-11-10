@@ -1,11 +1,12 @@
 using System.Diagnostics;
+using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.Windows.Storage.Pickers;
 using RTXLens.App.Services;
 using RTXLens.Presentation.Msi.Afterburner;
-using Windows.Storage.Pickers;
 using Windows.Globalization.NumberFormatting;
 
 namespace RTXLens.App.Msi.Afterburner;
@@ -13,6 +14,7 @@ namespace RTXLens.App.Msi.Afterburner;
 public sealed partial class AfterburnerSettingsView : UserControl
 {
     private readonly AppRuntime _runtime;
+    private readonly WindowId _windowId;
     private readonly DispatcherQueueTimer _statusTimer;
     private readonly string _selectionPath;
     private AfterburnerInstallation? _installation;
@@ -48,9 +50,10 @@ public sealed partial class AfterburnerSettingsView : UserControl
         _connector2.CommitPendingEdits();
     }
 
-    internal AfterburnerSettingsView(AppRuntime runtime)
+    internal AfterburnerSettingsView(AppRuntime runtime, WindowId windowId)
     {
         _runtime = runtime;
+        _windowId = windowId;
         _selectionPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "RTXLens", "afterburner-installation.txt");
         InitializeComponent();
@@ -241,6 +244,7 @@ public sealed partial class AfterburnerSettingsView : UserControl
         var result = await AfterburnerElevatedOperation.ExecuteAsync(new(_installation.Directory, "apply", settings, plan.Id, null));
         if (result.Success)
         {
+            await RecordAfterburnerChangesAsync(plan);
             await ReadInstallationAsync(_installation);
         }
 
@@ -265,9 +269,39 @@ public sealed partial class AfterburnerSettingsView : UserControl
         var result = await AfterburnerElevatedOperation.ExecuteAsync(new(_installation!.Directory, "restore", null, plan.Id, backup.Id));
         if (result.Success)
         {
+            await RecordAfterburnerChangesAsync(plan);
             await ReadInstallationAsync(_installation);
         }
         ShowMessage(result.Message, !result.Success);
+    }
+
+    private Task RecordAfterburnerChangesAsync(AfterburnerChangeSet plan) =>
+        _runtime.EventLog.RecordAsync("Afterburner Safeguard+", ReadAuditFields(plan.Files[0].Before, plan.Files[1].Before),
+            ReadAuditFields(plan.Files[0].After, plan.Files[1].After));
+
+    private static object? ReadAuditFields(byte[] plugin, byte[] profile)
+    {
+        try
+        {
+            var settings = AfterburnerConfiguration.Inspect(plugin, profile).Settings;
+            var connectors = new[] { 1, 2 }.Select(number => AfterburnerConfiguration.InspectConnector(profile, number))
+                .Select(connector => new
+                {
+                    connector.SourceEnabled,
+                    connector.AlarmConfigured,
+                    connector.Timeout,
+                    Action = connector.LowPowerAction ? "Emergency low-power profile"
+                        : connector.BuiltInScriptFileName ?? (string.IsNullOrWhiteSpace(connector.Application) ? "None" : "Custom action")
+                }).ToArray();
+
+            return new { settings.MonitoringEnabled, settings.SoftwareAlarm, settings.MaxCurrent, settings.CurrentDifference, connectors };
+        }
+        catch (Exception error) when (error is IOException or ArgumentException)
+        {
+            // A restored backup may replace a damaged file with no reliable previous values.
+            System.Diagnostics.Debug.WriteLine(error);
+            return null;
+        }
     }
 
     private async Task<bool> ConfirmPlanAsync(AfterburnerChangeSet plan, string title)
@@ -314,7 +348,11 @@ public sealed partial class AfterburnerSettingsView : UserControl
             or InvalidOperationException or System.ComponentModel.Win32Exception or System.Text.Json.JsonException
             or System.Runtime.InteropServices.COMException or System.Security.SecurityException or OperationCanceledException)
         {
-            ShowMessage(error.Message, true);
+            var message = string.IsNullOrWhiteSpace(error.Message)
+                ? "The Afterburner operation could not be completed."
+                : error.Message;
+
+            ShowMessage(message, true);
         }
         finally
         {
@@ -389,9 +427,9 @@ public sealed partial class AfterburnerSettingsView : UserControl
 
     private async void Locate_Click(object sender, RoutedEventArgs args) => await PerformAsync(async () =>
     {
-        var picker = new FileOpenPicker();
+        var picker = new FileOpenPicker(_windowId);
         picker.FileTypeFilter.Add(".exe");
-        WinRT.Interop.InitializeWithWindow.Initialize(picker, _runtime.MainWindowHandle);
+
         var file = await picker.PickSingleFileAsync();
         if (file is null)
         {
@@ -456,7 +494,7 @@ public sealed partial class AfterburnerSettingsView : UserControl
         }
 
         var rounded = Math.Round(args.NewValue, 1, MidpointRounding.AwayFromZero);
-        if (args.NewValue != rounded)
+        if (Math.Abs(args.NewValue - rounded) > 0.001)
         {
             sender.Value = rounded;
         }
@@ -473,14 +511,17 @@ public sealed partial class AfterburnerSettingsView : UserControl
     private async void Restart_Click(object sender, RoutedEventArgs args) => await PerformAsync(async () =>
     {
         RequireReady();
+
         var installation = AfterburnerDiscovery.Inspect(_installation!.Directory);
         AfterburnerDiscovery.RequireSupported(installation);
 
         if (AfterburnerDiscovery.IsRunning())
         {
             var current = await Task.Run(() => _store!.Read());
-            var result = await AfterburnerElevatedOperation.ExecuteAsync(new(installation.Directory,
-                "stop-for-restart", null, current.Id, null));
+
+            var result = await AfterburnerElevatedOperation
+                .ExecuteAsync(new(installation.Directory, "stop-for-restart", null, current.Id, null));
+
             if (!result.Success)
             {
                 ShowMessage(result.Message, true);
@@ -489,10 +530,13 @@ public sealed partial class AfterburnerSettingsView : UserControl
         }
 
         AfterburnerDiscovery.RequireStopped();
+
         _ = Process.Start(new ProcessStartInfo(Path.Combine(installation.Directory, "MSIAfterburner.exe")) { UseShellExecute = true, Verb = "runas" })
             ?? throw new InvalidOperationException("Afterburner could not be started.");
+
         _startPendingUntil = DateTimeOffset.UtcNow.AddSeconds(5);
         RefreshProcessState();
+
         ShowMessage("Afterburner launch requested. Its saved configuration will be loaded at startup.", false);
     });
 
@@ -501,6 +545,7 @@ public sealed partial class AfterburnerSettingsView : UserControl
         "Close Afterburner, then use Save config to keep your existing working configuration before making changes. "
         + "Explicitly saved working backups are kept until you delete them. A paired backup of both files is also made automatically before each apply or restore. "
         + "Select one backup to restore, or multiple backups to delete together. Restoring requires Afterburner to be closed and restarted afterwards.");
+
     private async void SoftwareAlarmInfo_Click(object sender, RoutedEventArgs args) => await ShowInfoAsync(
         "Afterburner software alarms",
         "Enables Afterburner's software current checks. The PSU's hardware protection remains active. "
@@ -539,6 +584,7 @@ public sealed partial class AfterburnerSettingsView : UserControl
                 + "Other PSU controllers can interfere with USB access; simultaneous polling and fan control compatibility must be checked separately.",
             CloseButtonText = "Close"
         };
+
         await dialog.ShowAsync();
     });
 
@@ -547,8 +593,10 @@ public sealed partial class AfterburnerSettingsView : UserControl
     private async void BackupLocation_Click(object sender, RoutedEventArgs args) => await PerformAsync(() =>
     {
         RequireReady(false);
+
         var directory = _store!.BackupDirectory;
         AfterburnerFileStore.EnsureNoLinks(directory);
+
         if (!Directory.Exists(directory))
         {
             throw new DirectoryNotFoundException("Save a configuration backup first to create the backup folder.");
@@ -558,8 +606,10 @@ public sealed partial class AfterburnerSettingsView : UserControl
         {
             UseShellExecute = true
         };
+
         start.ArgumentList.Add(directory);
         Process.Start(start);
+
         return Task.CompletedTask;
     });
 
@@ -569,20 +619,25 @@ public sealed partial class AfterburnerSettingsView : UserControl
         {
             var running = AfterburnerDiscovery.IsRunning();
             var starting = !running && DateTimeOffset.UtcNow < _startPendingUntil;
+
             _processStateKnown = true;
-            var scriptArmed = new[] { _connector1.Saved, _connector2.Saved }
-                .Any(connector => connector is { AlarmConfigured: true, ScriptBindingId: not null });
+
+            var scriptArmed = new[] { _connector1.Saved, _connector2.Saved }.Any(connector => connector is { AlarmConfigured: true, ScriptBindingId: not null });
+
             ProcessWarningText.Text = running && scriptArmed && _installation is { } installation
                 && !AfterburnerProcessControl.HasElevatedInstance(installation.Directory)
                 ? "Safeguard+ scripts require the selected Afterburner installation to run as administrator."
                 : "Afterburner is running. Close Afterburner to modify Safeguard+ settings!";
+
             ProcessWarning.Visibility = running || starting ? Visibility.Visible : Visibility.Collapsed;
         }
         catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
             _processStateKnown = false;
+
             ProcessWarningText.Text = "Afterburner process status is unavailable. Refresh status before modifying Safeguard+ settings!";
             ProcessWarning.Visibility = Visibility.Visible;
+
             Debug.WriteLine(error);
         }
 
@@ -609,6 +664,7 @@ public sealed partial class AfterburnerSettingsView : UserControl
     private async Task DeleteBackupAsync()
     {
         RequireReady(false);
+
         var selected = BackupPicker.SelectedItems.OfType<AfterburnerBackupChoice>().ToArray();
         if (selected.Length == 0)
         {
@@ -617,6 +673,7 @@ public sealed partial class AfterburnerSettingsView : UserControl
 
         var deletions = selected.Select(item => new AfterburnerBackupDeletion(item.Id, _store!.BackupFingerprint(item.Id))).ToArray();
         var labels = string.Join("\n", selected.Take(6).Select(item => item.Label));
+
         if (selected.Length > 6)
         {
             labels += "\n... and " + (selected.Length - 6) + " more.";
@@ -632,13 +689,15 @@ public sealed partial class AfterburnerSettingsView : UserControl
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Close
         };
+
         if (await dialog.ShowAsync() != ContentDialogResult.Primary)
         {
             return;
         }
 
-        var result = await AfterburnerElevatedOperation.ExecuteAsync(new(_installation!.Directory,
-            "delete", null, "", null) { BackupsToDelete = deletions });
+        var result = await AfterburnerElevatedOperation
+            .ExecuteAsync(new(_installation!.Directory, "delete", null, "", null) { BackupsToDelete = deletions });
+
         RefreshBackups();
         ShowMessage(result.Message, !result.Success);
     }

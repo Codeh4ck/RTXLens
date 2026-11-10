@@ -37,7 +37,9 @@ internal static class SafeguardReportRenderer
                     <tr><td align="center" style="padding:20px 12px;">
                         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:720px;">
             """);
+
         var plain = new StringBuilder();
+
         if (report.IsTestEmail)
         {
             Paragraph("TEST EMAIL. This report uses live sensor readings from the time the test was requested. No Safeguard+ action ran.", "#ffd15c");
@@ -50,6 +52,7 @@ internal static class SafeguardReportRenderer
                                 <p style="margin:6px 0 0;color:{Muted};">{Encode(report.MachineName)}</p>
                             </td></tr>
             """);
+
         plain.AppendLine("RTX Lens").AppendLine(title).AppendLine(report.MachineName);
 
         if (simulation && !report.IsTestEmail)
@@ -57,8 +60,7 @@ internal static class SafeguardReportRenderer
             Paragraph("Validation only. The low-power action and shutdown were simulated.", "#ffd15c");
         }
 
-        AddPanel("Execution", null,
-        [
+        AddPanel("Execution", null, [
             (report.IsTestEmail ? "Requested" : "Triggered", FormatTime(report.StartedAt)),
             ("Connector", report.Connector?.ToString(CultureInfo.InvariantCulture) ?? "Unavailable"),
             ("Script", script?.Name ?? report.ScriptId),
@@ -71,13 +73,11 @@ internal static class SafeguardReportRenderer
 
         AddPanel("Execution steps", null, report.Steps.Length == 0
             ? [("Status", "No execution steps were recorded.")]
-            : report.Steps.Select(step => (step.Name,
-                $"{FormatTime(step.Timestamp)} · {step.Result}" + (step.ExitCode is { } code ? $" (exit code {code})" : ""))));
+            : report.Steps.Select(step => (step.Name, $"{FormatTime(step.Timestamp)} · {step.Result}" + (step.ExitCode is { } code ? $" (exit code {code})" : ""))));
 
         if (report.MailSettings is { } mail)
         {
-            AddPanel("Email delivery", null,
-            [
+            AddPanel("Email delivery", null, [
                 ("SMTP server", $"{mail.Host}:{mail.Port} ({mail.Security})"),
                 ("Sender", mail.Sender),
                 ("Recipients", string.Join(", ", mail.Recipients)),
@@ -88,7 +88,9 @@ internal static class SafeguardReportRenderer
         }
 
         html.Append($"""<tr><td style="padding:20px 4px 0;"><h2 style="margin:0;color:{Text};font-size:19px;">Sensor snapshot</h2></td></tr>""");
+
         plain.AppendLine().AppendLine("Sensor snapshot");
+
         if (telemetry is not { Readings.Length: > 0 })
         {
             Paragraph("No sensor readings were captured at or before this trigger.", Muted);
@@ -96,13 +98,19 @@ internal static class SafeguardReportRenderer
         else
         {
             Paragraph($"Captured {FormatTime(telemetry.CapturedAt)}. Pin numbers follow each device's reported order.", Muted);
+
             foreach (var device in telemetry.Readings.GroupBy(reading => (reading.Identity.PluginId, reading.Identity.DeviceId)))
             {
                 var source = SourceName(device.Key.PluginId);
                 var observed = device.Max(reading => reading.ObservedAt);
                 var subtitle = $"{device.Key.DeviceId} · Last sample {FormatTime(observed)}";
-                var general = device.Where(reading => !IsPin(reading)).OrderBy(reading => reading.Identity.Component)
-                    .ThenBy(reading => reading.Identity.Channel).ThenBy(reading => reading.Identity.Metric).ToArray();
+
+                var general = device
+                    .Where(reading => !IsPin(reading))
+                    .OrderBy(reading => reading.Identity.Component)
+                    .ThenBy(reading => reading.Identity.Channel)
+                    .ThenBy(reading => reading.Identity.Metric)
+                    .ToArray();
 
                 if (general.Length > 0)
                 {
@@ -110,24 +118,28 @@ internal static class SafeguardReportRenderer
                 }
 
                 var connectors = device.Where(IsPin).GroupBy(reading => reading.Identity.ConnectorId);
+
                 foreach (var connector in connectors)
                 {
                     var heading = connector.Key is null ? $"{source} · Pins" : $"{source} · Connector {connector.Key} pins";
                     var activeProfile = telemetry.SettingsProfile;
-                    var profile = activeProfile?.AppliesToConnector(device.Key.PluginId, device.Key.DeviceId) == true
-                        ? activeProfile.Profile : null;
-                    var cableRating = general.FirstOrDefault(reading => reading is
-                        { Identity.Metric: SensorMetric.PowerCapability, Quality: ReadingQuality.Valid, Value: > 0 })?.Value;
+                    var profile = activeProfile?.AppliesToConnector(device.Key.PluginId, device.Key.DeviceId) == true ? activeProfile.Profile : null;
 
-                    foreach (var group in connector.GroupBy(reading => reading.Identity.Metric).OrderBy(group => group.Key switch
-                    {
-                        SensorMetric.Current => 0,
-                        SensorMetric.Power => 1,
-                        SensorMetric.Voltage => 2,
-                        _ => 3
-                    }))
+                    var cableRating = general
+                        .FirstOrDefault(reading => reading is { Identity.Metric: SensorMetric.PowerCapability, Quality: ReadingQuality.Valid, Value: > 0 })?.Value;
+
+                    foreach (var group in connector
+                                 .GroupBy(reading => reading.Identity.Metric)
+                                 .OrderBy(group => group.Key switch
+                                 {
+                                     SensorMetric.Current => 0,
+                                     SensorMetric.Power => 1,
+                                     SensorMetric.Voltage => 2,
+                                     _ => 3
+                                 }))
                     {
                         var readings = group.OrderBy(reading => reading.Identity.Channel).ToArray();
+
                         if (PinScale(group.Key, profile, cableRating) is { } scale)
                         {
                             AddPinChart(heading, subtitle, scale, readings);
@@ -142,6 +154,7 @@ internal static class SafeguardReportRenderer
         }
 
         html.Append("</table></td></tr></table></body></html>");
+
         return (html.ToString(), plain.ToString());
 
         void Paragraph(string value, string color)
@@ -150,12 +163,13 @@ internal static class SafeguardReportRenderer
             plain.AppendLine(value);
         }
 
-        void AddPinChart(string heading, string subtitle, (string Label, string Unit, double Min, double Max) scale,
-            SensorReading[] pins)
+        void AddPinChart(string heading, string subtitle, (string Label, string Unit, double Min, double Max) scale, SensorReading[] pins)
         {
             const int height = 88;
-            var title = $"{heading} · {scale.Label}";
-            OpenPanel(title, subtitle);
+            var chartTitle = $"{heading} · {scale.Label}";
+
+            OpenPanel(chartTitle, subtitle);
+
             html.Append($"""
                 <tr><td colspan="2" style="padding:0 12px 12px;">
                     <p style="margin:0 0 8px;color:{Muted};font-size:12px;">Scale {scale.Min.ToString("0.##", CultureInfo.InvariantCulture)}
@@ -168,6 +182,7 @@ internal static class SafeguardReportRenderer
                 var label = $"P{pin.Identity.Channel}";
                 var value = FormatValue(pin);
                 var fill = 0;
+
                 if (pin is { Quality: ReadingQuality.Valid, Value: { } number } && double.IsFinite(number) && number > scale.Min)
                 {
                     fill = Math.Max(1, (int)Math.Round(height * Math.Clamp((number - scale.Min) / (scale.Max - scale.Min), 0, 1)));
@@ -179,6 +194,7 @@ internal static class SafeguardReportRenderer
                         <table width="70%" cellspacing="0" cellpadding="0" role="presentation" bgcolor="{Border}"
                             style="background:{Border};margin:0 auto;">
                     """);
+
                 if (height > fill)
                 {
                     html.Append($"""<tr><td height="{height - fill}" style="font-size:0;line-height:0;">&nbsp;</td></tr>""");
@@ -204,6 +220,7 @@ internal static class SafeguardReportRenderer
                         <tr><td colspan="2" style="padding:12px;color:{Accent};">
                             <h2 style="margin:0;font-size:16px;">{Encode(heading)}</h2>
                 """);
+
             plain.AppendLine().AppendLine(heading);
 
             if (subtitle is not null)
@@ -218,6 +235,7 @@ internal static class SafeguardReportRenderer
         void AddPanel(string heading, string? subtitle, IEnumerable<(string Label, string Value)> rows)
         {
             OpenPanel(heading, subtitle);
+
             foreach (var (label, value) in rows)
             {
                 html.Append($"""
@@ -226,6 +244,7 @@ internal static class SafeguardReportRenderer
                         <td align="right" style="padding:6px 12px;border-top:1px solid {Border};color:{Text};font-weight:bold;overflow-wrap:anywhere;">{Encode(value)}</td>
                     </tr>
                     """);
+
                 plain.Append(label).Append(": ").AppendLine(value);
             }
 
@@ -233,8 +252,7 @@ internal static class SafeguardReportRenderer
         }
     }
 
-    private static (string Label, string Unit, double Min, double Max)? PinScale(SensorMetric metric,
-        SettingsProfile? profile, double? cableRating) => metric switch
+    private static (string Label, string Unit, double Min, double Max)? PinScale(SensorMetric metric, SettingsProfile? profile, double? cableRating) => metric switch
     {
         SensorMetric.Current => ("Current", "A", 0, profile?.CurrentCeiling ?? 10),
         SensorMetric.Power => ("Power", "W", 0, profile?.ResolvePowerCeiling(cableRating) ?? (cableRating ?? 600) / 6),
@@ -307,14 +325,12 @@ internal static class SafeguardReportRenderer
             return "Unavailable";
         }
 
-        if (reading.Unit == SensorUnit.Boolean)
+        switch (reading.Unit)
         {
-            return value == 0 ? "No" : "Yes";
-        }
-
-        if (reading.Unit == SensorUnit.Bitmask)
-        {
-            return value == 0 ? "Clear" : $"0x{(long)value:X}";
+            case SensorUnit.Boolean:
+                return value == 0 ? "No" : "Yes";
+            case SensorUnit.Bitmask:
+                return value == 0 ? "Clear" : $"0x{(long)value:X}";
         }
 
         var (number, format, unit) = reading.Unit switch
@@ -330,6 +346,7 @@ internal static class SafeguardReportRenderer
             SensorUnit.Megabytes => (value / 1024, "0.00", "GB"),
             _ => (value, "0.##", "")
         };
+
         var text = number.ToString(format, CultureInfo.InvariantCulture);
         return $"{text} {unit}".TrimEnd() + (reading.Derived ? " (derived)" : "");
     }

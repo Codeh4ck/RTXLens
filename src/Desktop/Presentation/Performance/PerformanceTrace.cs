@@ -58,7 +58,7 @@ public sealed record PerformanceTrace(string Key, string Group, string Label, st
         }
 
         var connector = identity.ConnectorId is { } id ? $" · Connector {id}"
-            : identity.Component == SensorComponent.GpuConnector && identity.Channel is > 1 ? $" · Connector {identity.Channel}" : "";
+            : identity is { Component: SensorComponent.GpuConnector, Channel: > 1 } ? $" · Connector {identity.Channel}" : "";
         var metric = group == "Pin current" ? $"P{identity.Channel}"
             : group == "GPU fan speed" ? identity.Channel is { } fan ? $"Fan {fan}" : "Fan"
             : group == "VRAM usage" ? "VRAM used"

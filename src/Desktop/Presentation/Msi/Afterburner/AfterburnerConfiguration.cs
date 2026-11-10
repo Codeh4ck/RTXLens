@@ -17,7 +17,7 @@ public static class AfterburnerConfiguration
             throw new InvalidDataException("The active Afterburner configuration is incomplete. Configure Afterburner once, or restore a working backup.");
         }
 
-        if (plugin.Get("Settings", "DataLayout") is { } layout && layout is not ("0" or "3"))
+        if (plugin.Get("Settings", "DataLayout") is { } and not ("0" or "3"))
         {
             throw new InvalidDataException("The PSU plugin is forced to a non-TS data layout. Select automatic detection in Afterburner's PSU configuration first.");
         }

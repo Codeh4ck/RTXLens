@@ -35,8 +35,8 @@ internal static class MsiCurveHardwareVerification
             {
                 var live = await api.GetMsiSnapshotAsync(default);
                 var expected = MsiFanCurveController.Interpolate(curve.Points, live.TemperatureC);
-                return live.FanControllerState == "Curve" && !live.AutomaticFan
-                    && live.TargetFanDutyPercent == expected && live.FanDutyPercent == expected;
+                return live is { FanControllerState: "Curve", AutomaticFan: false }
+                       && live.TargetFanDutyPercent == expected && live.FanDutyPercent == expected;
             }, "hardware curve controller and duty readback");
 
             // The host continues without a desktop client or editor.

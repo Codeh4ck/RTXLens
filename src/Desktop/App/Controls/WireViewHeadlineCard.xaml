@@ -8,10 +8,10 @@
                 <VisualState x:Name="Normal" />
                 <VisualState x:Name="Fault">
                     <VisualState.Setters>
-                        <Setter Target="HeadlineCard.Background" Value="{ThemeResource MonitorDangerSurface}" />
+                        <Setter Target="HeadlineCard.Background" Value="{ThemeResource MonitorWireViewFaultSurface}" />
                         <Setter Target="HeadlineCard.BorderBrush" Value="{ThemeResource MonitorDanger}" />
-                        <Setter Target="HeadlineLabel.Foreground" Value="{ThemeResource MonitorDanger}" />
-                        <Setter Target="HeadlineValue.Foreground" Value="{ThemeResource MonitorDanger}" />
+                        <Setter Target="HeadlineLabel.Foreground" Value="White" />
+                        <Setter Target="HeadlineValue.Foreground" Value="White" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>

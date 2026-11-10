@@ -3,7 +3,6 @@ using Microsoft.UI.Windowing;
 using RTXLens.App.Debugging.Windows;
 using RTXLens.Debugging;
 using RTXLens.Debugging.Api;
-using RTXLens.Debugging.Catalog;
 using RTXLens.Debugging.Models;
 using RTXLens.Presentation.Configuration;
 using RTXLens.Presentation.Notifications;
@@ -161,13 +160,13 @@ internal sealed partial class AppRuntime
             return;
         }
 
-        var configuration = Debug.Plugins[0].IsSimulated ? DebugDeviceDefaults.WireView() : _liveWireViewConfiguration;
+        var configuration = IsWireViewDeviceSimulated ? Debug.GetSimulatedWireViewConfiguration() : _liveWireViewConfiguration;
         if (configuration is null)
         {
             return;
         }
 
-        wire.SetDeviceConfiguration(configuration);
+        wire.SetDeviceConfiguration(configuration, IsWireViewDeviceSimulated ? "Simulated WireView settings loaded." : null);
         wire.Apply(_debugFrame.Snapshot, Preferences, DateTimeOffset.UtcNow);
     }
 }

@@ -1,3 +1,4 @@
+using RTXLens.Contracts.Monitoring;
 using RTXLens.Presentation.Telemetry;
 
 namespace RTXLens.Presentation.Settings;
@@ -38,7 +39,11 @@ public sealed record AppPreferences
     public double WindowWidth { get; init; } = DefaultWindowWidth;
     public double WindowHeight { get; init; } = DefaultWindowHeight;
     public int WindowLayoutVersion { get; init; } = 1;
-    public string ServiceAddress { get; init; } = "http://localhost:59273/";
+#if DEBUG
+    public string ServiceAddress { get; init; } = $"http://localhost:{ServiceEndpoint.DebugPort}/";
+#else
+    public string ServiceAddress { get; init; } = $"http://localhost:{ServiceEndpoint.LivePort}/";
+#endif
 
     public void Validate()
     {

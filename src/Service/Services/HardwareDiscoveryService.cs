@@ -1,10 +1,10 @@
 using RTXLens.Core.Configuration;
+using RTXLens.Core.Diagnostics;
 using RTXLens.Core.Plugins;
 
 namespace RTXLens.Service.Services;
 
-internal sealed class HardwareDiscoveryService(PluginRuntimeManager runtime, IRuntimeConfiguration configuration,
-    ILogger<HardwareDiscoveryService> logger) : BackgroundService
+internal sealed class HardwareDiscoveryService(PluginRuntimeManager runtime, IRuntimeConfiguration configuration, ILogger<HardwareDiscoveryService> logger) : BackgroundService
 {
     private readonly HardwarePresenceTracker _presence = new();
 
@@ -19,8 +19,7 @@ internal sealed class HardwareDiscoveryService(PluginRuntimeManager runtime, IRu
                 foreach (var factory in runtime.Factories)
                 {
                     var baseline = configuration.Current;
-                    if (!baseline.Configuration.Plugins.TryGetValue(factory.Id, out var settings)
-                        || settings is { Enabled: false, AutomaticallyDisabled: false })
+                    if (!baseline.Configuration.Plugins.TryGetValue(factory.Id, out var settings) || settings is { Enabled: false, AutomaticallyDisabled: false })
                     {
                         continue;
                     }
@@ -35,6 +34,12 @@ internal sealed class HardwareDiscoveryService(PluginRuntimeManager runtime, IRu
                                 candidate.Plugins[factory.Id] = detected;
                                 return candidate;
                             }, stoppingToken, baseline.Version);
+
+                            var message = detected.Enabled
+                                ? "Matching hardware was found. Plugin enabled automatically."
+                                : "No matching hardware was found. Plugin disabled automatically.";
+
+                            logger.LogActivity(LogLevel.Information, "plugin.auto-detection", factory.Name, message);
                         }
                     }
                     catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

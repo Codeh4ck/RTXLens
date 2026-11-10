@@ -39,6 +39,7 @@ SafeguardEmailTests.Run(runner);
 await SettingsProfileTests.RunEndpointsAsync(runner);
 await WarningConfigurationTests.RunAsync(runner);
 await HealthEndpointTests.RunAsync(runner);
+await ServiceLogTests.RunAsync(runner);
 await TestHostConfigurationTests.RunAsync(runner);
 await SensorEndpointTests.RunAsync(runner);
 await RuntimeConfigurationTests.RunAsync(runner);

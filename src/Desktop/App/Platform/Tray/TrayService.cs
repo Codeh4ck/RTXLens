@@ -31,7 +31,7 @@ internal sealed partial class TrayService : IDisposable
         _exit = exit;
         _minimizeChanged = minimizeChanged;
         _taskbarCreated = NativeMethods.RegisterWindowMessageW("TaskbarCreated");
-        _showMessage = NativeMethods.RegisterWindowMessageW("RTXLens.App.Show");
+        _showMessage = NativeMethods.RegisterWindowMessageW(DesktopBuild.ShowMessageName);
 
         WindowProcedure procedure = ProcessMessage;
 
@@ -59,10 +59,10 @@ internal sealed partial class TrayService : IDisposable
             Flags = NativeConstants.NotifyMessageFlag | NativeConstants.NotifyIconFlag | NativeConstants.NotifyTipFlag | NativeConstants.NotifyGuidFlag | NativeConstants.NotifyShowTipFlag,
             CallbackMessage = CallbackMessage,
             Icon = NativeMethods.LoadImageW(0, Path.Combine(AppContext.BaseDirectory, "Assets", "monitor.ico"), NativeConstants.IconImage, 32, 32, NativeConstants.LoadFromFile),
-            Tip = "RTX Lens · connecting",
+            Tip = DesktopBuild.WindowTitle + " · connecting",
             Info = string.Empty,
             InfoTitle = string.Empty,
-            Guid = new Guid("2C899FB2-3A10-4548-A37E-28F976C6B3AF")
+            Guid = DesktopBuild.TrayIconId
         };
 
         AddIcon();
@@ -70,7 +70,8 @@ internal sealed partial class TrayService : IDisposable
 
     public void SetStatus(string status)
     {
-        _data.Tip = ("RTX Lens · " + status);
+        var tip = DesktopBuild.WindowTitle + " · " + status;
+        _data.Tip = tip[..Math.Min(tip.Length, 127)];
         NativeMethods.Shell_NotifyIconW(NativeConstants.NotifyModify, ref _data);
     }
 

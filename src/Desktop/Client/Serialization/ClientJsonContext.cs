@@ -7,6 +7,7 @@ using RTXLens.Plugins.Asus.Contracts.Configuration;
 using RTXLens.Plugins.Asus.Contracts.Common;
 using RTXLens.Contracts.Configuration;
 using RTXLens.Contracts.Discovery;
+using RTXLens.Contracts.Diagnostics;
 using RTXLens.Contracts.Errors;
 using RTXLens.Contracts.Health;
 using RTXLens.Contracts.Sensors;
@@ -18,6 +19,7 @@ namespace RTXLens.Client.Serialization;
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     PropertyNameCaseInsensitive = true, UseStringEnumConverter = true, WriteIndented = true)]
 [JsonSerializable(typeof(SensorSnapshot))]
+[JsonSerializable(typeof(ServiceLogPage))]
 [JsonSerializable(typeof(HealthResponse))]
 [JsonSerializable(typeof(RTXLens.Contracts.Updates.ServiceVersionResponse))]
 [JsonSerializable(typeof(RTXLens.Contracts.Updates.ReleaseManifest))]

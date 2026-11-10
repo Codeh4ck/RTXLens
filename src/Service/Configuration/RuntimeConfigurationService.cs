@@ -1,4 +1,5 @@
 using RTXLens.Core.Configuration;
+using RTXLens.Core.Diagnostics;
 using RTXLens.Contracts.Configuration;
 using RTXLens.Contracts.Monitoring;
 using RTXLens.Core.Plugins;
@@ -71,6 +72,7 @@ public sealed class RuntimeConfigurationService(PluginRuntimeManager runtime, Ru
         }
 
         await runtime.ApplyAsync(configuration, cancellationToken);
+
         Volatile.Write(ref _current, new ConfigurationSnapshot(1, configuration, Version: CreateVersion(1)));
 
         _watcher = new FileSystemWatcher(directory, Path.GetFileName(file.Path))
@@ -85,6 +87,9 @@ public sealed class RuntimeConfigurationService(PluginRuntimeManager runtime, Ru
         _watcher.Error += (_, _) => _reload.Set();
 
         _watcher.EnableRaisingEvents = true;
+
+        logger.LogActivity(LogLevel.Information, "configuration.loaded", "Configuration",
+            persistDefaults ? "Service configuration loaded and defaults or migrations saved." : "Service configuration loaded.");
 
         await base.StartAsync(cancellationToken);
     }
@@ -109,7 +114,16 @@ public sealed class RuntimeConfigurationService(PluginRuntimeManager runtime, Ru
 
             runtime.Validate(candidate);
             var contents = RuntimeJson.Serialize(candidate);
-            await PersistAsync(contents, cancellationToken);
+            try
+            {
+                await PersistAsync(contents, cancellationToken);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                logger.LogActivity(LogLevel.Error, "configuration.save-failed", "Configuration",
+                    "The service could not save its settings.", eventViewer: true, exception: error);
+                throw;
+            }
 
             // Once committed to disk, finish applying even if the HTTP caller disconnects.
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -126,7 +140,14 @@ public sealed class RuntimeConfigurationService(PluginRuntimeManager runtime, Ru
             _observedContents = contents;
             Volatile.Write(ref _current, new ConfigurationSnapshot(previous.Revision + 1, candidate, Version: CreateVersion(previous.Revision + 1)));
             Changed?.Invoke();
+            logger.LogActivity(LogLevel.Information, "configuration.applied", "Configuration", "Service settings applied.",
+                $"Revision {Current.Revision}.");
             return Current;
+        }
+        catch (ArgumentException)
+        {
+            logger.LogActivity(LogLevel.Warning, "configuration.apply-rejected", "Configuration", "The service rejected invalid settings.");
+            throw;
         }
         finally
         {
@@ -186,12 +207,16 @@ public sealed class RuntimeConfigurationService(PluginRuntimeManager runtime, Ru
             _observedContents = contents;
             Volatile.Write(ref _current, new ConfigurationSnapshot(previous.Revision + 1, candidate, Version: CreateVersion(previous.Revision + 1)));
             Changed?.Invoke();
+            logger.LogActivity(LogLevel.Information, "configuration.reloaded", "Configuration", "Service settings reloaded from disk.",
+                $"Revision {Current.Revision}.");
         }
         catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             if (Current.LastError != exception.Message)
             {
-                logger.LogWarning(exception, "Runtime configuration was rejected; retaining the last valid settings");
+                logger.LogActivity(LogLevel.Warning, "configuration.reload-rejected", "Configuration",
+                    "Settings from disk were rejected. The service retained the last valid configuration.",
+                    eventViewer: true, exception: exception);
                 Volatile.Write(ref _current, Current with { LastError = exception.Message });
                 Changed?.Invoke();
             }
@@ -204,13 +229,24 @@ public sealed class RuntimeConfigurationService(PluginRuntimeManager runtime, Ru
 
     private async Task RestoreAsync(ServiceConfiguration configuration)
     {
-        var contents = RuntimeJson.Serialize(configuration);
-        await PersistAsync(contents, CancellationToken.None);
+        try
+        {
+            var contents = RuntimeJson.Serialize(configuration);
+            await PersistAsync(contents, CancellationToken.None);
 
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        await runtime.ApplyAsync(configuration, timeout.Token);
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await runtime.ApplyAsync(configuration, timeout.Token);
 
-        _observedContents = contents;
+            _observedContents = contents;
+            logger.LogActivity(LogLevel.Warning, "configuration.rolled-back", "Configuration",
+                "Applying new settings failed. The previous settings were restored.", eventViewer: true);
+        }
+        catch (Exception error)
+        {
+            logger.LogActivity(LogLevel.Error, "configuration.rollback-failed", "Configuration",
+                "The previous settings could not be restored.", eventViewer: true, exception: error);
+            throw;
+        }
     }
 
     private async Task PersistAsync(string contents, CancellationToken cancellationToken)

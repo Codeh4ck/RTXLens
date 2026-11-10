@@ -1,6 +1,8 @@
 using RTXLens.Plugins.WireView.Contracts.Common;
 using System.IO.Ports;
 using System.Text;
+using System.Security.Cryptography;
+using RTXLens.Core.Configuration;
 
 namespace RTXLens.Plugins.WireView.Device;
 
@@ -29,11 +31,13 @@ public sealed class WireViewProReader(ILogger<WireViewPlugin> logger) : IWireVie
 
 
     private const byte CmdReadVendorData = 0x01;
+    private const byte CmdReadUid = 0x02;
     private const byte CmdReadSensors = 0x04;
     private const byte CmdReadConfig = 0x05;
-    private const int ConfigV1Size = 64;
-    private const int ConfigV2Size = 72;
-    private const int ConfigV3Size = 88;
+    private const byte CmdWriteConfig = 0x06;
+    private const byte CmdNvmConfig = 0xF2;
+    private const byte NvmLoad = 1;
+    private const byte NvmStore = 2;
 
     // Protocol IDs, not Windows USB VID/PID pairs
     private static readonly Dictionary<(byte VendorId, byte ProductId), string> SupportedDevices = new()
@@ -46,6 +50,7 @@ public sealed class WireViewProReader(ILogger<WireViewPlugin> logger) : IWireVie
     private SharedSerialPort? _port;
 
     private bool _handshakeComplete;
+    private byte _firmwareVersion;
     public string PortName { get; private set; } = string.Empty;
 
     public WireViewSensorData? TryReadSensors(CancellationToken token) => ReadAvailableSensors(token);
@@ -111,7 +116,7 @@ public sealed class WireViewProReader(ILogger<WireViewPlugin> logger) : IWireVie
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "Error probing or reading WireView on {Port}", portName);
+                    logger.LogDebug(ex, "Error probing or reading WireView on {Port}", portName);
                 }
 
                 DisposePort();
@@ -131,7 +136,7 @@ public sealed class WireViewProReader(ILogger<WireViewPlugin> logger) : IWireVie
 
         if (!Monitor.TryEnter(_portGate, LockTimeoutMs))
         {
-            logger.LogWarning("Could not acquire port lock on {Port}, skipping poll", PortName);
+            logger.LogDebug("Could not acquire port lock on {Port}, skipping poll", PortName);
             return null;
         }
 
@@ -226,79 +231,52 @@ public sealed class WireViewProReader(ILogger<WireViewPlugin> logger) : IWireVie
         }
     }
 
-    public DeviceConfig? ReadConfig()
+    public DeviceConfig? ReadConfig() => WithConfigPort((port, payload) =>
+        ParseConfig(payload, payload[2]) with { EditToken = ReadEditToken(port, payload), FirmwareVersion = _firmwareVersion });
+
+    public byte[]? ReadConfigRaw() => WithConfigPort((_, payload) => payload);
+
+    public DeviceConfig ApplyConfig(DeviceConfig changes) => WithConfigPort((port, original) =>
     {
-        if (_port is null)
+        var token = ReadEditToken(port, original);
+        if (token is null)
         {
-            return null;
+            throw new ArgumentException("This WireView firmware did not provide a complete, editable configuration.");
         }
 
+        if (!string.Equals(token, changes.EditToken, StringComparison.Ordinal))
+        {
+            throw new ConfigurationConflictException();
+        }
+
+        var desired = WireViewConfigCodec.Patch(original, changes, _firmwareVersion);
+        if (desired.AsSpan().SequenceEqual(original))
+        {
+            return ParseConfig(original, original[2]) with { EditToken = token, FirmwareVersion = _firmwareVersion };
+        }
+
+        var saved = WriteAndVerifyConfig(desired, frame => port.Write(frame, 0, frame.Length),
+            () => ReadConfigPayload(port), Thread.Sleep);
+
+        return ParseConfig(saved, saved[2]) with { EditToken = ReadEditToken(port, saved), FirmwareVersion = _firmwareVersion };
+    }) ?? throw new IOException("Could not read WireView settings before applying changes.");
+
+    private T? WithConfigPort<T>(Func<SharedSerialPort, byte[], T> operation) where T : class
+    {
         if (!Monitor.TryEnter(_portGate, LockTimeoutMs))
         {
-            logger.LogWarning("Could not acquire port lock on {Port}, skipping config read", PortName);
             return null;
         }
 
         try
         {
-            if (_port is null || !_port.Open())
+            if (_port is not { } port || !port.Open() || !Handshake(port))
             {
                 return null;
             }
 
-            _port.DiscardInBuffer();
-
-            if (!Handshake(_port))
-            {
-                _port.Close();
-                return null;
-            }
-
-            // Read first 4 bytes to determine config version (version is at byte index 2)
-            _port.DiscardInBuffer();
-            _port.Write([CmdReadConfig], 0, 1);
-            var versionBuf = ReadExact(_port, 4);
-
-            _port.Close();
-
-            if (versionBuf is null)
-            {
-                return null;
-            }
-
-            var version = versionBuf[2];
-
-            var structSize = version switch
-            {
-                0 => ConfigV1Size,
-                1 => ConfigV2Size,
-                2 => ConfigV3Size,
-                _ => 0
-            };
-
-            if (structSize == 0)
-            {
-                return null;
-            }
-
-            // Full read with correct size
-            if (!_port.Open())
-            {
-                return null;
-            }
-
-            _port.DiscardInBuffer();
-            _port.Write([CmdReadConfig], 0, 1);
-
-            var buffer = ReadExact(_port, structSize);
-            _port.Close();
-
-            return buffer is null ? null : ParseConfig(buffer, version);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to read config on {Port}", PortName);
-            return null;
+            var payload = ReadConfigPayload(port);
+            return payload is null ? null : operation(port, payload);
         }
         finally
         {
@@ -307,85 +285,101 @@ public sealed class WireViewProReader(ILogger<WireViewPlugin> logger) : IWireVie
         }
     }
 
-    public byte[]? ReadConfigRaw()
+    private static byte[]? ReadConfigPayload(SharedSerialPort port)
     {
-        if (_port is null)
+        port.DiscardInBuffer();
+        port.Write([CmdReadConfig], 0, 1);
+
+        var header = ReadExact(port, 4);
+        if (header is null)
         {
             return null;
         }
 
-        if (!Monitor.TryEnter(_portGate, LockTimeoutMs))
+        var size = WireViewConfigCodec.Size(header[2]);
+        if (size == 0)
         {
-            logger.LogWarning("Could not acquire port lock on {Port}, skipping raw config read", PortName);
             return null;
         }
 
-        try
+        var payload = new byte[size];
+        header.CopyTo(payload, 0);
+        var length = 4 + ReadInto(port, payload, 4);
+
+        if (port.BytesToRead > 0)
         {
-            if (_port is null || !_port.Open())
-            {
-                return null;
-            }
-
-            _port.DiscardInBuffer();
-
-            if (!Handshake(_port))
-            {
-                _port.Close();
-                return null;
-            }
-
-            // Read first 4 bytes to determine config version (version is at byte index 2)
-            _port.DiscardInBuffer();
-            _port.Write([CmdReadConfig], 0, 1);
-            var versionBuf = ReadExact(_port, 4);
-
-            _port.Close();
-
-            if (versionBuf is null)
-            {
-                return null;
-            }
-
-            var version = versionBuf[2];
-
-            var structSize = version switch
-            {
-                0 => ConfigV1Size,
-                1 => ConfigV2Size,
-                2 => ConfigV3Size,
-                _ => 0
-            };
-
-            if (structSize == 0)
-            {
-                return null;
-            }
-
-            // Full read with correct size
-            if (!_port.Open())
-            {
-                return null;
-            }
-
-            _port.DiscardInBuffer();
-            _port.Write([CmdReadConfig], 0, 1);
-
-            var buffer = ReadExact(_port, structSize);
-            _port.Close();
-
-            return buffer;
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to read raw config on {Port}", PortName);
             return null;
         }
-        finally
+
+        if (length == size)
         {
-            _port?.Close();
-            Monitor.Exit(_portGate);
+            return payload;
         }
+
+        // Keep the original read-only layouts. A truncated write layout is never editable.
+        var legacySize = header[2] switch { 0 => 64, 1 => 72, 2 => 88, _ => 0 };
+        return length == legacySize ? payload[..length] : null;
+    }
+
+    private string? ReadEditToken(SharedSerialPort port, byte[] payload)
+    {
+        if (_firmwareVersion < WireViewSettingsValidation.MinimumWritableFirmware || payload.Length != WireViewConfigCodec.Size(payload[2]))
+        {
+            return null;
+        }
+
+        port.DiscardInBuffer();
+        port.Write([CmdReadUid], 0, 1);
+        var uid = ReadExact(port, 12);
+
+        return uid is null || uid.All(value => value == 0) || uid.All(value => value == byte.MaxValue)
+            ? null : Convert.ToHexString(SHA256.HashData([_firmwareVersion, .. uid, .. payload.AsSpan(2)]));
+    }
+
+    internal static byte[] WriteAndVerifyConfig(byte[] desired, Action<byte[]> send, Func<byte[]?> read, Action<int> delay)
+    {
+        foreach (var frame in ConfigWriteFrames(desired))
+        {
+            send(frame);
+        }
+
+        ReadBack(desired, read, delay);
+        send(NvmFrame(NvmStore));
+        delay(250);
+
+        send(NvmFrame(NvmLoad));
+        return ReadBack(desired, read, delay);
+    }
+
+    private static IEnumerable<byte[]> ConfigWriteFrames(byte[] payload)
+    {
+        const int chunkSize = 62;
+        for (var offset = 0; offset < payload.Length; offset += chunkSize)
+        {
+            var count = Math.Min(chunkSize, payload.Length - offset);
+            var frame = new byte[count + 2];
+            frame[0] = CmdWriteConfig;
+            frame[1] = (byte)offset;
+            payload.AsSpan(offset, count).CopyTo(frame.AsSpan(2));
+            yield return frame;
+        }
+    }
+
+    private static byte[] NvmFrame(byte command) => [CmdNvmConfig, 0x55, 0xAA, 0x55, 0xAA, command];
+
+    private static byte[] ReadBack(byte[] expected, Func<byte[]?> read, Action<int> delay)
+    {
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            delay(75);
+            var actual = read();
+            if (actual?.Length == expected.Length && actual.AsSpan(2).SequenceEqual(expected.AsSpan(2)))
+            {
+                return actual;
+            }
+        }
+
+        throw new IOException("WireView did not return the expected settings. Refresh before trying again.");
     }
 
     private bool Handshake(SharedSerialPort port)
@@ -433,12 +427,13 @@ public sealed class WireViewProReader(ILogger<WireViewPlugin> logger) : IWireVie
 
         if (!SupportedDevices.TryGetValue((vendorData[0], vendorData[1]), out var model))
         {
-            logger.LogWarning("Unsupported WireView device on {Port}: vendor {VendorId:X2}, product {ProductId:X2}",
+            logger.LogDebug("Unsupported WireView device on {Port}: vendor {VendorId:X2}, product {ProductId:X2}",
 
                 port.PortName, vendorData[0], vendorData[1]);
             return false;
         }
 
+        _firmwareVersion = vendorData[2];
         logger.LogInformation("Identified {Model} on {Port}, firmware {FirmwareVersion}", model, port.PortName, vendorData[2]);
         _handshakeComplete = true;
 
@@ -448,14 +443,19 @@ public sealed class WireViewProReader(ILogger<WireViewPlugin> logger) : IWireVie
     private static byte[]? ReadExact(SerialPort port, int size)
     {
         var buffer = new byte[size];
-        var offset = 0;
+        return ReadInto(port, buffer, 0) == size ? buffer : null;
+    }
+
+    private static int ReadInto(SerialPort port, byte[] buffer, int startOffset)
+    {
+        var offset = startOffset;
         var start = Environment.TickCount;
 
-        while (offset < size && Environment.TickCount - start < ReadTimeoutMs)
+        while (offset < buffer.Length && Environment.TickCount - start < ReadTimeoutMs)
         {
             if (port.BytesToRead > 0)
             {
-                offset += port.Read(buffer, offset, size - offset);
+                offset += port.Read(buffer, offset, buffer.Length - offset);
             }
             else
             {
@@ -463,7 +463,7 @@ public sealed class WireViewProReader(ILogger<WireViewPlugin> logger) : IWireVie
             }
         }
 
-        return offset == size ? buffer : null;
+        return offset - startOffset;
     }
 
     internal static WireViewSensorData Parse(byte[] b)
@@ -528,23 +528,13 @@ public sealed class WireViewProReader(ILogger<WireViewPlugin> logger) : IWireVie
         var shutdownWaitTime = b[62];
         var loggingInterval = b[63];
 
-        string? averaging = version >= 1
-            ? b[64] switch
-            {
-                0 => "22ms",
-                1 => "44ms",
-                2 => "89ms",
-                3 => "177ms",
-                4 => "354ms",
-                5 => "709ms",
-                6 => "1417ms",
-                _ => null
-            }
-            : null;
+        var averaging = version >= 1 && b[64] < DeviceConfig.AveragingOptions.Count
+            ? DeviceConfig.AveragingOptions[b[64]] : null;
 
         return new DeviceConfig
         {
             Version = version,
+            Display = WireViewConfigCodec.ReadDisplay(b, version),
             FriendlyName = friendlyName,
             BacklightDuty = backlightDuty,
             LoggingInterval = loggingInterval,

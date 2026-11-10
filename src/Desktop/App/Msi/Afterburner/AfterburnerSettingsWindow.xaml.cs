@@ -18,7 +18,7 @@ internal sealed partial class AfterburnerSettingsWindow : Window
     {
         InitializeComponent();
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "monitor.ico"));
-        Integration = new AfterburnerSettingsView(runtime);
+        Integration = new AfterburnerSettingsView(runtime, AppWindow.Id);
         Integration.CloseRequested += Close;
         IntegrationHost.Content = Integration;
         ApplyAppearance(runtime.Preferences);
@@ -40,7 +40,7 @@ internal sealed partial class AfterburnerSettingsWindow : Window
         }
 
         Integration.CommitPendingEdits();
-        if (!Integration.IsBusy && !Integration.HasPendingChanges && !_confirmingClose)
+        if (Integration is { IsBusy: false, HasPendingChanges: false } && !_confirmingClose)
         {
             return;
         }

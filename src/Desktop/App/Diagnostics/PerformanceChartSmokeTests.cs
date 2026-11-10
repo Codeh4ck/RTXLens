@@ -101,7 +101,7 @@ internal static class PerformanceChartSmokeTests
         runtime.SetRendering(true);
         window.Navigate("performance");
         view = (PerformanceChartView)window.CurrentView!;
-        await WaitAsync(() => VisualTreeQuery.Descendants<Button>(view).Any(button => button.Name == "StopButton" && button.IsEnabled));
+        await WaitAsync(() => VisualTreeQuery.Descendants<Button>(view).Any(button => button is { Name: "StopButton", IsEnabled: true }));
         Invoke(VisualTreeQuery.Descendants<Button>(view).Single(button => button.Name == "StopButton"));
         var session = runtime.Performance.CompletedSession();
         var html = PerformanceHtmlExporter.Export(session);

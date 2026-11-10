@@ -1,3 +1,4 @@
+using RTXLens.Core.Configuration;
 using RTXLens.Plugins.WireView.Contracts.Common;
 using RTXLens.Plugins.WireView.Device;
 
@@ -15,14 +16,17 @@ internal sealed class TestWireViewReader(WireViewTestState state) : IWireViewDev
             return state.Connected ? state.Sample : null;
         });
 
-    public DeviceConfig? ReadConfig() => Access(() => state.ConfigReadFails ? null : new DeviceConfig
+    public DeviceConfig? ReadConfig() => Access(() => state.ConfigReadFails ? null : state.Configuration);
+
+    public DeviceConfig ApplyConfig(DeviceConfig changes) => Access(() =>
     {
-        Version = 2,
-        FriendlyName = "Test WireView",
-        WireOcpFaultThresholdA = 9.2,
-        TsFaultThresholdC = 80,
-        FaultDisplayEnable = 0x3E,
-        FaultHardPowerEnable = 0x08
+        if (changes.EditToken != state.Configuration.EditToken)
+        {
+            throw new ConfigurationConflictException();
+        }
+
+        state.Configuration = changes with { EditToken = Guid.NewGuid().ToString("N") };
+        return state.Configuration;
     });
 
     public byte[]? ReadConfigRaw() => Access<byte[]?>(() => state.ConfigReadFails ? null : [0xEF, 0x05, 0x02, 0x41]);

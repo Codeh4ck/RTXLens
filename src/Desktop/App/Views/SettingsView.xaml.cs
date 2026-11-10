@@ -17,7 +17,7 @@ public sealed partial class SettingsView : UserControl
         Model = runtime.Settings;
         InitializeComponent();
         ThemePicker.SelectedIndex = Model.Theme switch { AppTheme.Dark => 1, AppTheme.Light => 2, _ => 0 };
-        StartupToggle.IsEnabled = !runtime.IsDemo;
+        StartupToggle.IsEnabled = runtime.CanRegisterStartup;
     }
 
     private void Theme_Changed(object sender, SelectionChangedEventArgs args)

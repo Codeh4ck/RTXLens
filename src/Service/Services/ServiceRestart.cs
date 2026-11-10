@@ -1,10 +1,23 @@
+using RTXLens.Core.Diagnostics;
+
 namespace RTXLens.Service.Services;
 
-internal sealed class ServiceRestart : IServiceRestart
+internal sealed class ServiceRestart(ILogger<ServiceRestart> logger) : IServiceRestart
 {
-    public void RequestRestart() => _ = Task.Run(async () =>
+    private int _requested;
+
+    public void RequestRestart()
     {
-        await Task.Delay(500);
-        Environment.Exit(1);
-    });
+        if (Interlocked.Exchange(ref _requested, 1) != 0)
+        {
+            return;
+        }
+
+        logger.LogActivity(LogLevel.Information, "service.restart-requested", "Service", "Backend restart requested.");
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(500);
+            Environment.Exit(1);
+        });
+    }
 }

@@ -21,22 +21,39 @@
         <TabView x:Name="ConfigurationTabs" Grid.Row="1" Style="{StaticResource MonitorConfigurationTabs}" TabWidthMode="SizeToContent" IsAddTabButtonVisible="False"
             CanDragTabs="False" CanReorderTabs="False"
             VerticalAlignment="Stretch" HorizontalAlignment="Stretch" Background="{ThemeResource MonitorBackground}">
-            <TabViewItem x:Name="StreamTab" Header="Sensor stream" Tag="stream" IsClosable="False" Style="{StaticResource MonitorConfigurationTab}">
+            <TabViewItem x:Name="StreamTab" Header="Streaming" Tag="stream" IsClosable="False" Style="{StaticResource MonitorConfigurationTab}">
                 <ScrollViewer Padding="0,16,0,8" HorizontalScrollBarVisibility="Disabled" VerticalContentAlignment="Top">
-                    <controls:SectionPanel x:Name="StreamPanel" Header="Sensor stream" VerticalAlignment="Top">
-                        <controls:SectionPanel.HeaderActions>
-                            <Button x:Name="SensorStreamInfoButton" Click="SensorStreamInfo_Click" Padding="6"
-                                ToolTipService.ToolTip="About Sensor stream" AutomationProperties.Name="About Sensor stream">
-                                <FontIcon Glyph="&#xE946;" FontSize="18" Foreground="{ThemeResource MonitorAccent}" />
-                            </Button>
-                        </controls:SectionPanel.HeaderActions>
-                        <StackPanel Spacing="12">
-                            <NumberBox Header="Sensor stream interval (ms)" Value="{x:Bind Model.StreamIntervalMs, Mode=TwoWay}"
-                                IsEnabled="{x:Bind Model.CanEdit, Mode=OneWay}"
-                                Minimum="100" Maximum="30000" SmallChange="100" SpinButtonPlacementMode="Inline" />
-                            <TextBlock Text="Sets how often the service publishes the latest readings to all connected apps and widgets. Hardware polling is configured separately in each plugin's tab." Style="{StaticResource MonitorCaption}" />
-                        </StackPanel>
-                    </controls:SectionPanel>
+                    <StackPanel Spacing="14">
+                        <controls:SectionPanel x:Name="StreamPanel" Header="Sensor stream" VerticalAlignment="Top">
+                            <controls:SectionPanel.HeaderActions>
+                                <Button x:Name="SensorStreamInfoButton" Click="SensorStreamInfo_Click" Padding="6"
+                                    ToolTipService.ToolTip="About Sensor stream" AutomationProperties.Name="About Sensor stream">
+                                    <FontIcon Glyph="&#xE946;" FontSize="18" Foreground="{ThemeResource MonitorAccent}" />
+                                </Button>
+                            </controls:SectionPanel.HeaderActions>
+                            <StackPanel Spacing="12">
+                                <NumberBox Header="Sensor stream interval (ms)" Value="{x:Bind Model.StreamIntervalMs, Mode=TwoWay}"
+                                    IsEnabled="{x:Bind Model.CanEdit, Mode=OneWay}"
+                                    Minimum="100" Maximum="30000" SmallChange="100" SpinButtonPlacementMode="Inline" />
+                                <TextBlock Text="Sets how often the service publishes the latest readings to all connected apps and widgets. Hardware polling is configured separately in each plugin's tab." Style="{StaticResource MonitorCaption}" />
+                            </StackPanel>
+                        </controls:SectionPanel>
+
+                        <controls:SectionPanel Header="Event log stream" VerticalAlignment="Top">
+                            <StackPanel Spacing="12">
+                                <Grid ColumnDefinitions="*,*" ColumnSpacing="14">
+                                    <NumberBox Header="Event log retention (days)" Value="{x:Bind Model.EventLogRetentionDays, Mode=TwoWay}"
+                                        IsEnabled="{x:Bind Model.CanEdit, Mode=OneWay}"
+                                        Minimum="1" Maximum="90" SmallChange="1" SpinButtonPlacementMode="Inline" />
+                                    <NumberBox Grid.Column="1" Header="Maximum log storage (MB)" Value="{x:Bind Model.EventLogStorageMb, Mode=TwoWay}"
+                                        IsEnabled="{x:Bind Model.CanEdit, Mode=OneWay}"
+                                        Minimum="1" Maximum="50" SmallChange="1" SpinButtonPlacementMode="Inline" />
+                                </Grid>
+                                <TextBlock Text="The service keeps recent activity across restarts. It removes the oldest events when either limit is reached."
+                                    TextWrapping="Wrap" Style="{StaticResource MonitorCaption}" />
+                            </StackPanel>
+                        </controls:SectionPanel>
+                    </StackPanel>
                 </ScrollViewer>
             </TabViewItem>
             <TabViewItem Header="Warnings" Tag="warnings" IsClosable="False" Style="{StaticResource MonitorConfigurationTab}">

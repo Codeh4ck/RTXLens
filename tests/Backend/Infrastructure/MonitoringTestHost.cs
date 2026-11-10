@@ -38,6 +38,8 @@ internal sealed class MonitoringTestHost : IAsyncDisposable
 
     public HttpClient Client { get; }
 
+    public ILogger CreateLogger(string category) => _application.Services.GetRequiredService<ILoggerFactory>().CreateLogger(category);
+
     public string ConfigurationPath { get; }
     public int RestartRequests => ((TestServiceRestart)_application.Services.GetRequiredService<IServiceRestart>()).RequestCount;
 
@@ -218,9 +220,13 @@ internal sealed class MonitoringTestHost : IAsyncDisposable
         }
 
         builder.Configuration.AddInMemoryCollection(settings);
+
         builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, 0));
+
         builder.Services.AddMonitoringCore(builder.Configuration);
+        builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy.AllowAnyOrigin()));
         builder.Services.AddSingleton<IServiceRestart, TestServiceRestart>();
+
         if (useMsiHardware)
         {
             builder.Services.AddMsiPlugin();
@@ -267,7 +273,7 @@ internal sealed class MonitoringTestHost : IAsyncDisposable
         }
 
         var application = builder.Build();
-        application.UseWebSockets();
+        application.UseCors().UseWebSockets();
         application.MapMonitoringEndpoints();
         if (msi is not null || useMsiHardware || useInstalledFactories)
         {

@@ -1,3 +1,8 @@
+1.0.8 - Event logs and WireView device settings
+- View desktop and backend activity in the Event Log. Filter and export entries, and configure backend log retention.
+- Read and edit WireView Pro II device settings, including fan controls, protection thresholds, fault actions, and display options. RTX Lens verifies settings after saving.
+- Improve installer cleanup when upgrading from older versions.
+
 1.0.7 - RTX Lens
 - Rename the desktop app, backend service, and iCUE widget to RTX Lens.
 - Upgrade existing RTX Monitor installations in place and migrate saved settings, profiles, startup entries, and Safeguard+ data.

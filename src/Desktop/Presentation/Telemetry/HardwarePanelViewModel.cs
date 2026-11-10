@@ -178,6 +178,7 @@ public sealed class HardwarePanelViewModel : ObservableObject
         get;
         set => Set(ref field, value);
     } = string.Empty;
+    public DeviceConfig? DeviceConfiguration { get; private set; }
     public string DeviceConfigurationStatus { get; private set; } = "Read settings from the connected device.";
     public ObservableCollection<PinViewModel> Pins { get; } = [.. Enumerable.Range(1, 6).Select(channel => new PinViewModel(channel))];
     public ObservableCollection<MetricViewModel> Metrics { get; } = [];
@@ -269,6 +270,7 @@ public sealed class HardwarePanelViewModel : ObservableObject
                 pin.ClearPeakHistory();
             }
 
+            DeviceConfiguration = null;
             DeviceDetails.Clear();
             SetDeviceConfigurationStatus("Read settings from the connected device.");
             if (IsWireView)
@@ -443,8 +445,9 @@ public sealed class HardwarePanelViewModel : ObservableObject
         }
     }
 
-    public void SetDeviceConfiguration(DeviceConfig config)
+    public void SetDeviceConfiguration(DeviceConfig config, string? status = null)
     {
+        DeviceConfiguration = config;
         _pinLimit = config.WireOcpFaultThresholdA;
         DeviceDetails.Clear();
 
@@ -453,7 +456,7 @@ public sealed class HardwarePanelViewModel : ObservableObject
             DeviceDetails.Add(metric);
         }
 
-        DeviceConfigurationStatus = $"Read from device · {DateTimeOffset.Now:HH:mm:ss}";
+        DeviceConfigurationStatus = status ?? $"Read from device · {DateTimeOffset.Now:HH:mm:ss}";
 
         Raise(nameof(DeviceConfigurationStatus));
     }
@@ -500,6 +503,7 @@ public sealed class HardwarePanelViewModel : ObservableObject
 
         if (IsWireView)
         {
+            DeviceConfiguration = null;
             if (DeviceDetails.Count > 0)
             {
                 DeviceDetails.Clear();

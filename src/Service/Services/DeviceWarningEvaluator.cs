@@ -183,9 +183,8 @@ internal sealed class DeviceWarningEvaluator
     };
 
     private static bool IsPinReading(SensorReading reading) =>
-        reading.Identity is { Channel: >= 1 and <= 6, Metric: SensorMetric.Current or SensorMetric.Voltage }
-        && reading.Identity is { PluginId: "msi-psu", Component: SensorComponent.PsuPin }
-            or { PluginId: "asus-astral" or "wireview-pro2", Component: SensorComponent.GpuPin };
+        reading.Identity is { Channel: >= 1 and <= 6, Metric: SensorMetric.Current or SensorMetric.Voltage } and ({ PluginId: "msi-psu", Component: SensorComponent.PsuPin }
+            or { PluginId: "asus-astral" or "wireview-pro2", Component: SensorComponent.GpuPin });
 
     private static WarningPolicy? LegacyPolicy(WarningOptions options, string pluginId, string kind)
     {

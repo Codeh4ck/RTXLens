@@ -148,7 +148,7 @@ internal static class AfterburnerElevatedOperation
                 {
                     // All checks, including process detection, are repeated in the elevated process before writing.
                     AfterburnerDiscovery.RequireStopped();
-                    if (operation.Action == "apply" && operation.Settings is { } settings)
+                    if (operation is { Action: "apply", Settings: { } settings })
                     {
                         foreach (var alarm in settings.GetConnectorAlarms())
                         {

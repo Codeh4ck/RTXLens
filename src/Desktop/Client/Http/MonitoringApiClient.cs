@@ -87,6 +87,16 @@ public sealed class MonitoringApiClient(HttpClient http) : IMonitoringApi
         NormalizeConfiguration(await GetAsync("configuration", ClientJsonContext.Default.ConfigurationSnapshot, token));
     public Task<DeviceConfig> GetWireViewConfigurationAsync(CancellationToken token) =>
         GetAsync("plugins/wireview-pro2/device/config", ClientJsonContext.Default.DeviceConfig, token);
+    public async Task<DeviceConfig> ApplyWireViewConfigurationAsync(DeviceConfig changes, CancellationToken token)
+    {
+        using var response = await http.PutAsJsonAsync("plugins/wireview-pro2/device/config", changes,
+            ClientJsonContext.Default.DeviceConfig, token);
+
+        await EnsureSuccessAsync(response, token);
+        return await response.Content.ReadFromJsonAsync(ClientJsonContext.Default.DeviceConfig, token)
+            ?? throw new InvalidDataException("The service returned empty WireView settings.");
+    }
+
     public Task<AsusDeviceInfo[]> GetAsusDevicesAsync(CancellationToken token) =>
         GetAsync("plugins/asus-astral/devices", ClientJsonContext.Default.AsusDeviceInfoArray, token);
     public Task<NvidiaDeviceInfo[]> GetNvidiaDevicesAsync(CancellationToken token) =>

@@ -29,8 +29,9 @@
                         <ComboBoxItem Content="GPU status" />
                         <ComboBoxItem Content="MSI PSU" />
                         <ComboBoxItem Content="Performance Chart" />
+                        <ComboBoxItem Content="Event Log" />
                     </ComboBox>
-                    <TextBlock Text="Opens the selected tab at startup when it is reporting. Otherwise, opens the first available tab." Style="{StaticResource MonitorCaption}" TextWrapping="Wrap" />
+                    <TextBlock Text="Opens the selected tab at startup. If the selected plugin is unavailable, opens the first reporting plugin." Style="{StaticResource MonitorCaption}" TextWrapping="Wrap" />
                     <ToggleSwitch Header="Remember window size" IsOn="{x:Bind Model.RememberWindowSize, Mode=OneWay}" Toggled="RememberWindowSize_Toggled" />
                     <ToggleSwitch Header="Remember window position" IsOn="{x:Bind Model.RememberWindowPosition, Mode=OneWay}" Toggled="RememberWindowPosition_Toggled" />
                     <ToggleSwitch Header="Minimize to system tray" IsOn="{x:Bind Model.MinimizeToTray, Mode=TwoWay}"/>

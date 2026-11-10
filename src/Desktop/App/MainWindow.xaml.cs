@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Windowing;
+using RTXLens.App.Platform;
 using RTXLens.App.Services;
 using RTXLens.App.Views;
 using RTXLens.Presentation.Telemetry;
@@ -12,7 +13,7 @@ namespace RTXLens.App;
 public sealed partial class MainWindow : Window
 {
     private readonly AppRuntime _runtime;
-    private string _page = "hardware";
+    private string _page;
     private string? _panelId;
     private bool _rendering = true;
     private string? _preferredPanelId;
@@ -25,11 +26,13 @@ public sealed partial class MainWindow : Window
     internal object? CurrentView => PageHost.Content;
     internal bool HardwareDetailsVisible => _rendering && _page == "hardware";
     internal bool ConfigurationVisible => _rendering && _page == "configuration";
+
     public Visibility WarningVisibility(bool hasWarning) => hasWarning ? Visibility.Visible : Visibility.Collapsed;
 
     internal void ApplyAppearance(AppPreferences preferences)
     {
         ThemeService.Apply(Root, preferences);
+
         PageHost.FontSize = 14 * preferences.TextScale;
         Tabs.FontSize = 14 * preferences.TextScale;
         AccentGlow.Visibility = preferences.ReducedEffects ? Visibility.Collapsed : Visibility.Visible;
@@ -53,9 +56,14 @@ public sealed partial class MainWindow : Window
     {
         _runtime = runtime;
         _preferredPanelId = runtime.Preferences.StartupTabId;
-        _page = _preferredPanelId == "performance" ? "performance" : "hardware";
+        _page = _preferredPanelId is "performance" or "event-log" ? _preferredPanelId : "hardware";
+
         Model = runtime.Dashboard;
+
         InitializeComponent();
+
+        Title = DesktopBuild.WindowTitle;
+
         if (AppWindow.Presenter is OverlappedPresenter presenter)
         {
             presenter.IsMaximizable = true;
@@ -67,14 +75,17 @@ public sealed partial class MainWindow : Window
             OperationStatus.Text = message;
             ToolTipService.SetToolTip(OperationStatus, message);
         };
+
         if (runtime.IsDemo)
         {
             ModeLabel.Text = "DEMO · SIMULATED TELEMETRY";
         }
 
         Model.ReportingPanels.CollectionChanged += OnReportingPanelsChanged;
+
         SelectInitialPanel();
-        if (_page == "performance")
+
+        if (_page is "performance" or "event-log")
         {
             RenderPage();
         }
@@ -99,7 +110,9 @@ public sealed partial class MainWindow : Window
         Model.ReportingPanels.CollectionChanged -= OnReportingPanelsChanged;
         Model = _runtime.Dashboard;
         Model.ReportingPanels.CollectionChanged += OnReportingPanelsChanged;
+
         ModeLabel.Text = simulated ? "DEBUG SIMULATION ACTIVE" : _runtime.IsDemo ? "DEMO · SIMULATED TELEMETRY" : "POWER · PINS · PROTECTION";
+
         Bindings.Update();
         SelectInitialPanel();
         RenderPage();
@@ -126,6 +139,7 @@ public sealed partial class MainWindow : Window
         {
             Model.SelectedPanel = null;
             _panelId = null;
+
             RenderPage();
         }
     }
@@ -138,6 +152,17 @@ public sealed partial class MainWindow : Window
     }
 
     private void Performance_Click(object sender, RoutedEventArgs args) => Navigate("performance");
+
+    private void EventLog_Click(object sender, RoutedEventArgs args)
+    {
+        if (_page == "event-log")
+        {
+            EventLogTab.IsChecked = true;
+            return;
+        }
+
+        Navigate("event-log");
+    }
 
     private void Configuration_Click(object sender, RoutedEventArgs args) => Navigate("configuration");
 
@@ -172,6 +197,7 @@ public sealed partial class MainWindow : Window
     internal void Navigate(string page)
     {
         RememberConfigurationSection();
+
         _page = page;
         if (page != "hardware")
         {
@@ -197,6 +223,7 @@ public sealed partial class MainWindow : Window
         {
             RememberConfigurationSection();
             CloseCurrentChart();
+
             PageHost.Content = null;
         }
     }
@@ -204,7 +231,9 @@ public sealed partial class MainWindow : Window
     internal async Task CloseViewsAsync()
     {
         CloseCurrentChart();
+
         await _closingCharts;
+
         PageHost.Content = null;
     }
 
@@ -213,8 +242,7 @@ public sealed partial class MainWindow : Window
         if (PageHost.Content is PerformanceChartView chart)
         {
             var closing = chart.CloseAsync();
-            _closingCharts = _closingCharts.IsCompletedSuccessfully
-                ? closing : Task.WhenAll(_closingCharts, closing);
+            _closingCharts = _closingCharts.IsCompletedSuccessfully ? closing : Task.WhenAll(_closingCharts, closing);
         }
     }
 
@@ -235,10 +263,14 @@ public sealed partial class MainWindow : Window
 
         CloseCurrentChart();
         _runtime.RefreshPresentation();
+
         PerformanceTab.IsChecked = _page == "performance";
+        EventLogTab.IsChecked = _page == "event-log";
+
         PageHost.Content = _page switch
         {
             "performance" => new PerformanceChartView(_runtime),
+            "event-log" => new EventLogView(_runtime),
             "settings" => new SettingsView(_runtime),
             "configuration" => new ConfigurationView(_runtime),
             _ when Model.ReportingPanels.FirstOrDefault(panel => panel.Id == _panelId) is { IsMsi: true } msi => new MsiHardwareView(msi, _runtime),
@@ -246,7 +278,6 @@ public sealed partial class MainWindow : Window
             _ => new TextBlock { Text = "No plugins are reporting. Open Configuration to check device and plugin settings.", TextWrapping = TextWrapping.Wrap,
                 VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(24) }
         };
-
 
         if (PageHost.Content is ConfigurationView configuration && _configurationSection is { } section)
         {

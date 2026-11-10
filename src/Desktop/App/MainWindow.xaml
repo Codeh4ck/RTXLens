@@ -46,6 +46,8 @@
                 </ItemsControl>
                     <ToggleButton x:Name="PerformanceTab" Content="Performance Chart"
                         Style="{StaticResource MonitorNavigationTab}" Click="Performance_Click" />
+                    <ToggleButton x:Name="EventLogTab" Content="Event Log"
+                        Style="{StaticResource MonitorNavigationTab}" Click="EventLog_Click" />
                 </StackPanel>
                 </ScrollViewer>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">

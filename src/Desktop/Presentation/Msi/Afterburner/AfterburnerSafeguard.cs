@@ -62,7 +62,7 @@ public static class AfterburnerSafeguard
         ProtectedInstallationFile.Require(executable);
         ProtectedInstallationFile.Require(entry);
         ProtectedInstallationFile.Require(workflow);
-        var binding = new SafeguardBinding(Guid.NewGuid(), script.Id, script.Version, connector, delay,
+        var binding = new SafeguardBinding(Guid.NewGuid(), script.Id, SafeguardScriptDefinition.Version, connector, delay,
             executable, Hash(executable), Hash(entry), Hash(workflow), mailId);
         binding.Validate();
         return binding;

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Net.WebSockets;
 using System.Text.Json;
+using RTXLens.Client.Http;
 using RTXLens.Contracts.Configuration;
 using RTXLens.Tests.Infrastructure;
 using RTXLens.Tests.TestDoubles;
@@ -20,6 +21,7 @@ internal static class WireViewEndpointTests
         await runner.RunAsync(MarksInvalidNativeConnectorVoltageUnavailableAsync);
         await runner.RunAsync(StreamsTheOriginalWireViewPayloadAsync);
         await runner.RunAsync(ReturnsDeviceConfigurationAndRawBytesAsync);
+        await runner.RunAsync(SavesWireViewSettingsAndRejectsStaleAndBrowserWritesAsync);
         await runner.RunAsync(ComplementsIndependentFaultMasksAsync);
         await runner.RunAsync(ReportsFailedDeviceOperationsAsync);
         await runner.RunAsync(RestartsOnlyTheWireViewPluginAsync);
@@ -126,6 +128,37 @@ internal static class WireViewEndpointTests
         TestAssert.Equal(9.2, configuration.RootElement.GetProperty("wireOcpFaultThresholdA").GetDouble());
         TestAssert.Equal("EF-05-02-41", raw!.RootElement.GetProperty("bytes").GetString());
         TestAssert.Equal(4, raw.RootElement.GetProperty("length").GetInt32());
+    }
+
+    private static async Task SavesWireViewSettingsAndRejectsStaleAndBrowserWritesAsync()
+    {
+        await using var host = await MonitoringTestHost.StartWithWireViewAsync(new WireViewTestState());
+        await host.GetSensorSnapshotAsync();
+        var api = new MonitoringApiClient(host.Client);
+
+        var initial = await api.GetWireViewConfigurationAsync(CancellationToken.None);
+        var changes = initial with { FriendlyName = "Updated WireView" };
+        var applied = await api.ApplyWireViewConfigurationAsync(changes, CancellationToken.None);
+
+        TestAssert.Equal("Updated WireView", applied.FriendlyName);
+        TestAssert.True(applied.EditToken != initial.EditToken, "Applying changes must produce a new edit token.");
+
+        using var incomplete = await host.Client.PutAsJsonAsync(Prefix + "/device/config",
+            new { applied.EditToken, applied.Version, FriendlyName = "Incomplete settings" });
+        TestAssert.Equal(HttpStatusCode.BadRequest, incomplete.StatusCode);
+
+        using var stale = await host.Client.PutAsJsonAsync(Prefix + "/device/config", initial);
+        TestAssert.Equal(HttpStatusCode.PreconditionFailed, stale.StatusCode);
+
+        using var fromBrowser = new HttpRequestMessage(HttpMethod.Put, Prefix + "/device/config")
+        {
+            Content = JsonContent.Create(applied with { FriendlyName = "Browser write" })
+        };
+        fromBrowser.Headers.Add("Origin", "https://example.com");
+
+        using var forbidden = await host.Client.SendAsync(fromBrowser);
+        TestAssert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+        TestAssert.Equal(applied, await api.GetWireViewConfigurationAsync(CancellationToken.None));
     }
 
     private static async Task ComplementsIndependentFaultMasksAsync()

@@ -1,0 +1,158 @@
+<UserControl
+    x:Class="RTXLens.App.Views.EventLogView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:RTXLens.App.Controls"
+    xmlns:views="using:RTXLens.App.Views"
+    Loaded="View_Loaded" Unloaded="View_Unloaded">
+    <UserControl.Resources>
+        <Style x:Key="ColumnGripHost" TargetType="controls:ColumnResizeGrip">
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Width" Value="12" />
+        </Style>
+
+        <Style x:Key="ColumnGrip" TargetType="Thumb">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Grid Background="Transparent">
+                            <Border Width="1" HorizontalAlignment="Center" Background="{ThemeResource MonitorBorder}" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Padding="12" RowDefinitions="Auto,*,Auto" RowSpacing="12">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <StackPanel Spacing="4" VerticalAlignment="Center">
+                <TextBlock Text="Event Log" Style="{StaticResource MonitorHeading}" />
+                <TextBlock x:Name="StatusText" Text="Connecting to the backend..." Style="{StaticResource MonitorCaption}" TextWrapping="Wrap" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <ComboBox x:Name="LevelFilter" AutomationProperties.Name="Filter by level"
+                    SelectedIndex="0" MinWidth="128" SelectionChanged="Filter_Changed">
+                    <ComboBoxItem Content="All levels" />
+                    <ComboBoxItem Content="Information" />
+                    <ComboBoxItem Content="Warning" />
+                    <ComboBoxItem Content="Error" />
+                </ComboBox>
+                <ComboBox x:Name="SourceFilter" AutomationProperties.Name="Filter by source"
+                    MinWidth="136" MaxWidth="200" SelectionChanged="Filter_Changed" />
+                <Button x:Name="ExportButton" Click="Export_Click" AutomationProperties.Name="Export logs"
+                    ToolTipService.ToolTip="Save retained events and desktop configuration changes as an HTML report">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <Image Width="16" Height="16" VerticalAlignment="Center">
+                            <Image.Source>
+                                <SvgImageSource UriSource="ms-appx:///Assets/Icons/chart-export.svg" />
+                            </Image.Source>
+                        </Image>
+                        <TextBlock Text="Export logs…" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button x:Name="ClearEventsButton" Click="ClearEvents_Click" AutomationProperties.Name="Clear events"
+                    ToolTipService.ToolTip="Permanently clear all saved RTX Lens events">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <Image Width="16" Height="16" VerticalAlignment="Center">
+                            <Image.Source>
+                                <SvgImageSource UriSource="ms-appx:///Assets/Icons/chart-clear.svg" />
+                            </Image.Source>
+                        </Image>
+                        <TextBlock Text="Clear events" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <Border x:Name="TableBorder" Grid.Row="1" Background="{ThemeResource MonitorPanel}" BorderBrush="{ThemeResource MonitorBorder}"
+            BorderThickness="1" CornerRadius="8" SizeChanged="Table_SizeChanged">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled"
+                VerticalScrollBarVisibility="Disabled" VerticalScrollMode="Disabled">
+                <Grid RowDefinitions="Auto,*" Width="{x:Bind Widths.Total, Mode=OneWay}">
+                    <Grid Background="{ThemeResource MonitorInset}" ColumnSpacing="8" Padding="12,7,16,7">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="{x:Bind Widths.Time, Mode=OneWay}" />
+                            <ColumnDefinition Width="{x:Bind Widths.Level, Mode=OneWay}" />
+                            <ColumnDefinition Width="{x:Bind Widths.Source, Mode=OneWay}" />
+                            <ColumnDefinition Width="{x:Bind Widths.Message, Mode=OneWay}" />
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="TimeHeader" Content="Time ▼" Click="TimeSort_Click" Margin="0,0,12,0" />
+                        <Button x:Name="LevelHeader" Grid.Column="1" Content="Level" Click="LevelSort_Click" Margin="0,0,12,0" />
+                        <TextBlock Grid.Column="2" Text="Source" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="3" Text="Message" FontWeight="SemiBold" VerticalAlignment="Center" />
+
+                        <controls:ColumnResizeGrip Grid.Column="0" Style="{StaticResource ColumnGripHost}">
+                            <Thumb Tag="0" Style="{StaticResource ColumnGrip}" DragDelta="Column_DragDelta"
+                                AutomationProperties.Name="Resize Time column" ToolTipService.ToolTip="Drag to resize Time" />
+                        </controls:ColumnResizeGrip>
+                        <controls:ColumnResizeGrip Grid.Column="1" Style="{StaticResource ColumnGripHost}">
+                            <Thumb Tag="1" Style="{StaticResource ColumnGrip}" DragDelta="Column_DragDelta"
+                                AutomationProperties.Name="Resize Level column" ToolTipService.ToolTip="Drag to resize Level" />
+                        </controls:ColumnResizeGrip>
+                        <controls:ColumnResizeGrip Grid.Column="2" Style="{StaticResource ColumnGripHost}">
+                            <Thumb Tag="2" Style="{StaticResource ColumnGrip}" DragDelta="Column_DragDelta"
+                                AutomationProperties.Name="Resize Source column" ToolTipService.ToolTip="Drag to resize Source" />
+                        </controls:ColumnResizeGrip>
+                        <controls:ColumnResizeGrip Grid.Column="3" Style="{StaticResource ColumnGripHost}">
+                            <Thumb Tag="3" Style="{StaticResource ColumnGrip}" DragDelta="Column_DragDelta"
+                                AutomationProperties.Name="Resize Message column" ToolTipService.ToolTip="Drag to resize Message" />
+                        </controls:ColumnResizeGrip>
+                    </Grid>
+
+                    <ListView x:Name="Events" Grid.Row="1" SelectionMode="None"
+                        ScrollViewer.HorizontalScrollMode="Disabled" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                        ScrollViewer.VerticalScrollBarVisibility="Auto" Padding="0,0,12,0"
+                        AutomationProperties.Name="RTX Lens events">
+                        <ListView.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <ItemsStackPanel ItemsUpdatingScrollMode="KeepItemsInView" />
+                            </ItemsPanelTemplate>
+                        </ListView.ItemsPanel>
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Padding" Value="0" />
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="views:EventLogRow">
+                                <Grid ColumnSpacing="8" Padding="12,8,4,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="{x:Bind Widths.Time, Mode=OneWay}" />
+                                        <ColumnDefinition Width="{x:Bind Widths.Level, Mode=OneWay}" />
+                                        <ColumnDefinition Width="{x:Bind Widths.Source, Mode=OneWay}" />
+                                        <ColumnDefinition Width="{x:Bind Widths.Message, Mode=OneWay}" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{x:Bind Time}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                    <Grid Grid.Column="1" VerticalAlignment="Center">
+                                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="5" Visibility="{x:Bind Information}">
+                                            <FontIcon Glyph="&#xE946;" FontSize="14" Foreground="{ThemeResource MonitorAccent}" />
+                                            <TextBlock Grid.Column="1" Text="Information" TextTrimming="CharacterEllipsis" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="5" Visibility="{x:Bind Warning}">
+                                            <FontIcon Glyph="&#xE7BA;" FontSize="14" Foreground="{ThemeResource MonitorCaution}" />
+                                            <TextBlock Grid.Column="1" Text="Warning" Foreground="{ThemeResource MonitorCaution}" TextTrimming="CharacterEllipsis" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="5" Visibility="{x:Bind Error}">
+                                            <FontIcon Glyph="&#xEA39;" FontSize="14" Foreground="{ThemeResource MonitorDanger}" />
+                                            <TextBlock Grid.Column="1" Text="Error" Foreground="{ThemeResource MonitorDanger}" TextTrimming="CharacterEllipsis" />
+                                        </Grid>
+                                    </Grid>
+                                    <TextBlock Grid.Column="2" Text="{x:Bind Source}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="3" Text="{x:Bind Message}" TextWrapping="Wrap" VerticalAlignment="Center"
+                                        ToolTipService.ToolTip="{x:Bind Detail}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Grid>
+            </ScrollViewer>
+        </Border>
+
+        <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <TextBlock x:Name="ActionStatus" Style="{StaticResource MonitorCaption}" TextWrapping="Wrap" VerticalAlignment="Center" />
+            <Button x:Name="LoadOlderButton" Grid.Column="1" Content="Load older events" Click="LoadOlder_Click" IsEnabled="False" />
+        </Grid>
+    </Grid>
+</UserControl>
