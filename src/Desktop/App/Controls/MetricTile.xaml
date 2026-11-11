@@ -27,7 +27,6 @@
                 <TextBlock x:Name="MetricLabel" Grid.Column="1" Text="{x:Bind DisplayLabel}" Foreground="{ThemeResource MonitorForeground}" FontSize="15" VerticalAlignment="Center"
                     TextWrapping="Wrap" ToolTipService.ToolTip="{x:Bind Model.Label}" />
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
-                    <ContentPresenter x:Name="ValueActionHost" Visibility="Collapsed" VerticalAlignment="Center" />
                     <TextBlock x:Name="ValueText" Text="{x:Bind Model.Value, Mode=OneWay}" FontSize="16" FontWeight="SemiBold"
                         Foreground="{ThemeResource MonitorForeground}" MaxWidth="210" TextWrapping="Wrap" TextAlignment="Right" ToolTipService.ToolTip="{x:Bind Model.Value, Mode=OneWay}" />
                     <Ellipse x:Name="Indicator" Width="4" Height="4" Fill="{ThemeResource MonitorAccent}" VerticalAlignment="Center" />

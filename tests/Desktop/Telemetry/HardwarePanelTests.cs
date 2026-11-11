@@ -26,6 +26,7 @@ internal static class HardwarePanelTests
         runner.Run(GroupsGpuStatusAndPromotesHeadlineMetrics);
         runner.Run(ShowsPcieRatesByLinkGeneration);
         runner.Run(ShowsBoostLimitTimesOnlyWhenReported);
+        runner.Run(UsesReportedPowerBoundsForScaleMarkers);
         runner.Run(UnavailablePinFlagsDoNotCreateAnEmptyChart);
     }
 
@@ -151,14 +152,17 @@ internal static class HardwarePanelTests
         };
         var model = new GpuStatusViewModel();
         model.Apply(frame, null, new AppPreferences(), frame.Timestamp);
-        TestAssert.Equal(5, model.Metrics.Count);
-        TestAssert.Equal("VRAM usage", model.Metrics[2].Label);
-        TestAssert.Equal("Core / VRAM temp", model.Metrics[3].Label);
-        TestAssert.Equal("1200 RPM / 1400 RPM", model.Metrics.Single(metric => metric.Label == "Fan 1 / 2").Value);
+        TestAssert.Equal("VRAM usage", model.VramUsage.Label);
+        TestAssert.Equal("1200 RPM", model.Fan1.Value);
+        TestAssert.Equal("1400 RPM", model.Fan2.Value);
         TestAssert.Equal("80%", model.GpuUsageText);
-        TestAssert.False(model.Metrics[3].IsWarning, "Warning colors must consume the shared backend state, not infer independent thresholds.");
+        TestAssert.True(model.HasVramUsage, "The standalone VRAM bar should use the reported utilization.");
+        TestAssert.Equal(25d, model.VramUsagePercent);
+        TestAssert.True(model.HasSecondFan, "The second fan is shown when the card reports it.");
+        TestAssert.False(model.CoreTemperature.IsWarning, "Warning colors must consume the shared backend state, not infer independent thresholds.");
         model.Clear();
         TestAssert.True(model.IsUnavailable, "Disconnected GPU status must be explicit.");
+        TestAssert.False(model.HasVramUsage, "An expired reading must not leave a populated VRAM bar.");
         return;
 
         SensorReading Reading(SensorComponent component, SensorMetric metric, double value, int? channel = null) =>
@@ -177,9 +181,9 @@ internal static class HardwarePanelTests
             (SensorComponent.GpuPcie, SensorMetric.ReceiveThroughput, null, 1024));
 
         var gen1Rate = 2.5.ToString("0.#", CultureInfo.CurrentCulture);
-        TestAssert.Equal($"Gen 1 ×8 · {gen1Rate} GT/s per lane", diagnostics.Pcie.Single(metric => metric.Label == "PCIe Link Speed").Value);
-        TestAssert.Equal("Gen 5 ×16 · 32 GT/s per lane", diagnostics.Pcie.Single(metric => metric.Label == "Max PCIe Link Speed").Value);
-        TestAssert.Equal("1 KiB/s", diagnostics.Pcie.Single(metric => metric.Label == "PCIe RX").Value);
+        TestAssert.Equal($"Gen 1 ×8 · {gen1Rate} GT/s per lane", diagnostics.CurrentLink.Value);
+        TestAssert.Equal("Gen 5 ×16 · 32 GT/s per lane", diagnostics.MaximumLink.Value);
+        TestAssert.Equal("1 KiB/s", diagnostics.ReceiveThroughput.Value);
     }
 
     private static void ShowsBoostLimitTimesOnlyWhenReported()
@@ -196,6 +200,27 @@ internal static class HardwarePanelTests
         TestAssert.Equal($"{duration} s", diagnostics.BoostLimits.Single(metric => metric.Label == "Software power cap").Value);
         TestAssert.Equal("0 s", diagnostics.BoostLimits.Single(metric => metric.Label == "Sync Boost").Value);
         TestAssert.Equal("-", diagnostics.BoostLimits.Single(metric => metric.Label == "Reliability").Value);
+    }
+
+    private static void UsesReportedPowerBoundsForScaleMarkers()
+    {
+        var diagnostics = ApplyGpuDiagnostics(
+            (SensorComponent.GpuPowerLimits, SensorMetric.MinimumPowerLimit, null, 400),
+            (SensorComponent.GpuPowerLimits, SensorMetric.MaximumPowerLimit, null, 600),
+            (SensorComponent.GpuPowerLimits, SensorMetric.EnforcedPowerLimit, null, 550),
+            (SensorComponent.GpuPowerLimits, SensorMetric.DefaultPowerLimit, null, 600));
+
+        TestAssert.True(diagnostics.HasPowerScale, "Both bounds are available and define an increasing range.");
+        TestAssert.Equal<double?>(0.75, diagnostics.PowerLimitPositions.Enforced);
+        TestAssert.Equal<double?>(1, diagnostics.PowerLimitPositions.Default);
+
+        diagnostics = ApplyGpuDiagnostics(
+            (SensorComponent.GpuPowerLimits, SensorMetric.MaximumPowerLimit, null, 600),
+            (SensorComponent.GpuPowerLimits, SensorMetric.EnforcedPowerLimit, null, 550));
+
+        TestAssert.False(diagnostics.HasPowerScale, "A missing minimum must not be treated as zero.");
+        TestAssert.Equal<double?>(null, diagnostics.PowerLimitPositions.Enforced);
+        TestAssert.Equal("550 W", diagnostics.EnforcedPower.Value);
     }
 
     private static GpuDiagnosticsViewModel ApplyGpuDiagnostics(

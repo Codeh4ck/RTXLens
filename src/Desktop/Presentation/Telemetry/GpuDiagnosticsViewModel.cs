@@ -1,11 +1,12 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using RTXLens.Contracts.Enums;
+using RTXLens.Presentation.Infrastructure;
 using RTXLens.Plugins.GenericNvidia.Contracts.Devices;
 
 namespace RTXLens.Presentation.Telemetry;
 
-public sealed class GpuDiagnosticsViewModel
+public sealed class GpuDiagnosticsViewModel : ObservableObject
 {
     private const string Unavailable = "Unavailable";
     private static readonly NvidiaClockReason[] ClockReasons = Enum.GetValues<NvidiaClockReason>()
@@ -24,30 +25,33 @@ public sealed class GpuDiagnosticsViewModel
     private readonly MetricViewModel _unknownBoostLimits = new("Unknown boost limits", "-");
     private readonly MetricViewModel _emptyBoostLimits = new(Unavailable, "-");
     private NvidiaClockReason _visibleBoostLimits;
-    private readonly MetricViewModel _performanceState = new("Current P-state", iconName: "vcore");
-    private readonly MetricViewModel _supportedStates = new("Supported P-states", iconName: "vcore");
-    private readonly MetricViewModel _enforcedPower = new("Enforced GPU power limit", iconName: "power");
-    private readonly MetricViewModel _defaultPower = new("Default GPU power limit", iconName: "power");
-    private readonly MetricViewModel _powerRange = new("GPU power limit range", iconName: "power");
-    private readonly MetricViewModel _currentLink = new("PCIe Link Speed", iconName: "pcie-link");
-    private readonly MetricViewModel _maximumLink = new("Max PCIe Link Speed", iconName: "pcie-link");
-    private readonly MetricViewModel _maximumGpuGeneration = new("GPU PCIe Gen", iconName: "pcie-link");
-    private readonly MetricViewModel _receive = new("PCIe RX", iconName: "pcie-rx");
-    private readonly MetricViewModel _transmit = new("PCIe TX", iconName: "pcie-tx");
-    private readonly MetricViewModel _replays = new("PCIe replays", iconName: "pcie-replay");
-    private readonly MetricViewModel _replayRollovers = new("PCIe replay rollovers", iconName: "pcie-rollover");
 
     public MetricViewModel ActiveBoostLimits { get; } = new("Active boost limits", iconName: "boost-limit");
-    public IReadOnlyList<MetricViewModel> PowerAndPerformance { get; }
+    public MetricViewModel CurrentPState { get; } = new("Current P-state", iconName: "vcore");
+    public MetricViewModel SupportedPStates { get; } = new("Supported P-states", iconName: "vcore");
+    public MetricViewModel EnforcedPower { get; } = new("Enforced GPU power limit", iconName: "power");
+    public MetricViewModel DefaultPower { get; } = new("Default GPU power limit", iconName: "power");
+    public MetricViewModel CurrentLink { get; } = new("PCIe Link Speed", iconName: "pcie-link");
+    public MetricViewModel MaximumLink { get; } = new("Max PCIe Link Speed", iconName: "pcie-link");
+    public MetricViewModel MaximumGpuGeneration { get; } = new("GPU PCIe Gen", iconName: "pcie-link");
+    public MetricViewModel ReceiveThroughput { get; } = new("PCIe RX", iconName: "pcie-rx");
+    public MetricViewModel TransmitThroughput { get; } = new("PCIe TX", iconName: "pcie-tx");
+    public MetricViewModel Replays { get; } = new("PCIe replays", iconName: "pcie-replay");
+    public MetricViewModel ReplayRollovers { get; } = new("PCIe replay rollovers", iconName: "pcie-rollover");
+
+    public string MinimumPowerText { get; private set => Set(ref field, value); } = Unavailable;
+    public string MaximumPowerText { get; private set => Set(ref field, value); } = Unavailable;
+    public bool HasPowerScale { get; private set => Set(ref field, value); }
+    public (double? Enforced, double? Default) PowerLimitPositions { get; private set => Set(ref field, value); }
     public ObservableCollection<MetricViewModel> BoostLimits { get; } = [];
-    public IReadOnlyList<MetricViewModel> Pcie { get; }
+
+    private readonly MetricViewModel[] _metrics;
 
     public GpuDiagnosticsViewModel()
     {
-        PowerAndPerformance = [_enforcedPower, _defaultPower, _powerRange, _performanceState, _supportedStates];
-
         BoostLimits.Add(_emptyBoostLimits);
-        Pcie = [_currentLink, _maximumLink, _maximumGpuGeneration, _receive, _transmit, _replays, _replayRollovers];
+        _metrics = [ActiveBoostLimits, CurrentPState, SupportedPStates, CurrentLink, MaximumLink, MaximumGpuGeneration,
+            ReceiveThroughput, TransmitThroughput, Replays, ReplayRollovers];
     }
 
     internal void Apply(Func<SensorComponent, SensorMetric, int?, double?> read)
@@ -56,7 +60,11 @@ public sealed class GpuDiagnosticsViewModel
         var supported = PerformanceValue(SensorMetric.SupportedClockReasons);
         ActiveBoostLimits.Value = FormatReasons(active, "None active");
 
-        var visibleReasons = (NvidiaClockReason)(ulong)(supported ?? 0) | (NvidiaClockReason)(ulong)(active ?? 0);
+        var activeReasons = (NvidiaClockReason)(ulong)(active ?? 0);
+        ActiveBoostLimits.IsWarning = (activeReasons & (NvidiaClockReason.SoftwareThermalSlowdown
+            | NvidiaClockReason.HardwareThermalSlowdown | NvidiaClockReason.HardwarePowerBrake)) != 0;
+
+        var visibleReasons = (NvidiaClockReason)(ulong)(supported ?? 0) | activeReasons;
         foreach (var reason in TimedReasons)
         {
             var seconds = PerformanceValue(SensorMetric.ClockLimitDuration, (int)reason);
@@ -70,27 +78,23 @@ public sealed class GpuDiagnosticsViewModel
 
         UpdateBoostLimitRows(visibleReasons, supported.HasValue ? "None reported" : Unavailable);
 
-        _performanceState.Value = PerformanceValue(SensorMetric.PerformanceState) is { } state ? $"P{(int)state}" : Unavailable;
-        _supportedStates.Value = PerformanceValue(SensorMetric.SupportedPerformanceStates) is { } stateMask
+        CurrentPState.Value = PerformanceValue(SensorMetric.PerformanceState) is { } state ? $"P{(int)state}" : Unavailable;
+        SupportedPStates.Value = PerformanceValue(SensorMetric.SupportedPerformanceStates) is { } stateMask
             ? JoinOrUnavailable(Enumerable.Range(0, 16).Where(index => ((uint)stateMask & (1u << index)) != 0)
                 .Select(index => $"P{index}"), ", ")
             : Unavailable;
 
-        _enforcedPower.Value = Watts(Power(SensorMetric.EnforcedPowerLimit));
-        _defaultPower.Value = Watts(Power(SensorMetric.DefaultPowerLimit));
-        var minimum = Power(SensorMetric.MinimumPowerLimit);
-        var maximum = Power(SensorMetric.MaximumPowerLimit);
-        _powerRange.Value = minimum.HasValue || maximum.HasValue
-            ? $"{Watts(minimum)} to {Watts(maximum)}" : Unavailable;
+        UpdatePowerLimits(Power(SensorMetric.EnforcedPowerLimit), Power(SensorMetric.DefaultPowerLimit),
+            Power(SensorMetric.MinimumPowerLimit), Power(SensorMetric.MaximumPowerLimit));
 
-        _currentLink.Value = FormatLink(PcieValue(SensorMetric.LinkGeneration), PcieValue(SensorMetric.LinkWidth));
-        _maximumLink.Value = FormatLink(PcieValue(SensorMetric.MaximumSystemLinkGeneration), PcieValue(SensorMetric.MaximumLinkWidth));
-        _maximumGpuGeneration.Value = PcieValue(SensorMetric.MaximumGpuLinkGeneration) is { } generation
+        CurrentLink.Value = FormatLink(PcieValue(SensorMetric.LinkGeneration), PcieValue(SensorMetric.LinkWidth));
+        MaximumLink.Value = FormatLink(PcieValue(SensorMetric.MaximumSystemLinkGeneration), PcieValue(SensorMetric.MaximumLinkWidth));
+        MaximumGpuGeneration.Value = PcieValue(SensorMetric.MaximumGpuLinkGeneration) is { } generation
             ? $"Gen {(int)generation}" : Unavailable;
-        _receive.Value = FormatThroughput(PcieValue(SensorMetric.ReceiveThroughput));
-        _transmit.Value = FormatThroughput(PcieValue(SensorMetric.TransmitThroughput));
-        _replays.Value = FormatCount(PcieValue(SensorMetric.ReplayCount));
-        _replayRollovers.Value = FormatCount(PcieValue(SensorMetric.ReplayRolloverCount));
+        ReceiveThroughput.Value = FormatThroughput(PcieValue(SensorMetric.ReceiveThroughput));
+        TransmitThroughput.Value = FormatThroughput(PcieValue(SensorMetric.TransmitThroughput));
+        Replays.Value = FormatCount(PcieValue(SensorMetric.ReplayCount));
+        ReplayRollovers.Value = FormatCount(PcieValue(SensorMetric.ReplayRolloverCount));
 
         return;
 
@@ -101,14 +105,29 @@ public sealed class GpuDiagnosticsViewModel
 
     internal void Clear()
     {
-        ActiveBoostLimits.Value = Unavailable;
-
-        foreach (var metric in PowerAndPerformance.Concat(Pcie))
+        foreach (var metric in _metrics)
         {
             metric.Value = Unavailable;
+            metric.IsWarning = false;
         }
 
+        UpdatePowerLimits(null, null, null, null);
         UpdateBoostLimitRows(NvidiaClockReason.None, Unavailable);
+    }
+
+    private void UpdatePowerLimits(double? enforced, double? defaultLimit, double? minimum, double? maximum)
+    {
+        EnforcedPower.Value = Watts(enforced);
+        DefaultPower.Value = Watts(defaultLimit);
+        MinimumPowerText = Watts(minimum);
+        MaximumPowerText = Watts(maximum);
+
+        HasPowerScale = minimum.HasValue && maximum > minimum;
+        PowerLimitPositions = (Position(enforced), Position(defaultLimit));
+
+        double? Position(double? limit) => HasPowerScale && limit >= minimum && limit <= maximum
+            ? (limit - minimum) / (maximum - minimum)
+            : null;
     }
 
     private void UpdateBoostLimitRows(NvidiaClockReason visibleReasons, string emptyLabel)

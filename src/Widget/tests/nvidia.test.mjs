@@ -30,7 +30,8 @@ test('legacy GPU status selections migrate to GenericNvidia without changing pin
     assert.equal(present().pluginId, 'generic-nvidia');
     assert.equal(present().gpuUsage, '97%');
     assert.equal(present().coreVoltage, '925.0 mV');
-    assert.equal(present().rows.length, 5);
+    assert.equal(present().rows.length, 7);
+    assert.equal(present().vramUsagePercent, 75);
 });
 
 test('a disabled GenericNvidia source cannot silently switch to ASUS', () => {
@@ -41,30 +42,27 @@ test('a disabled GenericNvidia source cannot silently switch to ASUS', () => {
     assert.equal(present().coreVoltage, '-');
 });
 
-test('GPU temperatures always show one decimal and hotspot is an optional third value', () => {
+test('GPU status shows core and VRAM temperatures with one decimal even when hotspot is reported', () => {
     for (const precision of ['0', '1', '2']) {
-        assert.equal(context({ precision }).present().rows[3].text, '62.0 °C / 70.0 °C');
-        const data = context({ precision, showHotspot: true }).present();
-        assert.equal(data.rows[3].label, 'Core / VRAM / HS');
-        assert.equal(data.rows[3].text, '62.0 °C / 70.0 °C / 73.3 °C');
+        const temperatures = context({ precision, showHotspot: true }).present().rows
+            .filter(row => row.id.startsWith('temperature'));
+        assert.deepEqual(temperatures.map(row => row.text), ['62.0 °C', '70.0 °C']);
     }
-
-    const frame = fixture();
-    frame.sensors = frame.sensors.filter(reading => reading.identity.component !== 'GpuHotspot');
-    assert.equal(context({ showHotspot: true }, frame).present().rows[3].label, 'Core / VRAM temp');
 });
 
 test('fan duty follows its RPM and can be hidden without changing fan labels', () => {
-    const data = context().present();
-    assert.equal(data.rows[4].label, 'Fan 1 / 2');
-    assert.equal(data.rows[4].text, '1220 RPM (50%) / 1185 RPM (45%)');
-    assert.equal(context({ showFanDuty: false }).present().rows[4].text, '1220 RPM / 1185 RPM');
+    const fans = data => data.rows.filter(row => row.id.startsWith('fan'));
+    const rows = fans(context().present());
+    assert.deepEqual(rows.map(row => row.label), ['Fan 1', 'Fan 2']);
+    assert.deepEqual(rows.map(row => row.text), ['1220 RPM (50%)', '1185 RPM (45%)']);
+    assert.deepEqual(fans(context({ showFanDuty: false }).present()).map(row => row.text), ['1220 RPM', '1185 RPM']);
 
     const frame = fixture();
     frame.sensors = frame.sensors.filter(reading => reading.identity.pluginId !== 'generic-nvidia'
         || reading.identity.component !== 'GpuFan' || reading.identity.channel !== 2);
-    assert.equal(context({}, frame).present().rows[4].label, 'Fan 1');
-    assert.equal(context({}, frame).present().rows[4].text, '1220 RPM (50%)');
+    const singleFan = fans(context({}, frame).present());
+    assert.deepEqual(singleFan.map(row => row.label), ['Fan 1']);
+    assert.equal(singleFan[0].text, '1220 RPM (50%)');
 });
 
 test('input values are measured, with WireView association only when explicitly configured', () => {

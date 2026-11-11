@@ -214,10 +214,10 @@ test('widget defaults use one font, requested sizes and colours, and retire hard
     assert.equal(settings.text('pinFillColor'), '#27d8bd');
 });
 
-test('GPU status order puts VRAM above temperatures and retains separate clocks', () => {
+test('GPU status orders clocks, VRAM usage, temperatures, and fans', () => {
     const { settings, store, presenter, now } = context({ panel1: 'asusStatus' });
     const rows = presenter.present(resolvePanel(1, settings, store, now), now).rows;
-    assert.deepEqual(rows.slice(0, 5).map(row => row.id), ['coreClock', 'memoryClock', 'vram', 'temperatures', 'fans']);
+    assert.deepEqual(rows.map(row => row.id), ['coreClock', 'memoryClock', 'vram', 'temperatureCore', 'temperatureMemory', 'fan1', 'fan2']);
     assert.match(rows[2].text, /24.0 GB \/ 32.0 GB \(75%\)/);
 });
 
@@ -227,7 +227,9 @@ test('temperature highlighting follows service warning phases instead of local t
         frame.warnings.sequence = 1;
         frame.warnings.states = [{ id: 'core', pluginId: 'asus-astral', deviceId: '/gpu-nvidia/0', typeId: 'asus-astral/core-temperature', icon: 'temperature', phase, title: 'Core temperature', detail: '81 °C', episodeId: 'first', startedAt: frame.timestamp, lastNotificationAt: frame.timestamp, notificationSequence: 1, policy: { notifyOnStart: true, repeatWhileActive: false, repeatIntervalSeconds: 5, clearAfterSeconds: 2 } }];
         const { settings, store, presenter, now } = context({ panel1: 'asusStatus' }, frame);
-        assert.equal(presenter.present(resolvePanel(1, settings, store, now), now).rows.find(row => row.id === 'temperatures').warning, phase === 'Active');
+        const rows = presenter.present(resolvePanel(1, settings, store, now), now).rows;
+        assert.equal(rows.find(row => row.id === 'temperatureCore').warning, phase === 'Active');
+        assert.equal(rows.find(row => row.id === 'temperatureMemory').warning, false);
     }
 });
 

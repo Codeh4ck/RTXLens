@@ -68,6 +68,7 @@ export class PanelPresenter {
             state,
             gpuUsage: '',
             coreVoltage: '',
+            vramUsagePercent: null,
             tone: state === 'Ready' ? 'good' : ['Error'].includes(state) ? 'error' : state === 'Disabled' ? 'neutral' : 'warning',
             summary: [],
             rows: [],
@@ -194,59 +195,41 @@ export class PanelPresenter {
 
                 const coreTemperature = value('GpuCore', 'Temperature');
                 const memoryTemperature = value('GpuMemory', 'Temperature');
-                const hotspot = value('GpuHotspot', 'Temperature');
-                const showHotspot = this.settings.enabled('showHotspot') && hotspot !== null;
-                const temperatures = [coreTemperature, memoryTemperature];
-                if (showHotspot) temperatures.push(hotspot);
+                const used = value('GpuMemory', 'MemoryUsed');
+                const total = value('GpuMemory', 'MemoryTotal');
+                const utilization = value('GpuMemory', 'Utilization');
+
+                if (used !== null && total !== null && total > 0) {
+                    data.vramUsagePercent = Math.max(0, Math.min(100, utilization ?? used / total * 100));
+                }
 
                 const channels = this.store.snapshot?.sensors.filter(reading => reading.identity.pluginId === pluginId
                     && reading.identity.deviceId === deviceId && reading.identity.component === 'GpuFan'
                     && reading.identity.metric === 'FanSpeed' && reading.identity.channel !== null)
                     .map(reading => reading.identity.channel!).sort((left, right) => left - right).slice(0, 2) ?? [];
-                const fanLabels = channels.length ? 'Fan ' + channels.map((_, index) => index + 1).join(' / ') : 'Fans';
-                const fans = channels.map(channel => {
+                const fans = channels.map((channel, index) => {
                     const rpm = this.format.value(value('GpuFan', 'FanSpeed', channel), 'RPM', 0);
                     const duty = value('GpuFan', 'FanDuty', channel);
-                    return this.settings.enabled('showFanDuty') && duty !== null
-                        ? `${rpm} (${this.format.value(duty, '%', 0)})` : rpm;
-                }).join(' / ') || '-';
-                const temperatureWarning =
-                    this.store.snapshot?.warnings?.states.some(
-                        (state) =>
-                            state.pluginId === pluginId &&
-                            state.deviceId === deviceId &&
-                            state.phase === 'Active' &&
-                            state.icon === 'temperature'
-                    ) ?? false;
+                    const text = this.settings.enabled('showFanDuty') && duty !== null
+                        ? `${rpm} (${this.format.value(duty, '%', 0)})`
+                        : rpm;
+                    return metric(`fan${index + 1}`, `Fan ${index + 1}`, text, 'vfan');
+                });
+                const temperatureWarnings = this.store.snapshot?.warnings?.states.filter(state =>
+                    state.pluginId === pluginId && state.deviceId === deviceId && state.phase === 'Active' && state.icon === 'temperature'
+                ) ?? [];
+                const warns = (sensor: string) => temperatureWarnings.some(state => state.typeId === `${pluginId}/${sensor}-temperature`);
                 data.rows = [
                     metric('coreClock', 'Core clock', this.format.value(value('GpuCore', 'Clock'), 'MHz', 0), 'vcore'),
                     metric('memoryClock', 'Memory clock', this.format.value(value('GpuMemory', 'Clock'), 'MHz', 0), 'vram'),
-                    metric(
-                        'vram',
-                        'VRAM usage',
-                        this.format.memory(
-                            value('GpuMemory', 'MemoryUsed'),
-                            value('GpuMemory', 'MemoryTotal'),
-                            value('GpuMemory', 'Utilization')
-                        ),
-                        'vramusage'
-                    ),
-                    metric(
-                        'temperatures',
-                        showHotspot ? 'Core / VRAM / HS' : 'Core / VRAM temp',
-                        temperatures.map(temperature => this.format.temperature(temperature)).join(' / '),
-                        'vtemp',
-                        temperatureWarning
-                    ),
-                    metric(
-                        'fans',
-                        fanLabels,
-                        fans,
-                        'vfan'
-                    )
+                    metric('vram', 'VRAM usage', this.format.memory(used, total, utilization), 'vramusage'),
+                    metric('temperatureCore', 'Core temp', this.format.temperature(coreTemperature), 'vtemp', warns('core')),
+                    metric('temperatureMemory', 'VRAM temp', this.format.temperature(memoryTemperature), 'vtemp', warns('memory'))
                 ];
 
-                if (temperatureWarning) {
+                data.rows.push(...(fans.length ? fans : [metric('fan1', 'Fans', '-', 'vfan')]));
+
+                if (temperatureWarnings.length) {
                     data.alerts.push('Display warning: GPU temperature threshold exceeded');
                 }
             }

@@ -19,9 +19,16 @@ internal static class GenericNvidiaSmokeTests
             window.ShowPanel(pluginId);
             await Task.Delay(200);
             var view = VisualTreeQuery.Descendants<GpuStatusView>(window.ThemeRoot).Single();
-            if (!ReferenceEquals(view.Model, shared) || view.Model.Metrics.Count != 5 || view.Model.IsUnavailable)
+            if (!ReferenceEquals(view.Model, shared) || view.Model.IsUnavailable
+                || !VisualTreeQuery.Descendants<ProgressBar>(view).Any(bar => bar.Name == "VramUsageBar"))
             {
-                throw new InvalidOperationException("Every hardware tab must consume the same available GPU status model.");
+                throw new InvalidOperationException("Every hardware tab must show the shared GPU status panel.");
+            }
+
+            var additionalReadings = VisualTreeQuery.Descendants<TextBlock>(view).Any(label => label.Text == "Board Temp In/Out");
+            if (additionalReadings != (pluginId == "wireview-pro2"))
+            {
+                throw new InvalidOperationException("WireView temperatures must appear in WireView’s GPU status panel.");
             }
 
             await SmokeTestRunner.CaptureElementAsync(window.ThemeRoot, Path.Combine(output, pluginId + ".png"));
@@ -71,9 +78,9 @@ internal static class GenericNvidiaSmokeTests
         runtime.Debug.Enabled = true;
         window.ShowPanel("generic-nvidia");
         await Task.Delay(200);
-        if (runtime.Dashboard.GpuStatus.Metrics[3].Label != "Core / VRAM / HS")
+        if (!runtime.Dashboard.GpuStatus.HasHotspotTemperature)
         {
-            throw new InvalidOperationException("A reported hotspot must join the existing temperature row.");
+            throw new InvalidOperationException("A reported hotspot must appear in the temperatures section.");
         }
 
         runtime.DebugConsole!.Close();

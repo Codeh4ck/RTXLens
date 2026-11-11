@@ -35,7 +35,7 @@ export async function verifyFlyouts(page, base, properties, setTransform, reques
     await properties({ ...base, smallPanel: '2' });
     assert.equal(await page.locator('#panel1 *').count(), 0);
     assert.equal(await page.locator('#panel2 .pin-chart,#panel2 .chart-caption').count(), 0);
-    assert.equal(await page.locator('#panel2 .status-row').count(), 5);
+    assert.equal(await page.locator('#panel2 .status-row').count(), 7);
 
     for (const [name, width, height] of [['S-H', 840, 344], ['S-V', 696, 416], ['M-H', 840, 696], ['M-V', 696, 840],
         ['L-H', 1688, 696], ['L-V', 696, 1688], ['XL-H', 2536, 696], ['XL-V', 696, 2536]]) {

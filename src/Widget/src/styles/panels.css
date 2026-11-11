@@ -64,4 +64,151 @@
 
 .core-voltage { display: inline-flex; align-items: center; flex: none; gap: .5em; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 8%, transparent); border-radius: 5px; padding: 7px 10px; font-size: max(18px, calc(var(--label-base) * 1.6)); white-space: nowrap; }
 .core-voltage-value { display: flex; align-items: center; justify-content: flex-end; width: 11ch; flex: none; font-variant-numeric: tabular-nums; }
+.gpu-usage-value, .core-voltage-value { color: var(--text); }
 .fan-duty, .fan-duty .number, .fan-duty .unit { color: var(--unit); }
+
+.panel[data-gpu-status='true'] {
+    container: gpu-status / size;
+}
+
+.panel[data-gpu-status='true'] .status-rows {
+    display: grid;
+    grid-auto-rows: minmax(min-content, 1fr);
+    gap: var(--space);
+}
+
+.gpu-card {
+    display: grid;
+    grid-template-columns: minmax(max-content, 26%) minmax(0, 1fr);
+    align-content: center;
+    align-items: center;
+    column-gap: var(--space);
+    min-width: 0;
+    padding: calc(var(--space) * .95) calc(var(--space) * 1.6);
+    border: 1px solid var(--accent);
+    border-radius: var(--metric-radius);
+    background: var(--metric-surface);
+    box-shadow: 0 0 calc(var(--glow, 12px) * .45) color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.gpu-vram-reading {
+    display: grid;
+    gap: calc(var(--space) * .6);
+    min-width: 0;
+    padding-inline-start: calc(var(--space) * .5);
+}
+
+.gpu-vram-track {
+    inline-size: 90%;
+    justify-self: end;
+    height: max(5px, calc(var(--layout-unit) * 1.15));
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--track);
+}
+
+.gpu-vram-fill {
+    display: block;
+    width: var(--vram-fill, 0%);
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+}
+
+.gpu-card-title {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--space) * .65);
+    margin: 0;
+    font-size: max(13px, calc(var(--row-base) * var(--label-scale, 1)));
+}
+
+.gpu-reading-columns {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    padding-inline-start: calc(var(--space) * .5);
+}
+
+.panel[data-gpu-status='true'] .status-row {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    padding: 0;
+}
+
+.gpu-vram .status-row {
+    justify-content: flex-end;
+}
+
+.gpu-vram .row-value {
+    flex-wrap: nowrap;
+}
+
+.panel[data-gpu-status='true'] .gpu-reading-columns .status-row {
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: calc(var(--space) * .3);
+    padding-inline: calc(var(--space) * .5);
+    text-align: center;
+}
+
+.gpu-reading-columns .status-row + .status-row {
+    border-inline-start: 1px solid var(--border);
+}
+
+.gpu-fans .fan-duty {
+    font-size: .78em;
+}
+
+.gpu-fans .metric-separator {
+    font-size: .55em;
+}
+
+.gpu-reading-columns .row-label {
+    font-size: max(12px, calc(var(--label-base) * 1.1 * var(--label-scale, 1)));
+}
+
+.gpu-reading-columns .row-value {
+    justify-content: center;
+    color: var(--text);
+    text-align: center;
+}
+
+.gpu-reading-columns .status-row[data-warning='true'] .row-value,
+.gpu-reading-columns .status-row[data-warning='true'] .unit {
+    color: var(--warning);
+}
+
+.widget[data-large-type='true'] .panel[data-gpu-status='true'] {
+    padding-block: calc(var(--panel-pad) * .7);
+    gap: calc(var(--space) * .5);
+}
+
+.widget[data-large-type='true'] .panel[data-gpu-status='true'] .summary-metric {
+    padding-block: calc(var(--space) * .45);
+}
+
+.widget[data-large-type='true'] .panel[data-gpu-status='true'] .status-rows {
+    gap: calc(var(--space) * .55);
+}
+
+.widget[data-large-type='true'] .gpu-card {
+    padding-block: calc(var(--space) * .3);
+}
+
+.widget[data-large-type='true'] .gpu-card-title {
+    font-size: max(13px, var(--row-base));
+    line-height: 1.05;
+}
+
+.widget[data-large-type='true'] .panel[data-gpu-status='true'] .gpu-reading-columns .status-row {
+    gap: 0;
+}
+
+@container gpu-status (max-height: 405px) {
+    .panel[data-gpu-status='true'] .status-rows {
+        gap: calc(var(--space) * .7);
+    }
+}

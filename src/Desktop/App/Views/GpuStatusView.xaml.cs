@@ -1,7 +1,6 @@
-using System.Collections.Specialized;
+using System.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using RTXLens.App.Controls;
 using RTXLens.Presentation.Telemetry;
 
 namespace RTXLens.App.Views;
@@ -10,37 +9,25 @@ public sealed partial class GpuStatusView : UserControl
 {
     private const double MinimumThreeColumnWidth = 1240;
     private const double PanelSpacing = 12;
-    private const double ColumnValueMaxWidth = 150;
-    private const double VramValueMaxWidth = 240;
 
     public GpuStatusViewModel Model { get; }
     public bool ShowSummary { get; }
+    public IReadOnlyList<MetricViewModel> AdditionalMetrics { get; }
+    public bool HasAdditionalMetrics => AdditionalMetrics.Count > 0;
 
-    private readonly IReadOnlyList<MetricViewModel> _additionalMetrics;
     private bool _stacked;
 
     internal GpuStatusView(GpuStatusViewModel model, bool showSummary, IReadOnlyList<MetricViewModel> additionalMetrics)
     {
         Model = model;
         ShowSummary = showSummary;
-        _additionalMetrics = additionalMetrics;
+        AdditionalMetrics = additionalMetrics;
         InitializeComponent();
 
         if (showSummary)
         {
             InitializeStandaloneLayout();
         }
-
-        RebuildMetrics(null, null);
-        Loaded += (_, _) =>
-        {
-            if (ShowSummary)
-            {
-                Model.DetailedMetrics.CollectionChanged += RebuildMetrics;
-                RebuildMetrics(null, null);
-            }
-        };
-        Unloaded += (_, _) => Model.DetailedMetrics.CollectionChanged -= RebuildMetrics;
     }
 
     private void InitializeStandaloneLayout()
@@ -58,13 +45,13 @@ public sealed partial class GpuStatusView : UserControl
         FindName(nameof(PowerStatusFrame));
         FindName(nameof(PcieStatusFrame));
 
-        var boostLimitInfo = (Button)ActiveBoostLimitHost.Content;
-        ActiveBoostLimitHost.Content = null;
-        ActiveBoostLimitHost.Content = new MetricTile(Model.Diagnostics.ActiveBoostLimits, valueMaxWidth: ColumnValueMaxWidth,
-            usePanelBorder: true, valueAction: boostLimitInfo);
-        AddMetrics(PowerMetricsHost, Model.Diagnostics.PowerAndPerformance, ColumnValueMaxWidth);
-        AddMetrics(PcieMetricsHost, Model.Diagnostics.Pcie, valueMaxWidth: 240);
         StatusColumns.SizeChanged += OnStatusColumnsSizeChanged;
+        Loaded += (_, _) =>
+        {
+            Model.Diagnostics.PropertyChanged += OnDiagnosticsChanged;
+            UpdatePowerMarkers();
+        };
+        Unloaded += (_, _) => Model.Diagnostics.PropertyChanged -= OnDiagnosticsChanged;
     }
 
     private void OnStatusColumnsSizeChanged(object sender, SizeChangedEventArgs args)
@@ -96,26 +83,37 @@ public sealed partial class GpuStatusView : UserControl
         }
     }
 
-    private void RebuildMetrics(object? sender, NotifyCollectionChangedEventArgs? args)
+    private void PowerScale_SizeChanged(object sender, SizeChangedEventArgs args) => UpdatePowerMarkers();
+
+    private void OnDiagnosticsChanged(object? sender, PropertyChangedEventArgs args)
     {
-        MetricsHost.Children.Clear();
-        var metrics = ShowSummary ? Model.DetailedMetrics : Model.Metrics;
-
-        var valueMaxWidth = ShowSummary ? ColumnValueMaxWidth : 260;
-
-        foreach (var metric in metrics.Concat(_additionalMetrics))
+        if (args.PropertyName == nameof(GpuDiagnosticsViewModel.PowerLimitPositions))
         {
-            var isVramUsage = ReferenceEquals(metric, Model.Metrics[2]);
-            MetricsHost.Children.Add(new MetricTile(metric, valueMaxWidth: isVramUsage ? VramValueMaxWidth : valueMaxWidth,
-                usePanelBorder: true, singleLineValue: isVramUsage));
+            UpdatePowerMarkers();
         }
     }
 
-    private static void AddMetrics(StackPanel host, IEnumerable<MetricViewModel> metrics, double valueMaxWidth)
+    private void UpdatePowerMarkers()
     {
-        foreach (var metric in metrics)
+        const double trackInset = 5;
+
+        var (enforced, defaultLimit) = Model.Diagnostics.PowerLimitPositions;
+        var trackWidth = Math.Max(0, PowerScale.ActualWidth - trackInset * 2);
+
+        Position(EnforcedPowerMarker, enforced);
+        Position(DefaultPowerMarker, defaultLimit);
+
+        void Position(FrameworkElement marker, double? fraction)
         {
-            host.Children.Add(new MetricTile(metric, valueMaxWidth: valueMaxWidth, usePanelBorder: true));
+            if (fraction is { } value && trackWidth > 0)
+            {
+                Canvas.SetLeft(marker, trackInset + trackWidth * value - marker.Width / 2);
+                marker.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                marker.Visibility = Visibility.Collapsed;
+            }
         }
     }
 }

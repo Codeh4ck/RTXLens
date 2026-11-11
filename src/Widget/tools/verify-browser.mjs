@@ -52,7 +52,7 @@ async function measure(name) {
         const visible = element => element.getClientRects().length && getComputedStyle(element).visibility !== 'hidden';
         const panels = [...document.querySelectorAll('.panel')].filter(visible);
         const overflow = [];
-        for (const element of document.querySelectorAll('.panel,.metric-value,.row-value,.row-label,.pin-value,.headroom,.psu-comparison,.panel-title,.status-pill,.spread-badge,.chart-axis span,.gpu-usage,.core-voltage')) {
+        for (const element of document.querySelectorAll('.panel,.metric-value,.row-value,.row-label,.pin-value,.headroom,.psu-comparison,.panel-title,.status-pill,.spread-badge,.chart-axis span,.gpu-usage,.core-voltage,.gpu-card')) {
             if (!visible(element)) continue;
             const bounds = element.getBoundingClientRect();
             if (element.scrollWidth > element.clientWidth + 2 || element.scrollHeight > element.clientHeight + 2
@@ -106,7 +106,9 @@ try {
     for (const [name, width, height, count] of [['S-H',840,344,1], ['S-V',696,416,1], ['M-H',840,696,1],
         ['M-V',696,840,2], ['L-H',1688,696,2], ['L-V',696,1688,3], ['XL-H',2536,696,3], ['XL-V',696,2536,3]]) {
         await page.setViewportSize({ width, height });
-        await properties(base);
+        await properties(count === 1
+            ? { ...base, panel1: 'nvidiaStatus', panel2: 'asusPins' }
+            : base);
         await page.screenshot({ path: join(output, `${name}-dark.png`) });
         const report = await measure(name);
         assert.equal(report.panels, count, name+' panel count');
@@ -114,7 +116,7 @@ try {
     }
     for(const [name,width,height] of [['S-H',840,344],['M-V',696,840],['L-H',1688,696],['XL-H',2536,696]]) {
         await page.setViewportSize({width,height});
-        await properties({...base,...largeFonts});
+        await properties({ ...base, ...largeFonts, ...(name === 'S-H' ? { panel1: 'nvidiaStatus' } : {}) });
         const report=await measure(name+' maximum font sizes');
         reports.push(report);
         await page.screenshot({path:join(output,`${name}-max-fonts.png`)});
@@ -148,7 +150,7 @@ try {
     assert.match(await page.locator('#panel3 .psu-comparison').first().innerText(), /5.8/);
     await properties({ ...base, panel1Title: '<img src=x onerror=alert(1)>' });
     assert.equal(await page.locator('#panel1 .panel-title img').count(), 0);
-    assert.match(await page.locator('#panel2 .row-label').first().innerText(), /Core clock/);
+    assert.match(await page.locator('#panel2 .gpu-clocks .row-label').first().innerText(), /Core clock/);
 
     await properties(base);
     assert.equal(await page.locator('#panel1 .panel-summary').isVisible(),false);
@@ -172,7 +174,7 @@ try {
     assert.equal(new Set(summaries.map(tile=>tile.unit)).size,1,'Summary units share one size');
     assert.ok(Math.max(...summaries.map(tile=>tile.width))-Math.min(...summaries.map(tile=>tile.width))<1,'Summary tiles have equal width');
     assert.ok(summaries.every(tile=>tile.borderWidth==='1px'&&tile.padding>=14));
-    assert.equal(summaries[0].border,await page.locator('#panel2 .status-row').first().evaluate(node=>getComputedStyle(node).borderColor));
+    assert.equal(await page.locator('#panel2 .gpu-clocks .status-row').first().evaluate(node=>getComputedStyle(node).borderWidth),'0px');
     const usage=await page.locator('#panel2 .gpu-usage').boundingBox();
     const coreVoltage=await page.locator('#panel2 .core-voltage').boundingBox();
     assert.ok(usage.x+usage.width<=coreVoltage.x,'Core voltage sits beside GPU usage');

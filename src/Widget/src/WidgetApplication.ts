@@ -367,6 +367,7 @@ export class WidgetApplication {
                 binding.pluginId,
                 showSummary,
                 Boolean(data.comparisonLabel),
+                data.rows.map(row => row.id),
                 ...['showSource', 'showSpread', 'showAxis', 'showHeadroom', 'showPeak'].map((name) => this.settings.enabled(name))
             ]);
 
