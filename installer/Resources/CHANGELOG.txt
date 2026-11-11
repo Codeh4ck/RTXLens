@@ -1,3 +1,9 @@
+1.0.9 - NVIDIA diagnostics and GPU status
+- Add read-only NVIDIA diagnostics for boost limits, time spent limited, performance states, power limits and PCIe link status, traffic and replays.
+- Add dedicated GPU Power Status and GPU PCIe Status panels. Show the GPU Status tab by default for new users.
+- Refresh GPU status in the desktop app and iCUE widget with grouped readings and a VRAM usage bar.
+- Keep the Windows app identity and Start menu shortcut stable to help preserve taskbar pins during upgrades.
+
 1.0.8 - Event logs and WireView device settings
 - View desktop and backend activity in the Event Log. Filter and export entries, and configure backend log retention.
 - Read and edit WireView Pro II device settings, including fan controls, protection thresholds, fault actions, and display options. RTX Lens verifies settings after saving.
