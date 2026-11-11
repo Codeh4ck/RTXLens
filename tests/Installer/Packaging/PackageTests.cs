@@ -48,6 +48,13 @@ internal static class PackageTests
         }
 
         Check.That(expected.Count == 0, "Every published DLL, executable, PRI, XBF, asset and runtime file is included exactly once.");
+
+        var shortcut = Read(database, "SELECT `Component_`, `Target` FROM `Shortcut` WHERE `Shortcut`='StartMenuShortcut'").Single();
+        Check.That(components[shortcut[0]][1] == "MonitorMenuFolder" && shortcut[1] == "[AppInstallFolder]RTXLens.App.exe",
+            "The Start menu shortcut targets the desktop executable directly across MSI versions.");
+        var shortcutIdentity = Read(database, "SELECT `PropVariantValue` FROM `MsiShortcutProperty` WHERE `Shortcut_`='StartMenuShortcut' AND `PropertyKey`='System.AppUserModel.ID'").Single();
+        Check.That(shortcutIdentity[0] == "Codeh4ck.RTXLens", "The Start menu shortcut uses the stable desktop app identity.");
+
         var service = Read(database, "SELECT `Name`, `StartType`, `StartName`, `Arguments` FROM `ServiceInstall`").Single();
         Check.That(service[0] == "RTXLensService" && service[1] == "2" && service[2] == "LocalSystem", "Service registers automatically under LocalSystem.");
         Check.That(service[3].Contains("--contentRoot"), "Service content root points to its installed payload.");

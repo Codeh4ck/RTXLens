@@ -106,7 +106,7 @@ internal static class SafeguardReportRenderer
                 var subtitle = $"{device.Key.DeviceId} · Last sample {FormatTime(observed)}";
 
                 var general = device
-                    .Where(reading => !IsPin(reading))
+                    .Where(reading => !IsPin(reading) && !reading.Identity.IsGpuDiagnostic())
                     .OrderBy(reading => reading.Identity.Component)
                     .ThenBy(reading => reading.Identity.Channel)
                     .ThenBy(reading => reading.Identity.Metric)

@@ -4,6 +4,8 @@ using RTXLens.Contracts.Enums;
 using RTXLens.Hardware.Nvidia;
 using RTXLens.Plugins.GenericNvidia;
 using RTXLens.Plugins.GenericNvidia.Configuration;
+using RTXLens.Plugins.GenericNvidia.Contracts.Devices;
+using RTXLens.Plugins.GenericNvidia.Diagnostics;
 using RTXLens.Plugins.GenericNvidia.Mapping;
 using RTXLens.Tests.Infrastructure;
 using RTXLens.Tests.TestDoubles;
@@ -18,6 +20,7 @@ internal static class GenericNvidiaTests
         runner.Run(PreservesSelectedIdentityWhenEnumerationChanges);
         runner.Run(MapsSingleAndMultipleFansByCoolerIdWithoutInventingDuty);
         runner.Run(MapsCoreVoltageAndHotspotWithoutPublishingBoardPower);
+        runner.Run(StreamsNvmlDiagnosticsForTheSelectedGpu);
         runner.Run(InputVoltagePrefersMeasurementsAndUsesConnectorRatioOnlyAsFallback);
         runner.Run(RecognizesAstralCapabilitiesAndKeepsStableGpuIdentity);
         runner.Run(MigrationPreservesExistingThresholdsAndDefaults);
@@ -80,6 +83,43 @@ internal static class GenericNvidiaTests
         TestAssert.Equal(2, readings.Length);
         TestAssert.Equal(SensorUnit.Volts, readings.Single(reading => reading.Identity.Component == SensorComponent.GpuCore).Unit);
         TestAssert.Equal<double?>(75, readings.Single(reading => reading.Identity.Component == SensorComponent.GpuHotspot).Value);
+    }
+
+    private static void StreamsNvmlDiagnosticsForTheSelectedGpu()
+    {
+        var clock = new TestTimeProvider();
+        var source = Source();
+        source.Sensors = [.. source.Sensors, new("GPU PCIe Rx", SensorType.Throughput, 0, 1024)];
+        using var reader = new NvidiaTelemetryReader(source, clock);
+        var diagnostics = new FakeDiagnosticsReader(clock.GetUtcNow());
+        var factory = new GenericNvidiaPluginFactory(reader, diagnostics);
+        using var plugin = factory.Create(factory.CreateDefaultSettings());
+
+        var sample = plugin.PollAsync(CancellationToken.None).GetAwaiter().GetResult();
+        var store = new RTXLens.Core.SensorStateStore([plugin]);
+        store.Update(GenericNvidiaPlugin.PluginId, sample, clock.GetUtcNow());
+        var receive = sample.Sensors.Single(reading => reading.Identity.Metric == SensorMetric.ReceiveThroughput);
+        var transmit = sample.Sensors.Single(reading => reading.Identity.Metric == SensorMetric.TransmitThroughput);
+        var state = sample.Sensors.Single(reading => reading.Identity.Metric == SensorMetric.PerformanceState);
+
+        TestAssert.Equal(PluginState.Ready, sample.State);
+        TestAssert.Equal("pci-first", receive.Identity.DeviceId);
+        TestAssert.Equal(SensorComponent.GpuPcie, receive.Identity.Component);
+        TestAssert.Equal(SensorUnit.BytesPerSecond, receive.Unit);
+        TestAssert.Equal<double?>(5_120_000_000d, receive.Value);
+        TestAssert.Equal<double?>(0, transmit.Value);
+        TestAssert.Equal(ReadingQuality.Valid, transmit.Quality);
+        TestAssert.Equal<double?>(0, state.Value);
+        TestAssert.Equal(ReadingQuality.Unavailable,
+            sample.Sensors.Single(reading => reading.Identity.Metric == SensorMetric.ReplayCount).Quality);
+    }
+
+    private sealed class FakeDiagnosticsReader(DateTimeOffset observedAt) : INvidiaDiagnosticsReader
+    {
+        public NvidiaDiagnostics Read(string deviceId) => new(deviceId, observedAt, (ulong)NvidiaClockReason.SoftwarePowerCap,
+            null, new NvidiaClockLimitDurations(2, null, null, null, null), 0, [0, 8],
+            new NvidiaPcieDiagnostics(5, 5, 5, 16, 16, 32000, 32000, 0, 5_000_000, null, null),
+            new NvidiaPowerLimits(600, 575, 400, 600));
     }
 
     private static void InputVoltagePrefersMeasurementsAndUsesConnectorRatioOnlyAsFallback()

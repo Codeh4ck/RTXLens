@@ -11,12 +11,25 @@ public sealed partial class MetricTile : UserControl
     public bool ShowIcon { get; }
     public string DisplayLabel => Model.Label switch { "Core temperature" => "Core temp", "VRAM temperature" => "VRAM temp", _ => Model.Label };
 
-    public MetricTile(MetricViewModel model, bool showIcon = true, double valueMaxWidth = 210, bool usePanelBorder = false)
+    public MetricTile(MetricViewModel model, bool showIcon = true, double valueMaxWidth = 210, bool usePanelBorder = false,
+        bool singleLineValue = false, UIElement? valueAction = null)
     {
         Model = model;
         ShowIcon = showIcon;
         InitializeComponent();
         ValueText.MaxWidth = valueMaxWidth;
+        if (singleLineValue)
+        {
+            ValueText.TextWrapping = TextWrapping.NoWrap;
+            ValueText.TextTrimming = TextTrimming.CharacterEllipsis;
+        }
+
+        if (valueAction is not null)
+        {
+            ValueActionHost.Content = valueAction;
+            ValueActionHost.Visibility = Visibility.Visible;
+        }
+
         if (usePanelBorder)
         {
             Frame.ClearValue(Border.BorderBrushProperty);

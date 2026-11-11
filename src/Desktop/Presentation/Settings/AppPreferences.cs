@@ -30,7 +30,7 @@ public sealed record AppPreferences
     public double CoreTemperatureWarningC { get; init; } = 84;
     public double MemoryTemperatureWarningC { get; init; } = 95;
     public PinMetric PinMetric { get; init; }
-    public bool ShowSeparateGpuStatusTab { get; init; }
+    public bool ShowSeparateGpuStatusTab { get; init; } = true;
     public string StartupTabId { get; init; } = string.Empty;
     public bool RememberWindowSize { get; init; } = true;
     public bool RememberWindowPosition { get; init; } = true;

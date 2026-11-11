@@ -2,6 +2,7 @@ using System.Globalization;
 using RTXLens.Contracts.Discovery;
 using RTXLens.Contracts.Enums;
 using RTXLens.Contracts.Sensors;
+using RTXLens.Plugins.GenericNvidia.Contracts.Devices;
 using RTXLens.Presentation.Settings;
 using RTXLens.Presentation.Telemetry;
 using RTXLens.Tests.Infrastructure;
@@ -23,6 +24,8 @@ internal static class HardwarePanelTests
         runner.Run(DisabledPluginsDoNotRaiseMissingDeviceWarnings);
         runner.Run(StaleOrEmptyPluginsLoseTheirTabs);
         runner.Run(GroupsGpuStatusAndPromotesHeadlineMetrics);
+        runner.Run(ShowsPcieRatesByLinkGeneration);
+        runner.Run(ShowsBoostLimitTimesOnlyWhenReported);
         runner.Run(UnavailablePinFlagsDoNotCreateAnEmptyChart);
     }
 
@@ -160,6 +163,62 @@ internal static class HardwarePanelTests
 
         SensorReading Reading(SensorComponent component, SensorMetric metric, double value, int? channel = null) =>
             new(UiTestData.Pin with { Component = component, Metric = metric, Channel = channel }, SensorUnits.For(metric), value, frame.Timestamp);
+    }
+
+    private static void ShowsPcieRatesByLinkGeneration()
+    {
+        var diagnostics = ApplyGpuDiagnostics(
+            (SensorComponent.GpuPcie, SensorMetric.LinkGeneration, null, 1),
+            (SensorComponent.GpuPcie, SensorMetric.LinkWidth, null, 8),
+            (SensorComponent.GpuPcie, SensorMetric.LinkSpeed, null, 32000),
+            (SensorComponent.GpuPcie, SensorMetric.MaximumSystemLinkGeneration, null, 5),
+            (SensorComponent.GpuPcie, SensorMetric.MaximumLinkWidth, null, 16),
+            (SensorComponent.GpuPcie, SensorMetric.MaximumLinkSpeed, null, 5),
+            (SensorComponent.GpuPcie, SensorMetric.ReceiveThroughput, null, 1024));
+
+        var gen1Rate = 2.5.ToString("0.#", CultureInfo.CurrentCulture);
+        TestAssert.Equal($"Gen 1 ×8 · {gen1Rate} GT/s per lane", diagnostics.Pcie.Single(metric => metric.Label == "PCIe Link Speed").Value);
+        TestAssert.Equal("Gen 5 ×16 · 32 GT/s per lane", diagnostics.Pcie.Single(metric => metric.Label == "Max PCIe Link Speed").Value);
+        TestAssert.Equal("1 KiB/s", diagnostics.Pcie.Single(metric => metric.Label == "PCIe RX").Value);
+    }
+
+    private static void ShowsBoostLimitTimesOnlyWhenReported()
+    {
+        var diagnostics = ApplyGpuDiagnostics(
+            (SensorComponent.GpuPerformance, SensorMetric.ActiveClockReasons, null, (double)NvidiaClockReason.Reliability),
+            (SensorComponent.GpuPerformance, SensorMetric.SupportedClockReasons, null,
+                (double)(NvidiaClockReason.SoftwarePowerCap | NvidiaClockReason.Reliability)),
+            (SensorComponent.GpuPerformance, SensorMetric.ClockLimitDuration, (int)NvidiaClockReason.SoftwarePowerCap, 0.22),
+            (SensorComponent.GpuPerformance, SensorMetric.ClockLimitDuration, (int)NvidiaClockReason.SyncBoost, 0));
+
+        var duration = 0.22.ToString("0.###", CultureInfo.CurrentCulture);
+        TestAssert.Equal(3, diagnostics.BoostLimits.Count);
+        TestAssert.Equal($"{duration} s", diagnostics.BoostLimits.Single(metric => metric.Label == "Software power cap").Value);
+        TestAssert.Equal("0 s", diagnostics.BoostLimits.Single(metric => metric.Label == "Sync Boost").Value);
+        TestAssert.Equal("-", diagnostics.BoostLimits.Single(metric => metric.Label == "Reliability").Value);
+    }
+
+    private static GpuDiagnosticsViewModel ApplyGpuDiagnostics(
+        params (SensorComponent Component, SensorMetric Metric, int? Channel, double Value)[] readings)
+    {
+        var frame = UiTestData.Frame();
+        frame = frame with
+        {
+            Sensors = [.. readings.Select(reading => new SensorReading(
+                UiTestData.Pin with
+                {
+                    PluginId = GpuStatusViewModel.PluginId,
+                    Component = reading.Component,
+                    Metric = reading.Metric,
+                    Channel = reading.Channel
+                },
+                SensorUnits.For(reading.Metric), reading.Value, frame.Timestamp))],
+            Plugins = [new Contracts.Health.PluginHealth(GpuStatusViewModel.PluginId, PluginState.Ready, frame.Timestamp, "RTX 5090")]
+        };
+
+        var model = new GpuStatusViewModel();
+        model.Apply(frame, null, new AppPreferences(), frame.Timestamp);
+        return model.Diagnostics;
     }
 
     private static void UnavailablePinFlagsDoNotCreateAnEmptyChart()

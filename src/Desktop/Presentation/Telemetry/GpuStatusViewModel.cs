@@ -49,6 +49,7 @@ public sealed class GpuStatusViewModel : ObservableObject
     private readonly MetricViewModel _fan2 = new("Fan 2", iconName: "vfan");
 
     public ObservableCollection<MetricViewModel> DetailedMetrics { get; } = [];
+    public GpuDiagnosticsViewModel Diagnostics { get; } = new();
 
     public GpuStatusViewModel()
     {
@@ -81,6 +82,7 @@ public sealed class GpuStatusViewModel : ObservableObject
         _lastObservedAt = readings.Where(Valid).Max(reading => reading.ObservedAt);
         GpuUsageText = Format(Value(SensorComponent.GpuCore, SensorMetric.Utilization), "%", 0);
         CoreVoltageText = Format(Value(SensorComponent.GpuCore, SensorMetric.Voltage) * 1000, "mV", 1);
+        Diagnostics.Apply(Value);
 
         var electrical = options.ElectricalSource switch
         {
@@ -240,6 +242,7 @@ public sealed class GpuStatusViewModel : ObservableObject
         _lastObservedAt = null;
         PowerText = CurrentText = VoltageText = "Unavailable";
         GpuUsageText = CoreVoltageText = "-";
+        Diagnostics.Clear();
 
         foreach (var metric in Metrics.Concat(DetailedMetrics).Distinct())
         {

@@ -9,12 +9,13 @@ using RTXLens.Hardware.Nvidia;
 using RTXLens.Plugins.GenericNvidia.Analysis.Warnings;
 using RTXLens.Plugins.GenericNvidia.Configuration;
 using RTXLens.Plugins.GenericNvidia.Contracts.Configuration;
+using RTXLens.Plugins.GenericNvidia.Diagnostics;
 using RTXLens.Plugins.GenericNvidia.Serialization;
 using RTXLens.Warnings;
 
 namespace RTXLens.Plugins.GenericNvidia;
 
-public sealed class GenericNvidiaPluginFactory(NvidiaTelemetryReader reader) : ISensorPluginFactory, IConnectorSourceProvider
+public sealed class GenericNvidiaPluginFactory(NvidiaTelemetryReader reader, INvidiaDiagnosticsReader? diagnostics = null) : ISensorPluginFactory, IConnectorSourceProvider
 {
     public string Id => GenericNvidiaPlugin.PluginId;
     public string Name => "Nvidia";
@@ -46,7 +47,7 @@ public sealed class GenericNvidiaPluginFactory(NvidiaTelemetryReader reader) : I
 
     public void ValidateSettings(PluginSettings settings) => GenericNvidiaSettings.GetOptions(settings);
 
-    public ISensorPlugin Create(PluginSettings settings) => new GenericNvidiaPlugin(settings, reader);
+    public ISensorPlugin Create(PluginSettings settings) => new GenericNvidiaPlugin(settings, reader, diagnostics);
 
     public int? Priority(SensorMetric metric) => metric switch
     {

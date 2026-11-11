@@ -4,11 +4,12 @@ using RTXLens.Contracts.Enums;
 using RTXLens.Hardware.Nvidia;
 using RTXLens.Plugins.GenericNvidia.Configuration;
 using RTXLens.Plugins.GenericNvidia.Contracts.Configuration;
+using RTXLens.Plugins.GenericNvidia.Diagnostics;
 using RTXLens.Plugins.GenericNvidia.Mapping;
 
 namespace RTXLens.Plugins.GenericNvidia;
 
-public sealed class GenericNvidiaPlugin(PluginSettings settings, NvidiaTelemetryReader reader) : ISensorPlugin
+public sealed class GenericNvidiaPlugin(PluginSettings settings, NvidiaTelemetryReader reader, INvidiaDiagnosticsReader? diagnostics = null) : ISensorPlugin
 {
     public const string PluginId = "generic-nvidia";
 
@@ -28,6 +29,12 @@ public sealed class GenericNvidiaPlugin(PluginSettings settings, NvidiaTelemetry
     {
         var sample = reader.Read(_options.DeviceId, _pollIntervalMs, cancellationToken);
         var readings = sample is null ? [] : GenericNvidiaSnapshotMapper.Create(sample);
+
+        if (sample is not null && diagnostics?.Read(sample.Device.Id) is { } diagnosticSample)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            readings = [.. readings, .. NvidiaDiagnosticsMapper.Create(diagnosticSample)];
+        }
 
         return ValueTask.FromResult(readings.Length == 0
             ? new PluginSample(PluginState.NoDevice, [], "Selected desktop GeForce RTX GPU or supported telemetry is unavailable.")

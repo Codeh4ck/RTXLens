@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml;
+using RTXLens.App.Platform.Interop;
 using RTXLens.App.Platform.Startup;
 using RTXLens.App.Platform.Tray;
 using RTXLens.App.Platform.Windowing;
@@ -47,6 +48,9 @@ public sealed partial class App : Application
             Exit();
             return;
         }
+
+        // Keep this ID in sync with the installer's Start menu shortcut.
+        _ = NativeMethods.SetCurrentProcessExplicitAppUserModelID("Codeh4ck.RTXLens");
 
         _runtime = new AppRuntime(demo, Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread(), diagnostic);
         _window = new MainWindow(_runtime);

@@ -1,4 +1,4 @@
-﻿namespace RTXLens.Contracts.Enums;
+namespace RTXLens.Contracts.Enums;
 
 public enum SensorMetric
 {
@@ -19,5 +19,25 @@ public enum SensorMetric
     ImbalanceDetected,
     OvercurrentDetected,
     FanDuty,
-    FanAutomatic
+    FanAutomatic,
+    ReceiveThroughput,
+    TransmitThroughput,
+    ActiveClockReasons,
+    SupportedClockReasons,
+    ClockLimitDuration,
+    PerformanceState,
+    SupportedPerformanceStates,
+    LinkGeneration = 28,
+    MaximumSystemLinkGeneration,
+    MaximumGpuLinkGeneration,
+    LinkWidth,
+    MaximumLinkWidth,
+    LinkSpeed,
+    MaximumLinkSpeed,
+    ReplayCount,
+    ReplayRolloverCount,
+    DefaultPowerLimit,
+    EnforcedPowerLimit,
+    MinimumPowerLimit,
+    MaximumPowerLimit
 }
