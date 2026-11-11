@@ -1,7 +1,12 @@
 .panel-header, .panel-heading { display: flex; align-items: center; gap: var(--space); min-width: 0; }
 .panel-header { justify-content: space-between; flex: none; }
 .heading-text { min-width: 0; }
-.panel { --metric-outline: color-mix(in srgb, var(--accent) 35%, var(--border)); --metric-surface: color-mix(in srgb, var(--bg) 70%, transparent); --metric-radius: calc(var(--panel-radius, 10px) * .7); }
+.panel {
+    --status-label-size: max(12px, calc(var(--row-base) * var(--label-scale, 1)));
+    --metric-outline: color-mix(in srgb, var(--accent) 35%, var(--border));
+    --metric-surface: color-mix(in srgb, var(--bg) 70%, transparent);
+    --metric-radius: calc(var(--panel-radius, 10px) * .7);
+}
 .gpu-usage { display: inline-flex; align-items: center; gap: .5em; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 8%, transparent); border-radius: 5px; padding: 7px 10px; font-size: max(18px, calc(var(--label-base) * 1.6)); white-space: nowrap; }
 .gpu-usage-value { display: flex; align-items: center; justify-content: flex-end; width: 4.5ch; flex: none; font-variant-numeric: tabular-nums; }
 .panel-title { margin: 0; font: 700 max(14px, calc(var(--title-base) * var(--title-scale, 1))) var(--font-family, Consolas, monospace); overflow-wrap: anywhere; }
@@ -19,7 +24,7 @@
 .summary-metric .metric-value { font-size: max(22px, calc(var(--summary-value-base) * var(--value-scale, 1))); }
 .status-rows { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: var(--space); }
 .status-row { flex: 1; min-height: 0; display: flex; justify-content: space-between; align-items: center; gap: var(--space); padding: calc(var(--space) * 1.1); border: 1px solid var(--metric-outline); border-radius: var(--metric-radius); background: var(--metric-surface); }
-.row-label { display: flex; align-items: center; gap: var(--space); min-width: 0; color: var(--muted); font: 700 max(12px, calc(var(--row-base) * var(--label-scale, 1))) var(--font-family, Consolas, monospace); }
+.row-label { display: flex; align-items: center; gap: var(--space); min-width: 0; color: var(--muted); font: 700 var(--status-label-size) var(--font-family, Consolas, monospace); }
 .row-value { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; text-align: right; min-width: 0; }
 .status-row[data-warning='true'] { border-color: var(--warning); }
 .status-row[data-warning='true'] .row-value, .summary-metric[data-warning='true'] .metric-value { color: var(--warning); }
@@ -52,7 +57,7 @@
     .panel-tools button { min-width: 44px; padding: 5px 8px; font-size: 20px; }
     .status-rows { gap: 5px; }
     .status-row { padding: 5px 9px; }
-    .row-label { font-size: calc(13px * var(--label-scale, 1)); }
+    .panel { --status-label-size: calc(13px * var(--label-scale, 1)); }
     .row-value { font-size: calc(15px * var(--value-scale, 1)); }
 }
 @media (max-aspect-ratio: 1/1) {
@@ -120,7 +125,7 @@
     align-items: center;
     gap: calc(var(--space) * .65);
     margin: 0;
-    font-size: max(13px, calc(var(--row-base) * var(--label-scale, 1)));
+    font-size: var(--status-label-size);
 }
 
 .gpu-reading-columns {
@@ -167,7 +172,7 @@
 }
 
 .gpu-reading-columns .row-label {
-    font-size: max(12px, calc(var(--label-base) * 1.1 * var(--label-scale, 1)));
+    font-size: max(13px, calc(var(--label-base) * 1.2 * var(--label-scale, 1)));
 }
 
 .gpu-reading-columns .row-value {
@@ -199,7 +204,6 @@
 }
 
 .widget[data-large-type='true'] .gpu-card-title {
-    font-size: max(13px, var(--row-base));
     line-height: 1.05;
 }
 
