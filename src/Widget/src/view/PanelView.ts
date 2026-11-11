@@ -31,6 +31,28 @@ const template = `
     <p class="panel-detail"></p>
     <div class="panel-alert" role="status"></div>`;
 
+const gpuStatusTemplate = `
+    <section class="gpu-card gpu-clocks" aria-label="Clocks">
+        <h2 class="gpu-card-title"><span class="icon" data-icon="vcore" aria-hidden="true"></span>Clocks</h2>
+        <div class="gpu-reading-columns"></div>
+    </section>
+    <section class="gpu-card gpu-vram" aria-label="VRAM usage">
+        <h2 class="gpu-card-title"><span class="icon" data-icon="vramusage" aria-hidden="true"></span>VRAM usage</h2>
+        <div class="gpu-vram-reading">
+            <div class="gpu-vram-track" role="progressbar" aria-label="VRAM usage" aria-valuemin="0" aria-valuemax="100" hidden>
+                <span class="gpu-vram-fill"></span>
+            </div>
+        </div>
+    </section>
+    <section class="gpu-card gpu-temperatures" aria-label="Temperatures">
+        <h2 class="gpu-card-title"><span class="icon" data-icon="vtemp" aria-hidden="true"></span>Temperatures</h2>
+        <div class="gpu-reading-columns"></div>
+    </section>
+    <section class="gpu-card gpu-fans" aria-label="Fans">
+        <h2 class="gpu-card-title"><span class="icon" data-icon="vfan" aria-hidden="true"></span>Fans</h2>
+        <div class="gpu-reading-columns"></div>
+    </section>`;
+
 export class PanelView {
     readonly element: HTMLElement;
     private slot: number;
@@ -42,9 +64,9 @@ export class PanelView {
     }[] = [];
     private rows: {
         element: HTMLElement;
-        label: HTMLElement;
+        label: HTMLElement | null;
         text: MetricText;
-        icon: HTMLElement;
+        icon: HTMLElement | null;
     }[] = [];
     private pins: {
         element: HTMLElement;
@@ -60,6 +82,7 @@ export class PanelView {
     private settings: Settings;
     private usage: MetricText | null;
     private coreVoltage: MetricText | null;
+    private vramTrack: HTMLElement | null = null;
     private spread: MetricText | null;
 
     constructor(
@@ -78,6 +101,8 @@ export class PanelView {
 
         const pins = data.kind === 'pins';
         const psu = data.pluginId === 'msi-psu';
+        const gpuStatus = data.kind === 'status' && ['asus-astral', 'generic-nvidia'].includes(data.pluginId);
+        element.dataset.gpuStatus = String(gpuStatus);
 
         if (pins || !['asus-astral', 'generic-nvidia'].includes(data.pluginId)) {
             element.querySelector('.gpu-usage')!.remove();
@@ -169,17 +194,37 @@ export class PanelView {
             });
         }
 
-        for (let index = 0; index < (pins ? 0 : data.rows.length); index++) {
+        const rowHost = this.nodes['status-rows'];
+
+        if (gpuStatus) {
+            rowHost!.innerHTML = gpuStatusTemplate;
+            this.vramTrack = rowHost!.querySelector('.gpu-vram-track');
+        }
+
+        for (const metric of pins ? [] : data.rows) {
+            const fan = metric.id.startsWith('fan');
+            const vram = gpuStatus && metric.id === 'vram';
+            const temperature = metric.id.startsWith('temperature');
             const row = document.createElement('div');
             row.className = 'status-row';
-            row.innerHTML =
-                '<span class="row-label"><span class="icon" aria-hidden="true"></span><span></span></span><b class="row-value"></b>';
-            element.querySelector('.status-rows')!.append(row);
+            const rowIcon = gpuStatus ? '' : '<span class="icon" aria-hidden="true"></span>';
+            const label = vram ? '' : `<span class="row-label">${rowIcon}<span class="row-label-text"></span></span>`;
+            row.innerHTML = `${label}<b class="row-value"></b>`;
+
+            if (!gpuStatus) {
+                rowHost!.append(row);
+            } else if (vram) {
+                rowHost!.querySelector('.gpu-vram-reading')!.prepend(row);
+            } else {
+                const section = temperature ? '.gpu-temperatures' : fan ? '.gpu-fans' : '.gpu-clocks';
+                rowHost!.querySelector(`${section} .gpu-reading-columns`)!.append(row);
+            }
+
             this.rows.push({
                 element: row,
-                label: row.querySelector('.row-label span:last-child')!,
-                text: new MetricText(row.querySelector('.row-value')!, data.rows[index]?.id === 'fans'),
-                icon: row.querySelector('.icon')!
+                label: row.querySelector('.row-label-text'),
+                text: new MetricText(row.querySelector('.row-value')!, gpuStatus && fan),
+                icon: row.querySelector('.icon')
             });
         }
 
@@ -261,8 +306,21 @@ export class PanelView {
         }
 
         if (data.kind === 'status') {
-            const rows = ['asus-astral', 'generic-nvidia'].includes(data.pluginId) ? data.rows.slice(0, 5) : data.rows;
-            this.writeMetrics(this.rows, rows);
+            this.writeMetrics(this.rows, data.rows);
+            if (this.vramTrack) {
+                const percent = data.vramUsagePercent;
+                this.vramTrack.hidden = percent === null;
+
+                if (percent !== null) {
+                    const value = String(percent);
+                    setVariable(this.vramTrack, '--vram-fill', `${value}%`);
+                    if (this.vramTrack.getAttribute('aria-valuenow') !== value) {
+                        this.vramTrack.setAttribute('aria-valuenow', value);
+                    }
+                } else {
+                    this.vramTrack.removeAttribute('aria-valuenow');
+                }
+            }
         }
 
         const detail = ['Ready', 'Alert'].includes(data.state)
@@ -323,9 +381,9 @@ export class PanelView {
     private writeMetrics(
         views: {
             element: HTMLElement;
-            label: HTMLElement;
+            label: HTMLElement | null;
             text: MetricText;
-            icon: HTMLElement;
+            icon: HTMLElement | null;
         }[],
         data: MetricData[]
     ): void {
@@ -337,9 +395,13 @@ export class PanelView {
                 return;
             }
 
-            setText(view.label, metric.label);
+            if (view.label) {
+                setText(view.label, metric.label);
+            }
             view.text.set(metric.text);
-            view.icon.dataset.icon = metric.icon;
+            if (view.icon) {
+                view.icon.dataset.icon = metric.icon;
+            }
             view.element.dataset.warning = String(metric.warning === true);
             view.element.dataset.metric = metric.id;
         });

@@ -2,6 +2,7 @@ using System.Globalization;
 using RTXLens.Contracts.Discovery;
 using RTXLens.Contracts.Enums;
 using RTXLens.Contracts.Sensors;
+using RTXLens.Plugins.GenericNvidia.Contracts.Devices;
 using RTXLens.Presentation.Settings;
 using RTXLens.Presentation.Telemetry;
 using RTXLens.Tests.Infrastructure;
@@ -23,6 +24,9 @@ internal static class HardwarePanelTests
         runner.Run(DisabledPluginsDoNotRaiseMissingDeviceWarnings);
         runner.Run(StaleOrEmptyPluginsLoseTheirTabs);
         runner.Run(GroupsGpuStatusAndPromotesHeadlineMetrics);
+        runner.Run(ShowsPcieRatesByLinkGeneration);
+        runner.Run(ShowsBoostLimitTimesOnlyWhenReported);
+        runner.Run(UsesReportedPowerBoundsForScaleMarkers);
         runner.Run(UnavailablePinFlagsDoNotCreateAnEmptyChart);
     }
 
@@ -148,18 +152,98 @@ internal static class HardwarePanelTests
         };
         var model = new GpuStatusViewModel();
         model.Apply(frame, null, new AppPreferences(), frame.Timestamp);
-        TestAssert.Equal(5, model.Metrics.Count);
-        TestAssert.Equal("VRAM usage", model.Metrics[2].Label);
-        TestAssert.Equal("Core / VRAM temp", model.Metrics[3].Label);
-        TestAssert.Equal("1200 RPM / 1400 RPM", model.Metrics.Single(metric => metric.Label == "Fan 1 / 2").Value);
+        TestAssert.Equal("VRAM usage", model.VramUsage.Label);
+        TestAssert.Equal("1200 RPM", model.Fan1.Value);
+        TestAssert.Equal("1400 RPM", model.Fan2.Value);
         TestAssert.Equal("80%", model.GpuUsageText);
-        TestAssert.False(model.Metrics[3].IsWarning, "Warning colors must consume the shared backend state, not infer independent thresholds.");
+        TestAssert.True(model.HasVramUsage, "The standalone VRAM bar should use the reported utilization.");
+        TestAssert.Equal(25d, model.VramUsagePercent);
+        TestAssert.True(model.HasSecondFan, "The second fan is shown when the card reports it.");
+        TestAssert.False(model.CoreTemperature.IsWarning, "Warning colors must consume the shared backend state, not infer independent thresholds.");
         model.Clear();
         TestAssert.True(model.IsUnavailable, "Disconnected GPU status must be explicit.");
+        TestAssert.False(model.HasVramUsage, "An expired reading must not leave a populated VRAM bar.");
         return;
 
         SensorReading Reading(SensorComponent component, SensorMetric metric, double value, int? channel = null) =>
             new(UiTestData.Pin with { Component = component, Metric = metric, Channel = channel }, SensorUnits.For(metric), value, frame.Timestamp);
+    }
+
+    private static void ShowsPcieRatesByLinkGeneration()
+    {
+        var diagnostics = ApplyGpuDiagnostics(
+            (SensorComponent.GpuPcie, SensorMetric.LinkGeneration, null, 1),
+            (SensorComponent.GpuPcie, SensorMetric.LinkWidth, null, 8),
+            (SensorComponent.GpuPcie, SensorMetric.LinkSpeed, null, 32000),
+            (SensorComponent.GpuPcie, SensorMetric.MaximumSystemLinkGeneration, null, 5),
+            (SensorComponent.GpuPcie, SensorMetric.MaximumLinkWidth, null, 16),
+            (SensorComponent.GpuPcie, SensorMetric.MaximumLinkSpeed, null, 5),
+            (SensorComponent.GpuPcie, SensorMetric.ReceiveThroughput, null, 1024));
+
+        var gen1Rate = 2.5.ToString("0.#", CultureInfo.CurrentCulture);
+        TestAssert.Equal($"Gen 1 ×8 · {gen1Rate} GT/s per lane", diagnostics.CurrentLink.Value);
+        TestAssert.Equal("Gen 5 ×16 · 32 GT/s per lane", diagnostics.MaximumLink.Value);
+        TestAssert.Equal("1 KiB/s", diagnostics.ReceiveThroughput.Value);
+    }
+
+    private static void ShowsBoostLimitTimesOnlyWhenReported()
+    {
+        var diagnostics = ApplyGpuDiagnostics(
+            (SensorComponent.GpuPerformance, SensorMetric.ActiveClockReasons, null, (double)NvidiaClockReason.Reliability),
+            (SensorComponent.GpuPerformance, SensorMetric.SupportedClockReasons, null,
+                (double)(NvidiaClockReason.SoftwarePowerCap | NvidiaClockReason.Reliability)),
+            (SensorComponent.GpuPerformance, SensorMetric.ClockLimitDuration, (int)NvidiaClockReason.SoftwarePowerCap, 0.22),
+            (SensorComponent.GpuPerformance, SensorMetric.ClockLimitDuration, (int)NvidiaClockReason.SyncBoost, 0));
+
+        var duration = 0.22.ToString("0.###", CultureInfo.CurrentCulture);
+        TestAssert.Equal(3, diagnostics.BoostLimits.Count);
+        TestAssert.Equal($"{duration} s", diagnostics.BoostLimits.Single(metric => metric.Label == "Software power cap").Value);
+        TestAssert.Equal("0 s", diagnostics.BoostLimits.Single(metric => metric.Label == "Sync Boost").Value);
+        TestAssert.Equal("-", diagnostics.BoostLimits.Single(metric => metric.Label == "Reliability").Value);
+    }
+
+    private static void UsesReportedPowerBoundsForScaleMarkers()
+    {
+        var diagnostics = ApplyGpuDiagnostics(
+            (SensorComponent.GpuPowerLimits, SensorMetric.MinimumPowerLimit, null, 400),
+            (SensorComponent.GpuPowerLimits, SensorMetric.MaximumPowerLimit, null, 600),
+            (SensorComponent.GpuPowerLimits, SensorMetric.EnforcedPowerLimit, null, 550),
+            (SensorComponent.GpuPowerLimits, SensorMetric.DefaultPowerLimit, null, 600));
+
+        TestAssert.True(diagnostics.HasPowerScale, "Both bounds are available and define an increasing range.");
+        TestAssert.Equal<double?>(0.75, diagnostics.PowerLimitPositions.Enforced);
+        TestAssert.Equal<double?>(1, diagnostics.PowerLimitPositions.Default);
+
+        diagnostics = ApplyGpuDiagnostics(
+            (SensorComponent.GpuPowerLimits, SensorMetric.MaximumPowerLimit, null, 600),
+            (SensorComponent.GpuPowerLimits, SensorMetric.EnforcedPowerLimit, null, 550));
+
+        TestAssert.False(diagnostics.HasPowerScale, "A missing minimum must not be treated as zero.");
+        TestAssert.Equal<double?>(null, diagnostics.PowerLimitPositions.Enforced);
+        TestAssert.Equal("550 W", diagnostics.EnforcedPower.Value);
+    }
+
+    private static GpuDiagnosticsViewModel ApplyGpuDiagnostics(
+        params (SensorComponent Component, SensorMetric Metric, int? Channel, double Value)[] readings)
+    {
+        var frame = UiTestData.Frame();
+        frame = frame with
+        {
+            Sensors = [.. readings.Select(reading => new SensorReading(
+                UiTestData.Pin with
+                {
+                    PluginId = GpuStatusViewModel.PluginId,
+                    Component = reading.Component,
+                    Metric = reading.Metric,
+                    Channel = reading.Channel
+                },
+                SensorUnits.For(reading.Metric), reading.Value, frame.Timestamp))],
+            Plugins = [new Contracts.Health.PluginHealth(GpuStatusViewModel.PluginId, PluginState.Ready, frame.Timestamp, "RTX 5090")]
+        };
+
+        var model = new GpuStatusViewModel();
+        model.Apply(frame, null, new AppPreferences(), frame.Timestamp);
+        return model.Diagnostics;
     }
 
     private static void UnavailablePinFlagsDoNotCreateAnEmptyChart()

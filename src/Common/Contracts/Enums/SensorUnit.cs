@@ -1,4 +1,4 @@
-﻿namespace RTXLens.Contracts.Enums;
+namespace RTXLens.Contracts.Enums;
 
 public enum SensorUnit
 {
@@ -11,5 +11,9 @@ public enum SensorUnit
     Percent,
     Megabytes,
     Bitmask,
-    Boolean
+    Boolean,
+    BytesPerSecond,
+    Seconds,
+    Count,
+    MegabitsPerSecond
 }

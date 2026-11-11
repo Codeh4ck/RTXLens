@@ -60,7 +60,7 @@ internal static class DebugConsoleSmokeTests
         VisualTreeQuery.Descendants<ComboBox>(editor).Single().SelectedIndex = (int)DebugMetricMode.Fixed;
         VisualTreeQuery.Descendants<NumberBox>(editor).Single().Value = 80;
         window.ShowPanel("asus-astral");
-        await WaitAsync(() => runtime.Dashboard.GpuStatus.Metrics.Single(metric => metric.Label.StartsWith("Core / VRAM", StringComparison.Ordinal)).Value.StartsWith("80", StringComparison.Ordinal));
+        await WaitAsync(() => runtime.Dashboard.GpuStatus.CoreTemperature.Value.StartsWith("80", StringComparison.Ordinal));
         var temperature = editor.Model;
         temperature.Value = 60;
         runtime.Settings.WarningNotifications = true;

@@ -89,7 +89,6 @@ for (const prefix of ['asus', 'wireview']) {
 }
 
 const gpuStatus = 'GPU Status settings';
-add(gpuStatus, 'showHotspot', 'Show hotspot alongside core and VRAM temperatures (when reported)', 'switch', false);
 add(gpuStatus, 'showFanDuty', 'Show reported fan duty after RPM', 'switch', true);
 
 const charts = layout;

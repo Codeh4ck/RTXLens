@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Text.Json;
 using RTXLens.Client.Serialization;
@@ -33,29 +32,26 @@ public sealed class GpuStatusViewModel : ObservableObject
         private set => Set(ref field, value);
     } = true;
 
-    public ObservableCollection<MetricViewModel> Metrics { get; } =
-    [
-        new("Core clock", iconName: "vcore"),
-        new("Memory clock", iconName: "vram"),
-        new("VRAM usage", iconName: "vramusage"),
-        new("Core / VRAM temp", iconName: "vtemp"),
-        new("Fan 1 / 2", iconName: "vfan")
-    ];
+    public MetricViewModel CoreClock { get; } = new("Core clock", iconName: "vcore");
+    public MetricViewModel MemoryClock { get; } = new("Memory clock", iconName: "vram");
+    public MetricViewModel VramUsage { get; } = new("VRAM usage", iconName: "vramusage");
+    public MetricViewModel CoreTemperature { get; } = new("Core temp", iconName: "vtemp");
+    public MetricViewModel MemoryTemperature { get; } = new("VRAM temp", iconName: "vtemp");
+    public MetricViewModel HotspotTemperature { get; } = new("Hotspot temp", iconName: "vtemp");
+    public MetricViewModel Fan1 { get; } = new("Fans", iconName: "vfan");
+    public MetricViewModel Fan2 { get; } = new("Fan 2", iconName: "vfan");
 
-    private readonly MetricViewModel _coreTemperature = new("Core temp", iconName: "vtemp");
-    private readonly MetricViewModel _memoryTemperature = new("VRAM temp", iconName: "vtemp");
-    private readonly MetricViewModel _hotspotTemperature = new("Hotspot temp", iconName: "vtemp");
-    private readonly MetricViewModel _fan1 = new("Fan 1", iconName: "vfan");
-    private readonly MetricViewModel _fan2 = new("Fan 2", iconName: "vfan");
+    public double VramUsagePercent { get; private set => Set(ref field, value); }
+    public bool HasVramUsage { get; private set => Set(ref field, value); }
+    public bool HasHotspotTemperature { get; private set => Set(ref field, value); }
+    public bool HasSecondFan { get; private set => Set(ref field, value); }
+    public GpuDiagnosticsViewModel Diagnostics { get; } = new();
 
-    public ObservableCollection<MetricViewModel> DetailedMetrics { get; } = [];
+    private readonly MetricViewModel[] _metrics;
 
     public GpuStatusViewModel()
     {
-        foreach (var metric in Metrics.Take(3).Concat([_coreTemperature, _memoryTemperature, _fan1]))
-        {
-            DetailedMetrics.Add(metric);
-        }
+        _metrics = [CoreClock, MemoryClock, VramUsage, CoreTemperature, MemoryTemperature, HotspotTemperature, Fan1, Fan2];
     }
 
     public void Apply(SensorSnapshot snapshot, ConfigurationSnapshot? configuration, AppPreferences preferences, DateTimeOffset now)
@@ -81,6 +77,7 @@ public sealed class GpuStatusViewModel : ObservableObject
         _lastObservedAt = readings.Where(Valid).Max(reading => reading.ObservedAt);
         GpuUsageText = Format(Value(SensorComponent.GpuCore, SensorMetric.Utilization), "%", 0);
         CoreVoltageText = Format(Value(SensorComponent.GpuCore, SensorMetric.Voltage) * 1000, "mV", 1);
+        Diagnostics.Apply(Value);
 
         var electrical = options.ElectricalSource switch
         {
@@ -119,83 +116,43 @@ public sealed class GpuStatusViewModel : ObservableObject
         PowerText = Format(Input(SensorMetric.Power), "W", 1);
         CurrentText = Format(Input(SensorMetric.Current), "A", 2);
         VoltageText = Format(Input(SensorMetric.Voltage), "V", 2);
-        Metrics[0].Value = Format(Value(SensorComponent.GpuCore, SensorMetric.Clock), "MHz", 0);
-        Metrics[1].Value = Format(Value(SensorComponent.GpuMemory, SensorMetric.Clock), "MHz", 0);
+        CoreClock.Value = Format(Value(SensorComponent.GpuCore, SensorMetric.Clock), "MHz", 0);
+        MemoryClock.Value = Format(Value(SensorComponent.GpuMemory, SensorMetric.Clock), "MHz", 0);
 
         var used = Value(SensorComponent.GpuMemory, SensorMetric.MemoryUsed);
         var total = Value(SensorComponent.GpuMemory, SensorMetric.MemoryTotal);
-        var percentage = Value(SensorComponent.GpuMemory, SensorMetric.Utilization);
-        Metrics[2].Value = used is { } usedMb && total is > 0 and var totalMb
-            ? $"{Format(usedMb / 1024, "GB", 2)} / {Format(totalMb / 1024, "GB", 2)} ({Format(percentage ?? usedMb / totalMb * 100, "%", 0)})"
-            : "Unavailable";
-
-        var temperatures = new List<string>
+        var reportedVramPercent = Value(SensorComponent.GpuMemory, SensorMetric.Utilization);
+        var vramPercent = reportedVramPercent ?? (total is > 0 ? used / total * 100 : null);
+        if (used is { } usedMb && total is > 0 and var totalMb)
         {
-            Temperature(Value(SensorComponent.GpuCore, SensorMetric.Temperature)),
-            Temperature(Value(SensorComponent.GpuMemory, SensorMetric.Temperature))
-        };
-        var hotspot = Value(SensorComponent.GpuHotspot, SensorMetric.Temperature);
-        Metrics[3].Label = hotspot is null ? "Core / VRAM temp" : "Core / VRAM / HS";
-
-        if (hotspot is not null)
+            HasVramUsage = vramPercent is { } percent && double.IsFinite(percent);
+            VramUsagePercent = vramPercent is { } value && HasVramUsage ? Math.Clamp(value, 0, 100) : 0;
+            VramUsage.Value = $"{Format(usedMb / 1024, "GB", 2)} / {Format(totalMb / 1024, "GB", 2)} ({Format(vramPercent, "%", 0)})";
+        }
+        else
         {
-            temperatures.Add(Temperature(hotspot));
+            HasVramUsage = false;
+            VramUsagePercent = 0;
+            VramUsage.Value = "Unavailable";
         }
 
-        Metrics[3].Value = string.Join(" / ", temperatures);
-        Metrics[3].IsWarning = snapshot.Warnings?.States.Any(warning => warning.PluginId == PluginId
-                                                                        && warning.DeviceId == devices[0] && warning is { Phase: Contracts.Warnings.WarningPhase.Active, Icon: "temperature" }) == true;
+        var hotspot = Value(SensorComponent.GpuHotspot, SensorMetric.Temperature);
+        CoreTemperature.Value = Temperature(Value(SensorComponent.GpuCore, SensorMetric.Temperature));
+        MemoryTemperature.Value = Temperature(Value(SensorComponent.GpuMemory, SensorMetric.Temperature));
+        HotspotTemperature.Value = Temperature(hotspot);
+        HasHotspotTemperature = hotspot.HasValue;
+
+        CoreTemperature.IsWarning = snapshot.Warnings?.States.Any(warning => warning.PluginId == PluginId
+            && warning.DeviceId == devices[0] && warning is { Phase: Contracts.Warnings.WarningPhase.Active, TypeId: "generic-nvidia/core-temperature" }) == true;
+        MemoryTemperature.IsWarning = snapshot.Warnings?.States.Any(warning => warning.PluginId == PluginId
+            && warning.DeviceId == devices[0] && warning is { Phase: Contracts.Warnings.WarningPhase.Active, TypeId: "generic-nvidia/memory-temperature" }) == true;
 
         var fans = readings.Where(reading => reading.Identity is { Component: SensorComponent.GpuFan, Metric: SensorMetric.FanSpeed, Channel: > 0 })
             .OrderBy(reading => reading.Identity.Channel).Take(2).ToArray();
-        Metrics[4].Label = fans.Length == 0 ? "Fans" : "Fan " + string.Join(" / ", Enumerable.Range(1, fans.Length));
-        Metrics[4].Value = fans.Length == 0 ? "Unavailable" : string.Join(" / ", fans.Select(fan =>
-        {
-            var rpm = Format(Value(SensorComponent.GpuFan, SensorMetric.FanSpeed, fan.Identity.Channel), "RPM", 0);
-            var duty = Value(SensorComponent.GpuFan, SensorMetric.FanDuty, fan.Identity.Channel);
-            return duty is null ? rpm : $"{rpm} ({Format(duty, "%", 0)})";
-        }));
-
-        _coreTemperature.Value = Temperature(Value(SensorComponent.GpuCore, SensorMetric.Temperature));
-        _memoryTemperature.Value = Temperature(Value(SensorComponent.GpuMemory, SensorMetric.Temperature));
-        _hotspotTemperature.Value = Temperature(hotspot);
-        _coreTemperature.IsWarning = snapshot.Warnings?.States.Any(warning => warning.PluginId == PluginId
-                                                                              && warning.DeviceId == devices[0] && warning is { Phase: Contracts.Warnings.WarningPhase.Active, TypeId: "generic-nvidia/core-temperature" }) == true;
-        _memoryTemperature.IsWarning = snapshot.Warnings?.States.Any(warning => warning.PluginId == PluginId
-                                                                                && warning.DeviceId == devices[0] && warning is { Phase: Contracts.Warnings.WarningPhase.Active, TypeId: "generic-nvidia/memory-temperature" }) == true;
-        _fan1.Label = fans.Length == 0 ? "Fans" : "Fan 1";
-        _fan1.Value = Fan(fans.ElementAtOrDefault(0));
-        _fan2.Value = Fan(fans.ElementAtOrDefault(1));
-
-        var detailed = Metrics.Take(3).Concat([_coreTemperature, _memoryTemperature]).ToList();
-        if (hotspot is not null)
-        {
-            detailed.Add(_hotspotTemperature);
-        }
-
-        detailed.Add(_fan1);
-        if (fans.Length > 1)
-        {
-            detailed.Add(_fan2);
-        }
-
-        foreach (var metric in DetailedMetrics.Except(detailed).ToArray())
-        {
-            DetailedMetrics.Remove(metric);
-        }
-
-        for (var index = 0; index < detailed.Count; index++)
-        {
-            var existing = DetailedMetrics.IndexOf(detailed[index]);
-            if (existing < 0)
-            {
-                DetailedMetrics.Insert(index, detailed[index]);
-            }
-            else if (existing != index)
-            {
-                DetailedMetrics.Move(existing, index);
-            }
-        }
+        Fan1.Label = fans.Length == 0 ? "Fans" : "Fan 1";
+        Fan1.Value = Fan(fans.ElementAtOrDefault(0));
+        Fan2.Value = Fan(fans.ElementAtOrDefault(1));
+        HasSecondFan = fans.Length > 1;
 
         return;
 
@@ -240,8 +197,12 @@ public sealed class GpuStatusViewModel : ObservableObject
         _lastObservedAt = null;
         PowerText = CurrentText = VoltageText = "Unavailable";
         GpuUsageText = CoreVoltageText = "-";
+        HasVramUsage = HasHotspotTemperature = HasSecondFan = false;
+        VramUsagePercent = 0;
+        Fan1.Label = "Fans";
+        Diagnostics.Clear();
 
-        foreach (var metric in Metrics.Concat(DetailedMetrics).Distinct())
+        foreach (var metric in _metrics)
         {
             metric.Value = "Unavailable";
             metric.IsWarning = false;

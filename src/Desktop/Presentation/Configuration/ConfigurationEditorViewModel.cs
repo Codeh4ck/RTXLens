@@ -9,6 +9,7 @@ using RTXLens.Contracts.Discovery;
 using RTXLens.Contracts.Monitoring;
 using RTXLens.Contracts.Sensors;
 using RTXLens.Presentation.Infrastructure;
+using RTXLens.Presentation.Telemetry;
 
 namespace RTXLens.Presentation.Configuration;
 
@@ -150,7 +151,8 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
 
     public void SetAvailableSensors(SensorSnapshot snapshot)
     {
-        var identities = snapshot.Sensors.Select(reading => reading.Identity).OrderBy(identity => identity.Key, StringComparer.Ordinal).ToArray();
+        var identities = snapshot.Sensors.Select(reading => reading.Identity).Where(identity => !identity.IsGpuDiagnostic())
+            .OrderBy(identity => identity.Key, StringComparer.Ordinal).ToArray();
         if (!AvailableSensors.Select(sensor => sensor.Identity.Key).SequenceEqual(identities.Select(identity => identity.Key)))
         {
             AvailableSensors.Clear();
@@ -319,7 +321,7 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
             _streamInterval = snapshot.Configuration.Monitoring.StreamIntervalMs;
             _eventLogRetentionDays = snapshot.Configuration.Monitoring.EventLogRetentionDays;
             _eventLogStorageMb = snapshot.Configuration.Monitoring.EventLogStorageMb;
-            foreach (var (id, settings) in snapshot.Configuration.Plugins)
+            foreach (var (id, settings) in snapshot.Configuration.Plugins.OrderBy(plugin => plugin.Key != GpuStatusViewModel.PluginId))
             {
                 var name = _catalog?.Plugins.FirstOrDefault(plugin => plugin.Id == id)?.Name ?? id;
                 var plugin = new PluginSettingsEditorViewModel(id, name, settings);

@@ -13,5 +13,8 @@ public enum SensorComponent
     Psu,
     PsuConnector,
     PsuPin,
-    GpuHotspot
+    GpuHotspot,
+    GpuPcie,
+    GpuPerformance,
+    GpuPowerLimits
 }

@@ -8,6 +8,7 @@ export interface PanelData {
     source: string;
     gpuUsage: string;
     coreVoltage: string;
+    vramUsagePercent: number | null;
     state: string;
     tone: 'good' | 'warning' | 'error' | 'neutral';
     summary: MetricData[];

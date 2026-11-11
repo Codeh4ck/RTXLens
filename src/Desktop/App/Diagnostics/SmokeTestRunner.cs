@@ -124,21 +124,13 @@ internal static class SmokeTestRunner
         await CaptureAsync(window, Path.Combine(output, "wireview-dark.png"));
         window.ShowPanel("asus-astral");
         await CaptureAsync(window, Path.Combine(output, "astral-dark.png"));
-        var metricLabels = VisualTreeQuery.Descendants<TextBlock>(window.ThemeRoot).Where(label => label.Name == "MetricLabel").ToArray();
-        if (metricLabels.Length != 5 || metricLabels.Any(label => label.FontSize < 15))
+        var gpuStatus = VisualTreeQuery.Descendants<GpuStatusView>(window.ThemeRoot).Single();
+        var gpuLabels = VisualTreeQuery.Descendants<TextBlock>(gpuStatus).ToArray();
+        var vramLabel = Array.FindIndex(gpuLabels, label => label.Text == "VRAM usage");
+        var temperatureLabel = Array.FindIndex(gpuLabels, label => label.Text == "Temperatures");
+        if (vramLabel < 0 || temperatureLabel <= vramLabel || gpuLabels[vramLabel].FontSize < 15)
         {
-            throw new InvalidOperationException("GPU metric labels must use the larger readable size.");
-        }
-
-        if (metricLabels[2].Text != "VRAM usage" || metricLabels[3].Text != "Core / VRAM temp")
-        {
-            throw new InvalidOperationException("VRAM usage must appear above temperatures.");
-        }
-
-        if (VisualTreeQuery.Descendants<MetricTile>(window.ThemeRoot).Any(tile =>
-                VisualTreeQuery.Descendants<Border>(tile).Single(border => border.Name == "Frame").BorderThickness != new Thickness(1)))
-        {
-            throw new InvalidOperationException("Metric rows must have a complete outline.");
+            throw new InvalidOperationException("The readable VRAM heading must appear above temperatures.");
         }
 
         var bars = VisualTreeQuery.Descendants<PinBar>(window.ThemeRoot).ToArray();

@@ -32,6 +32,7 @@
         </Feature>
         <Feature Id="Desktop" Title="Desktop app and configurator" Description="Optional telemetry dashboard and backend service configurator. It does not need to stay open for monitoring." Level="1" AllowAdvertise="no">
             <ComponentGroupRef Id="DesktopFiles" />
+            <ComponentRef Id="DesktopExecutable" />
             <ComponentRef Id="DesktopShortcut" />
         </Feature>
 
@@ -55,10 +56,14 @@
         <Component Id="InstallationRegistration" Directory="INSTALLFOLDER" Guid="AA3079F5-F011-42B8-AC34-1BE0B984744F" Bitness="always64">
             <RegistryValue Root="HKLM" Key="SOFTWARE\RTXLens" Name="InstallDirectory" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
         </Component>
-        <Component Id="DesktopShortcut" Directory="AppInstallFolder" Guid="2B21DA40-41D0-4D26-8CC5-FA7F96B01D7D" Bitness="always64">
-            <File Id="AppExecutable" Source="$(var.PayloadDirectory)/Desktop/RTXLens.App.exe" KeyPath="yes">
-                <Shortcut Id="StartMenuShortcut" Directory="MonitorMenuFolder" Name="RTX Lens" Description="Telemetry and service configuration" Advertise="yes" WorkingDirectory="AppInstallFolder" Icon="MonitorIcon.exe" />
-            </File>
+        <Component Id="DesktopExecutable" Directory="AppInstallFolder" Guid="2B21DA40-41D0-4D26-8CC5-FA7F96B01D7D" Bitness="always64">
+            <File Id="AppExecutable" Source="$(var.PayloadDirectory)/Desktop/RTXLens.App.exe" KeyPath="yes" />
+        </Component>
+        <Component Id="DesktopShortcut" Directory="MonitorMenuFolder" Guid="DB3D526D-6D7D-4D98-B684-389CB6B72547" Bitness="always64">
+            <Shortcut Id="StartMenuShortcut" Name="RTX Lens" Description="Telemetry and service configuration" Advertise="no" Target="[AppInstallFolder]RTXLens.App.exe" WorkingDirectory="AppInstallFolder">
+                <ShortcutProperty Key="System.AppUserModel.ID" Value="Codeh4ck.RTXLens" />
+            </Shortcut>
+            <RegistryValue Root="HKCU" Key="SOFTWARE\RTXLens" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
             <RemoveFolder Id="RemoveMenuFolder" Directory="MonitorMenuFolder" On="uninstall" />
         </Component>
 
