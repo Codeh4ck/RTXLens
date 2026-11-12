@@ -18,7 +18,6 @@ public sealed record AppPreferences
     public bool ShowAsusPsuCurrent { get; init; }
     public int WireViewPsuConnector { get; init; } = 1;
     public int AsusPsuConnector { get; init; } = 1;
-    public bool ReducedEffects { get; init; } = true;
     public bool MinimizeToTray { get; init; } = true;
     public bool CloseToTray { get; init; }
     public bool SuppressExitConfirmation { get; init; }

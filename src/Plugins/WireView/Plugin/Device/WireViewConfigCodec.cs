@@ -117,7 +117,7 @@ internal static class WireViewConfigCodec
 
         if (changes.Averaging != current.Averaging)
         {
-            payload[AveragingOffset] = checked((byte)Array.IndexOf(DeviceConfig.AveragingOptions.ToArray(), changes.Averaging));
+            payload[AveragingOffset] = checked((byte)Array.IndexOf([.. DeviceConfig.AveragingOptions], changes.Averaging));
         }
 
         var display = changes.Display!;

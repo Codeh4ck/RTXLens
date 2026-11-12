@@ -16,7 +16,9 @@ public sealed class MsiPsuReader(ILogger<MsiPsuReader> logger) : IMsiPsuReader
     private string _model = "";
     private string _revision = "";
 
-    public MsiDeviceInfo[] Devices => OperatingSystem.IsWindows()
+    public MsiDeviceInfo[] Devices => DiscoverDevices();
+
+    internal static MsiDeviceInfo[] DiscoverDevices() => OperatingSystem.IsWindows()
         ? [.. SupportedDevices().Select(device => new MsiDeviceInfo(device.DevicePath, "MSI " + MsiPsuModels.Name(device.VendorID, device.ProductID)))]
         : [];
 

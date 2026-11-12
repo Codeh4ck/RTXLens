@@ -13,7 +13,7 @@ public sealed partial class DeviceWarningProfilesView
     [
         new("asus-astral", "ROG Astral"),
         new("msi-psu", "MSI PSU"),
-        new("wireview-pro2", "WireView Pro 2")
+        new("wireview-pro2", "WireView Pro II")
     ];
 
     private readonly AppRuntime _runtime;

@@ -46,7 +46,7 @@ public sealed class WireViewWarningSource : IWarningSource
             continue;
 
             void Fault(string typeId, ushort mask) => observations.Add(new WarningObservation(PluginId, reading.Identity.DeviceId, typeId,
-                true, (flags & mask) != 0, "Reported by WireView firmware."));
+                true, (flags & mask) != 0, "Reported by WireView Pro II firmware."));
         }
         
         var currentPins = snapshot.Sensors.Where(reading => reading.Identity.PluginId == PluginId

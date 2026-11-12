@@ -191,25 +191,6 @@ internal static class PerformanceRecordingTests
     {
         var clock = new RecordingClock();
         var recorder = Create(clock);
-        SensorSnapshot Snapshot(double first, double second)
-        {
-            var frame = Frame(clock, 1);
-            var msi = new List<SensorReading>();
-            foreach (var (connector, current) in new[] { ("1", first), ("2", second) })
-            {
-                for (var pin = 1; pin <= 6; pin++)
-                {
-                    msi.Add(new(new("msi-psu", "psu", SensorComponent.PsuPin, SensorMetric.Current, pin, connector),
-                        SensorUnit.Amperes, current, clock.GetUtcNow()));
-                }
-            }
-
-            return frame with
-            {
-                Sensors = [.. frame.Sensors, .. msi],
-                Plugins = [.. frame.Plugins, new("msi-psu", PluginState.Ready, clock.GetUtcNow(), null)]
-            };
-        }
 
         recorder.Accept(Snapshot(0, 0.4));
         var sources = recorder.ReadFrame(null, new Dictionary<string, int>()).Series;
@@ -250,6 +231,27 @@ internal static class PerformanceRecordingTests
             .All(series => series.Trace.Identity.ConnectorId == "2"),
             "A new session must not silently select an unused connector from an earlier recording.");
         recorder.Stop();
+        return;
+
+        SensorSnapshot Snapshot(double first, double second)
+        {
+            var frame = Frame(clock, 1);
+            var msi = new List<SensorReading>();
+            foreach (var (connector, current) in new[] { ("1", first), ("2", second) })
+            {
+                for (var pin = 1; pin <= 6; pin++)
+                {
+                    msi.Add(new(new("msi-psu", "psu", SensorComponent.PsuPin, SensorMetric.Current, pin, connector),
+                        SensorUnit.Amperes, current, clock.GetUtcNow()));
+                }
+            }
+
+            return frame with
+            {
+                Sensors = [.. frame.Sensors, .. msi],
+                Plugins = [.. frame.Plugins, new("msi-psu", PluginState.Ready, clock.GetUtcNow(), null)]
+            };
+        }
     }
 
     private static void DisplayFramesBoundMemoryAndKeepExactHoverAndExport()

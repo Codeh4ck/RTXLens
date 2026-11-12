@@ -5,10 +5,13 @@ Removes generated local build and test artifacts and superseded RTX Lens release
 
 .DESCRIPTION
 Keeps the latest verified local release, the current widget, build prerequisites and local hardware research.
-Use -WhatIf to preview the cleanup.
+Use -PreviewsOnly to remove preview builds, -KeepPreview to retain specific preview folder names and -WhatIf to preview the cleanup.
 #>
 [CmdletBinding(SupportsShouldProcess)]
-param()
+param(
+    [switch] $PreviewsOnly,
+    [string[]] $KeepPreview = @()
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -115,49 +118,83 @@ function Get-SupersededReleases
     }
 }
 
-$paths = @(
-    # Release staging, old widget packages and temporary diagnostic runs.
-    '.dist/build'
-    '.dist/components'
-    '.dist/connector-profile-desktop-smoke'
-    '.dist/diagnostic-tool'
-    '.dist/diagnostics-smoke'
-    '.dist/rtx5090monitor'
-    '.dist/rtx5090monitor.icuewidget'
-    '.dist/RTXMonitor-Diagnostic-Tool.zip'
-    '.dist/verification'
-    '.dist/verification-desktop-gpu'
-    '.dist/PublishGitHubRelease.ps1'
-    '.dist/PublishGitHubRelease-1.0.1.ps1'
-    '.dist/VerifyRelease-1.0.1.ps1'
-    '.dist/release-notes-1.0.0.md'
-    '.dist/release-notes-1.0.1.md'
-
-    # Generated UI, service, packaging and crash investigation output.
-    'artifacts/diagnostics-tools'
-    'artifacts/exit-confirmation-ui'
-    'artifacts/layout-native-ui'
-    'artifacts/layout-validation'
-    'artifacts/msi-curve-api-recovery-ui'
-    'artifacts/msi-fan-curve-ui'
-    'artifacts/msi-service-verification'
-    'artifacts/release-0.4.0-upgrade-check.json'
-
-    Get-GeneratedFiles '.dist' '*.log'
-    Get-GeneratedFiles 'artifacts' '*.log'
-    Get-GeneratedFiles 'artifacts' 'fan-curve-crash-*.txt'
-    Get-SupersededReleases
-)
-
-foreach ($project in 'Backend', 'Desktop', 'Installer')
+function Get-PreviewBuilds
 {
-    $paths += "tests/$project/bin", "tests/$project/obj"
+    $olderPreviewNames = 'feature-parity', 'msi-pin-tabs'
+
+    foreach ($tree in 'src', 'tests')
+    {
+        $directory = Get-LocalItem $tree
+        if (!$directory)
+        {
+            continue
+        }
+
+        Get-ChildItem -LiteralPath $directory.FullName -Directory -Recurse -Filter 'bin' |
+            ForEach-Object { Get-ChildItem -LiteralPath $_.FullName -Directory } |
+            Where-Object { ($_.Name -like '*-preview' -or $_.Name -in $olderPreviewNames) -and $_.Name -notin $KeepPreview } |
+            ForEach-Object { [IO.Path]::GetRelativePath($solution, $_.FullName).Replace('\', '/') }
+    }
+
+    foreach ($folder in '.dist', '.dist/build', 'artifacts')
+    {
+        $directory = Get-LocalItem $folder
+        if ($directory)
+        {
+            Get-ChildItem -LiteralPath $directory.FullName -Directory -Filter '*-preview' |
+                Where-Object Name -NotIn $KeepPreview |
+                ForEach-Object { "$folder/$($_.Name)" }
+        }
+    }
 }
 
-foreach ($project in 'Bootstrapper', 'Package')
+$paths = @(Get-PreviewBuilds)
+if (!$PreviewsOnly)
 {
-    $paths += Get-GeneratedFiles "installer/$project/bin/x64/Release" 'RtxMonitor-*'
-    $paths += Get-GeneratedFiles "installer/$project/obj/Release" 'RtxMonitor-*'
+    $paths += @(
+        # Release staging, old widget packages and temporary diagnostic runs.
+        '.dist/build'
+        '.dist/components'
+        '.dist/connector-profile-desktop-smoke'
+        '.dist/diagnostic-tool'
+        '.dist/diagnostics-smoke'
+        '.dist/rtx5090monitor'
+        '.dist/rtx5090monitor.icuewidget'
+        '.dist/RTXMonitor-Diagnostic-Tool.zip'
+        '.dist/verification'
+        '.dist/verification-desktop-gpu'
+        '.dist/PublishGitHubRelease.ps1'
+        '.dist/PublishGitHubRelease-1.0.1.ps1'
+        '.dist/VerifyRelease-1.0.1.ps1'
+        '.dist/release-notes-1.0.0.md'
+        '.dist/release-notes-1.0.1.md'
+
+        # Generated UI, service, packaging and crash investigation output.
+        'artifacts/diagnostics-tools'
+        'artifacts/exit-confirmation-ui'
+        'artifacts/layout-native-ui'
+        'artifacts/layout-validation'
+        'artifacts/msi-curve-api-recovery-ui'
+        'artifacts/msi-fan-curve-ui'
+        'artifacts/msi-service-verification'
+        'artifacts/release-0.4.0-upgrade-check.json'
+
+        Get-GeneratedFiles '.dist' '*.log'
+        Get-GeneratedFiles 'artifacts' '*.log'
+        Get-GeneratedFiles 'artifacts' 'fan-curve-crash-*.txt'
+        Get-SupersededReleases
+    )
+
+    foreach ($project in 'Backend', 'Desktop', 'Installer')
+    {
+        $paths += "tests/$project/bin", "tests/$project/obj"
+    }
+
+    foreach ($project in 'Bootstrapper', 'Package')
+    {
+        $paths += Get-GeneratedFiles "installer/$project/bin/x64/Release" 'RtxMonitor-*'
+        $paths += Get-GeneratedFiles "installer/$project/obj/Release" 'RtxMonitor-*'
+    }
 }
 
 $targets = @{}
@@ -195,6 +232,7 @@ if ($LASTEXITCODE -ne 0 -or (Compare-Object $targetPaths @($ignored)))
 }
 
 $removed = 0
+$failed = 0
 
 foreach ($path in ($targetPaths | Sort-Object))
 {
@@ -210,12 +248,25 @@ foreach ($path in ($targetPaths | Sort-Object))
 
     if ($PSCmdlet.ShouldProcess($item.FullName, 'Remove generated artifact'))
     {
-        Remove-Item -LiteralPath $item.FullName -Recurse:$item.PSIsContainer -Force
-        $removed++
+        try
+        {
+            Remove-Item -LiteralPath $item.FullName -Recurse:$item.PSIsContainer -Force
+            $removed++
+        }
+        catch
+        {
+            Write-Warning "Could not finish removing ${path}: $($_.Exception.Message)"
+            $failed++
+        }
     }
 }
 
 if (!$WhatIfPreference)
 {
     Write-Host "Removed $removed local artifact files and folders."
+}
+
+if ($failed)
+{
+    throw "Cleanup could not remove $failed local artifact files or folders."
 }

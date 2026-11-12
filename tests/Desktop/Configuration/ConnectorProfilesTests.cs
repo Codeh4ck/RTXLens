@@ -57,7 +57,11 @@ internal static class ConnectorProfilesTests
         var readings = new[] { clock, power, current, voltage };
         var snapshot = new SensorSnapshot(1, 1, now, readings,
             [.. new[] { "generic-nvidia", "wireview-pro2", "msi-psu" }.Select(id => new PluginHealth(id, PluginState.Ready, now, null))],
-            [.. new[] { power, current, voltage }.Select(reading => new ResolvedSelection(ConnectorProfiles.SelectionName(reading.Identity.Metric), SelectionState.Fallback, reading.Identity.Key))]);
+            [
+                new ResolvedSelection(ConnectorProfiles.SelectionName(SensorMetric.Power), SelectionState.Selected, power.Identity.Key),
+                new ResolvedSelection(ConnectorProfiles.SelectionName(SensorMetric.Current), SelectionState.Fallback, current.Identity.Key),
+                new ResolvedSelection(ConnectorProfiles.SelectionName(SensorMetric.Voltage), SelectionState.Fallback, voltage.Identity.Key)
+            ]);
         var configuration = new ConfigurationSnapshot(1, new ServiceConfiguration
         {
             Plugins = new[] { "generic-nvidia", "wireview-pro2", "msi-psu" }.ToDictionary(id => id, _ => new PluginSettings()),
@@ -70,5 +74,14 @@ internal static class ConnectorProfilesTests
         TestAssert.True(model.VoltageText.Contains("12"), "Resolved voltage must replace native plugin voltage.");
         model.Apply(snapshot with { Selections = [] }, configuration, new AppPreferences(), now);
         TestAssert.Equal("Unavailable", model.PowerText);
+
+        var editor = new ConnectorProfilesEditorViewModel();
+        editor.Load(configuration.Configuration.Monitoring.ConnectorProfiles, null);
+        editor.Apply(snapshot);
+        var metrics = editor.SelectedProfile!.Metrics.ToDictionary(metric => metric.Metric);
+        TestAssert.Equal("Using WireView Pro II", metrics[SensorMetric.Power].Resolution);
+        TestAssert.Equal("Using MSI PSU · Connector 2 (fallback)", metrics[SensorMetric.Current].Resolution);
+        editor.Apply(snapshot with { Selections = [] });
+        TestAssert.Equal("Unavailable - no source is reporting a usable reading", metrics[SensorMetric.Voltage].Resolution);
     }
 }

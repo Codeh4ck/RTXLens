@@ -14,7 +14,7 @@ public sealed partial class PerformanceRecorder(TimeProvider? timeProvider = nul
     private readonly Dictionary<string, string> _sourceNames = new(StringComparer.Ordinal)
     {
         ["asus-astral"] = "ROG Astral",
-        ["wireview-pro2"] = "WireView Pro 2",
+        ["wireview-pro2"] = "WireView Pro II",
         ["msi-psu"] = "MSI PSU",
         ["generic-nvidia"] = "NVIDIA"
     };

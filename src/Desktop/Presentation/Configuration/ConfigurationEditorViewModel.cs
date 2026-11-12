@@ -35,6 +35,7 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
 
     public GenericNvidiaSettingsEditorViewModel? NvidiaWarnings => Plugins.FirstOrDefault(plugin => plugin.IsNvidia)?.Nvidia;
     public bool HasNvidiaWarnings => NvidiaWarnings is not null;
+    public ServiceConfiguration? CurrentConfiguration => _baseline?.Configuration;
     public bool CanEdit => !IsBusy && _baseline is not null;
     public string Title => localOnly ? "Local simulation configuration" : "Service configuration";
 
@@ -67,6 +68,29 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
         get;
         set => Set(ref field, value);
     } = "Waiting for service configuration";
+
+    public StatusTone MessageTone
+    {
+        get;
+        private set => Set(ref field, value);
+    }
+
+    public DateTimeOffset? ApplyMessageExpiresAt { get; private set; }
+
+    public void DismissApplyMessage()
+    {
+        if (MessageTone == StatusTone.Positive)
+        {
+            Report("", StatusTone.Neutral);
+        }
+    }
+
+    private void Report(string message, StatusTone tone)
+    {
+        ApplyMessageExpiresAt = tone == StatusTone.Positive ? DateTimeOffset.UtcNow.AddSeconds(5) : null;
+        MessageTone = tone;
+        Message = message;
+    }
 
     public string RevisionText => _baseline is null ? "Not loaded" : $"Revision {_baseline.Revision}";
     public double StreamIntervalMs { get => _streamInterval; set { if (Set(ref _streamInterval, value))
@@ -124,6 +148,11 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
 
     public void SetDevices(AsusDeviceInfo[] devices)
     {
+        if (_devices.SequenceEqual(devices))
+        {
+            return;
+        }
+
         _devices = devices;
         foreach (var plugin in Plugins.Where(plugin => plugin.IsAsus))
         {
@@ -133,6 +162,11 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
 
     public void SetNvidiaDevices(NvidiaDeviceInfo[] devices)
     {
+        if (_nvidiaDevices.SequenceEqual(devices))
+        {
+            return;
+        }
+
         _nvidiaDevices = devices;
         foreach (var plugin in Plugins.Where(plugin => plugin.IsNvidia))
         {
@@ -142,6 +176,11 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
 
     public void SetMsiDevices(MsiDeviceInfo[] devices)
     {
+        if (_msiDevices.SequenceEqual(devices))
+        {
+            return;
+        }
+
         _msiDevices = devices;
         foreach (var plugin in Plugins.Where(plugin => plugin.IsMsi))
         {
@@ -203,7 +242,7 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
         }
         catch (Exception exception) when (IsRequestError(exception))
         {
-            Message = exception.Message;
+            Report(exception.Message, StatusTone.Negative);
         }
         finally
         {
@@ -249,16 +288,17 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
             }
 
             Load(updated);
-            Message = localOnly ? $"Applied to local simulation · revision {updated.Revision}" : $"Applied live · revision {updated.Revision}";
+            Report(localOnly ? "Your configuration has been applied to the local simulation." : "Your configuration has been applied.",
+                StatusTone.Positive);
         }
         catch (MonitoringApiException exception) when (exception.IsConflict)
         {
             HasExternalChanges = true;
-            Message = exception.Message;
+            Report(exception.Message, StatusTone.Caution);
         }
         catch (Exception exception) when (IsRequestError(exception) || exception is ArgumentException or InvalidOperationException)
         {
-            Message = exception.Message;
+            Report(exception.Message, StatusTone.Negative);
         }
         finally
         {
@@ -342,8 +382,16 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
             IsDirty = false;
             _pendingConfiguration = null;
             HasExternalChanges = false;
-            Message = snapshot.LastError ?? (localOnly ? "Changes apply only to this local simulation. The service and other consumers are unchanged."
-                : "Changes are applied live to the service and all consumers.");
+            if (snapshot.LastError is { } error)
+            {
+                Report(error, StatusTone.Negative);
+            }
+            else if (MessageTone != StatusTone.Positive)
+            {
+                Report(localOnly ? "Changes apply only to this local simulation." : "", StatusTone.Neutral);
+            }
+
+
             Raise(nameof(StreamIntervalMs));
             Raise(nameof(EventLogRetentionDays));
             Raise(nameof(EventLogStorageMb));

@@ -63,7 +63,7 @@ try
     {
         Invoke-ReleaseCommand dotnet @('run', '--project', 'tests/Backend', '-c', 'Release')
 
-        Invoke-ReleaseCommand dotnet @('run', '--project', 'tests/Desktop', '-c', 'Release', '-p:EnableTelemetryDebug=false')
+        Invoke-ReleaseCommand dotnet @('run', '--project', 'tests/Desktop', '-c', 'Release', '-p:EnableTelemetryDebug=true')
 
         Invoke-ReleaseCommand dotnet @('run', '--project', 'tests/Installer', '-c', 'Release')
     }
@@ -72,11 +72,11 @@ try
         '-p:PublishSingleFile=false', '-p:PublishTrimmed=false', '-o', (Join-Path $payload 'Service'))
 
     Invoke-ReleaseCommand dotnet @('publish', 'src/Desktop/App', '-c', 'Release', '-p:PublishProfile=Portable',
-        '-p:EnableTelemetryDebug=false', '-o', (Join-Path $payload 'Desktop'), '-m:1')
+        '-p:EnableTelemetryDebug=true', '-o', (Join-Path $payload 'Desktop'), '-m:1')
 
     if (-not $SkipChecks)
     {
-        Invoke-ReleaseCommand dotnet @('run', '--project', 'tests/Desktop', '-c', 'Release', '-p:EnableTelemetryDebug=false',
+        Invoke-ReleaseCommand dotnet @('run', '--project', 'tests/Desktop', '-c', 'Release', '-p:EnableTelemetryDebug=true',
             '--', '--verify-release', (Join-Path $payload 'Desktop'))
     }
 

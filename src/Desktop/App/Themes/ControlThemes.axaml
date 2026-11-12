@@ -1,0 +1,545 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:controls="using:RTXLens.App.Controls">
+    <ControlTheme x:Key="HudButtonTheme" TargetType="Button">
+        <Setter Property="Background" Value="{DynamicResource InsetBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource HudInputStrokeBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="5" />
+        <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="MinHeight" Value="36" />
+        <Setter Property="Padding" Value="12,7" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{TemplateBinding CornerRadius}">
+                    <Grid>
+                        <Border Name="UnsavedHighlight" Background="{DynamicResource PrimaryBrush}" CornerRadius="{TemplateBinding CornerRadius}"
+                                IsHitTestVisible="False" IsVisible="False" />
+                        <ContentPresenter Name="PART_ContentPresenter" Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}" Padding="{TemplateBinding Padding}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Grid>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^.desktop-action">
+            <Setter Property="Background" Value="{DynamicResource TrackBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="12,6" />
+        </Style>
+
+        <Style Selector="^.alert-dismiss">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="MinHeight" Value="0" />
+        </Style>
+
+        <Style Selector="^.column-sort">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Padding" Value="0,0,6,0" />
+        </Style>
+
+        <Style Selector="^.primary-action">
+            <Setter Property="Background" Value="{DynamicResource PanelBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryBrush}" />
+        </Style>
+
+        <Style Selector="^:pointerover, ^:focus-visible">
+            <Setter Property="Background" Value="{DynamicResource HudHoverSurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />
+        </Style>
+
+        <Style Selector="^:pressed">
+            <Setter Property="Background" Value="{DynamicResource HudPressedSurfaceBrush}" />
+        </Style>
+
+        <Style Selector="^.unsaved-profile:not(:disabled) /template/ Border#UnsavedHighlight">
+            <Setter Property="IsVisible" Value="True" />
+            <Style.Animations>
+                <Animation Duration="0:0:1.8" IterationCount="INFINITE">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Opacity" Value="0.04" />
+                    </KeyFrame>
+                    <KeyFrame Cue="50%">
+                        <Setter Property="Opacity" Value="0.19" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Opacity" Value="0.04" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.48" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="{x:Type controls:SectionPanel}" TargetType="controls:SectionPanel">
+        <Setter Property="Padding" Value="18" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource PanelBorderBrush}"
+                        BorderThickness="1" CornerRadius="8">
+                    <Grid RowDefinitions="Auto,*">
+                        <Border Padding="18,12" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,0,0,1">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" MinHeight="32">
+                                <ContentPresenter Content="{TemplateBinding Header}" ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                                  VerticalAlignment="Center" FontWeight="SemiBold" FontSize="15" />
+                                <ContentPresenter Grid.Column="1" Content="{TemplateBinding HeaderActions}" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <ContentPresenter Grid.Row="1" Margin="{TemplateBinding Padding}" Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}" HorizontalContentAlignment="Stretch" />
+                    </Grid>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^.dashboard">
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{DynamicResource PanelBrush}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="1" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                        <Grid RowDefinitions="Auto,*" RowSpacing="12" MaxWidth="{TemplateBinding ContentMaxWidth}">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="9">
+                                <Border Classes="icon-surface" Width="28" Height="28"
+                                        IsVisible="{TemplateBinding HeaderIcon, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                    <Image Source="{TemplateBinding HeaderIcon}" />
+                                </Border>
+                                <ContentPresenter Grid.Column="1" Content="{TemplateBinding Header}"
+                                                  ContentTemplate="{TemplateBinding HeaderTemplate}" VerticalAlignment="Center"
+                                                  FontWeight="SemiBold" FontSize="15" />
+                                <ContentPresenter Grid.Column="2" Content="{TemplateBinding HeaderActions}" VerticalAlignment="Center" />
+                            </Grid>
+                            <ContentPresenter Grid.Row="1" Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}" HorizontalContentAlignment="Stretch" />
+                        </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="^.dashboard.accent">
+            <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="SettingsRowTheme" TargetType="HeaderedContentControl">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="12" MinHeight="36">
+                    <ContentPresenter Content="{TemplateBinding Header}" ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                      VerticalAlignment="Center" />
+                    <ContentPresenter Grid.Column="1" Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}" VerticalAlignment="Center"
+                                      HorizontalContentAlignment="Stretch" />
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+    <ControlTheme x:Key="{x:Type controls:MetricDisplay}" TargetType="controls:MetricDisplay">
+        <Setter Property="Background" Value="{DynamicResource InsetBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+        <Setter Property="Padding" Value="12,9" />
+        <Setter Property="IconBackground" Value="{DynamicResource IconSurfaceBrush}" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="1" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="9">
+                        <Border Name="MetricIcon" Background="{TemplateBinding IconBackground}" CornerRadius="6" Padding="5"
+                                VerticalAlignment="Center" IsVisible="{TemplateBinding Icon, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <Image Source="{TemplateBinding Icon}" Width="16" Height="16" />
+                        </Border>
+                        <TextBlock Grid.Column="1" Text="{TemplateBinding Label}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="{TemplateBinding Value}" Foreground="{TemplateBinding Foreground}" FontWeight="SemiBold" />
+                            <TextBlock Text="{TemplateBinding Unit}" Foreground="{DynamicResource MutedTextBrush}"
+                                       IsVisible="{TemplateBinding Unit, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^.tile">
+            <Setter Property="Background" Value="{DynamicResource PanelBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />
+            <Setter Property="Padding" Value="14,11" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="1" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                        <StackPanel Spacing="5">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                <Border Name="MetricIcon" Width="20" Height="20" Padding="4" CornerRadius="6"
+                                        Background="{TemplateBinding IconBackground}" VerticalAlignment="Center"
+                                        IsVisible="{TemplateBinding Icon, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                    <Image Source="{TemplateBinding Icon}" Width="12" Height="12" />
+                                </Border>
+                                <TextBlock Name="TileLabel" Grid.Column="1" Text="{TemplateBinding Label}" FontSize="12"
+                                           Foreground="{DynamicResource MutedTextBrush}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                            </Grid>
+
+                            <Grid ColumnDefinitions="*,Auto">
+                                <controls:ReadingText Reading="{TemplateBinding Value}" Foreground="{TemplateBinding Foreground}"
+                                                      UnitBrush="{DynamicResource MutedTextBrush}" FontSize="26"
+                                                      FontWeight="SemiBold" TextWrapping="Wrap" />
+                                <TextBlock Grid.Column="1" Text="{TemplateBinding Unit}" Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="19" VerticalAlignment="Center" Margin="4,0,0,0"
+                                           IsVisible="{TemplateBinding Unit, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+
+        <Style Selector="^.error">
+            <Setter Property="Background" Value="{DynamicResource ErrorSurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ErrorBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}" />
+            <Setter Property="IconBackground" Value="{DynamicResource ErrorBrush}" />
+        </Style>
+
+        <Style Selector="^.tile.error">
+            <Setter Property="Background" Value="{DynamicResource FaultCardBrush}" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+
+        <Style Selector="^.tile.error /template/ TextBlock#TileLabel">
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+
+
+    </ControlTheme>
+
+    <ControlTheme x:Key="StatusMessageTheme" TargetType="ContentControl">
+        <Setter Property="Background" Value="{DynamicResource InsetBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+        <Setter Property="Padding" Value="10,5" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="Frame" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="1" Padding="{TemplateBinding Padding}" CornerRadius="14">
+                    <Grid Name="MessageContent" ColumnDefinitions="Auto,*" ColumnSpacing="7">
+                        <Ellipse Name="Indicator" Width="5" Height="5" Fill="{TemplateBinding Foreground}" VerticalAlignment="Center" />
+                        <ContentPresenter Grid.Column="1" Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}" FontSize="{TemplateBinding FontSize}"
+                                          VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^.success">
+            <Setter Property="Background" Value="{DynamicResource SuccessSurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SuccessBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+        </Style>
+
+        <Style Selector="^.warning">
+            <Setter Property="Background" Value="{DynamicResource WarningSurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource WarningBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource WarningBrush}" />
+        </Style>
+
+        <Style Selector="^.error">
+            <Setter Property="Background" Value="{DynamicResource ErrorSurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ErrorBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}" />
+        </Style>
+
+        <Style Selector="^.badge">
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+
+        <Style Selector="^.headroom">
+            <Setter Property="Padding" Value="5,4" />
+        </Style>
+
+        <Style Selector="^.banner">
+            <Setter Property="Padding" Value="12,9" />
+            <Setter Property="AutomationProperties.LiveSetting" Value="Polite" />
+        </Style>
+
+        <Style Selector="^.banner.info /template/ Ellipse#Indicator">
+            <Setter Property="Fill" Value="{DynamicResource PrimaryBrush}" />
+        </Style>
+
+        <Style Selector="^.banner /template/ Border#Frame">
+            <Setter Property="CornerRadius" Value="6" />
+        </Style>
+
+        <Style Selector="^.no-indicator /template/ Grid#MessageContent">
+            <Setter Property="ColumnSpacing" Value="0" />
+        </Style>
+
+        <Style Selector="^.no-indicator /template/ Ellipse#Indicator">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="NavigationTabTheme" TargetType="ToggleButton">
+        <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="16,9" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="TabSurface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6">
+                    <Grid>
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}" Margin="{TemplateBinding Padding}" />
+                        <Border Name="Underline" Height="2" Background="{DynamicResource PrimaryBrush}" Margin="16,0"
+                                VerticalAlignment="Bottom" IsVisible="False" />
+                    </Grid>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^:pointerover, ^:checked">
+            <Setter Property="Background" Value="{DynamicResource TrackBrush}" />
+        </Style>
+
+        <Style Selector="^:checked">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryBrush}" />
+        </Style>
+
+        <Style Selector="^:checked:not(.pin-metric) /template/ Border#Underline">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+
+        <Style Selector="^.pin-metric">
+            <Setter Property="Background" Value="{DynamicResource InsetBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+
+        <Style Selector="^.pin-metric:pointerover, ^.pin-metric:focus-visible">
+            <Setter Property="Background" Value="{DynamicResource TrackBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource MutedTextBrush}" />
+        </Style>
+
+        <Style Selector="^.pin-metric:checked, ^.pin-metric:pressed">
+            <Setter Property="Background" Value="{DynamicResource TrackBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />
+        </Style>
+
+        <Style Selector="^:pressed:not(.pin-metric), ^:disabled">
+            <Setter Property="Opacity" Value="0.65" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="ConfigurationTabStripTheme" TargetType="TabControl">
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid RowDefinitions="Auto,*" RowSpacing="12">
+                    <Border Name="TabStripFrame" Background="{DynamicResource InsetBrush}" BorderBrush="{DynamicResource PanelBorderBrush}"
+                            BorderThickness="1" CornerRadius="8" Padding="6" Margin="{TemplateBinding Padding}">
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                            <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
+                        </ScrollViewer>
+                    </Border>
+                    <Panel Grid.Row="1" ClipToBounds="True">
+                        <ContentPresenter Name="PART_SelectedContentHost2" IsVisible="False" />
+                        <ContentPresenter Name="PART_SelectedContentHost"
+                                          HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
+                    </Panel>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+    <ControlTheme x:Key="VerticalConfigurationTabStripTheme" TargetType="TabControl">
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                    <Border Classes="panel-frame" Padding="6" VerticalAlignment="Top">
+                        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                            <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
+                        </ScrollViewer>
+                    </Border>
+                    <Panel Grid.Column="1">
+                        <ContentPresenter Name="PART_SelectedContentHost2" IsVisible="False" />
+                        <ContentPresenter Name="PART_SelectedContentHost"
+                                          HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
+                    </Panel>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+    <ControlTheme x:Key="ConfigurationTabTheme" TargetType="TabItem">
+        <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="16,9" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}" CornerRadius="6">
+                    <Grid>
+                        <ContentPresenter Content="{TemplateBinding Header}" ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                          Foreground="{TemplateBinding Foreground}" Margin="{TemplateBinding Padding}" />
+                        <Border Name="Underline" Height="2" Margin="16,0" VerticalAlignment="Bottom" IsVisible="False"
+                                Background="{DynamicResource PrimaryBrush}" />
+                    </Grid>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^:pointerover, ^:selected">
+            <Setter Property="Background" Value="{DynamicResource TrackBrush}" />
+        </Style>
+        <Style Selector="^:selected">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryBrush}" />
+        </Style>
+        <Style Selector="^:selected /template/ Border#Underline">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+        <Style Selector="^.vertical /template/ Border#Underline">
+            <Setter Property="Width" Value="2" />
+            <Setter Property="Height" Value="NaN" />
+            <Setter Property="Margin" Value="0,7" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="EventRowTheme" TargetType="ListBoxItem">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="RowSurface" Background="Transparent" BorderBrush="{DynamicResource PanelBorderBrush}"
+                        BorderThickness="0,0,0,1">
+                    <ContentPresenter Name="PART_ContentPresenter" Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}" HorizontalContentAlignment="Stretch" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^:pointerover /template/ Border#RowSurface">
+            <Setter Property="Background" Value="{DynamicResource InsetBrush}" />
+        </Style>
+
+        <Style Selector="^:selected /template/ Border#RowSurface">
+            <Setter Property="Background" Value="{DynamicResource TrackBrush}" />
+        </Style>
+
+        <Style Selector="^:focus-visible /template/ Border#RowSurface">
+            <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="{x:Type controls:ColumnHeader}" TargetType="controls:ColumnHeader">
+        <Setter Property="MinWidth" Value="72" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid ColumnDefinitions="*,10">
+                    <TextBlock Text="{TemplateBinding Label}" VerticalAlignment="Center" FontWeight="SemiBold"
+                               IsVisible="{TemplateBinding SortCommand, Converter={x:Static ObjectConverters.IsNull}}" />
+                    <Button Classes="column-sort" Command="{TemplateBinding SortCommand}" AutomationProperties.Name="{TemplateBinding Label}"
+                            IsVisible="{TemplateBinding SortCommand, Converter={x:Static ObjectConverters.IsNotNull}}"
+                            HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <TextBlock Text="{TemplateBinding Label}" />
+                            <TextBlock Text="{TemplateBinding SortIndicator}" Foreground="{DynamicResource IconBrush}" />
+                        </StackPanel>
+                    </Button>
+
+                    <Thumb Grid.Column="1" Name="PART_ResizeGrip" Cursor="SizeWestEast" Focusable="True"
+                           AutomationProperties.Name="Resize column">
+                        <Thumb.Template>
+                            <ControlTemplate>
+                                <Border Background="Transparent">
+                                    <Border Width="1" Background="{DynamicResource PanelBorderBrush}" Margin="0,4"
+                                            HorizontalAlignment="Center" />
+                                </Border>
+                            </ControlTemplate>
+                        </Thumb.Template>
+                    </Thumb>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+    <ControlTheme x:Key="{x:Type controls:PinBar}" TargetType="controls:PinBar">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <StackPanel>
+                    <Border Height="{x:Static controls:PinBar.HeadroomHeight}"
+                            IsVisible="{TemplateBinding Headroom, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <ContentControl Name="HeadroomBadge" HorizontalAlignment="Center" VerticalAlignment="Top"
+                                        Theme="{StaticResource StatusMessageTheme}" Classes="badge success headroom no-indicator"
+                                        ToolTip.Tip="Current headroom to the configured pin limit" Content="{TemplateBinding Headroom}" />
+                    </Border>
+                    <TextBlock Height="{x:Static controls:PinBar.ReadingHeight}" TextAlignment="Center"
+                               Text="{TemplateBinding Reading}" FontSize="12" FontWeight="SemiBold" />
+                    <Grid MaxWidth="36" Height="{x:Static controls:PinBar.PlotHeight}">
+                        <controls:PinTrack Name="Track" FillFraction="{TemplateBinding FillFraction}"
+                                           PeakFraction="{TemplateBinding PeakFraction}" BaselineFraction="{TemplateBinding BaselineFraction}"
+                                           AutomationProperties.Name="{TemplateBinding Reading}" />
+                        <Border Name="WarningOutline" BorderBrush="{DynamicResource ErrorBrush}" BorderThickness="2"
+                                CornerRadius="4" IsVisible="False" />
+                        <TextBlock Name="OverflowMarker" Text="!" FontWeight="Bold" HorizontalAlignment="Center"
+                                   Foreground="{DynamicResource ErrorBrush}" IsVisible="False" />
+                    </Grid>
+                    <Border Height="26">
+                        <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Text="{TemplateBinding Label}" FontWeight="SemiBold" />
+                    </Border>
+                    <Border Background="{DynamicResource InsetBrush}" BorderBrush="{DynamicResource PrimaryBrush}"
+                            BorderThickness="0,1,0,0" Padding="2,6"
+                            IsVisible="{TemplateBinding Comparison, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <TextBlock HorizontalAlignment="Center" Text="{TemplateBinding Comparison}" FontSize="12" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource PrimaryBrush}" />
+                    </Border>
+                    <Border Height="16" />
+                </StackPanel>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^.overflow /template/ TextBlock#OverflowMarker">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+
+        <Style Selector="^.error /template/ Border#WarningOutline">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+
+        <Style Selector="^.headroom-warning /template/ ContentControl#HeadroomBadge">
+            <Setter Property="Foreground" Value="{DynamicResource WarningBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource WarningBrush}" />
+            <Setter Property="Background" Value="{DynamicResource WarningSurfaceBrush}" />
+        </Style>
+
+        <Style Selector="^.headroom-error /template/ ContentControl#HeadroomBadge">
+            <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ErrorBrush}" />
+            <Setter Property="Background" Value="{DynamicResource ErrorSurfaceBrush}" />
+        </Style>
+    </ControlTheme>
+</ResourceDictionary>

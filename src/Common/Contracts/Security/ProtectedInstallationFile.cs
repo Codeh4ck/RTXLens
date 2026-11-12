@@ -22,10 +22,9 @@ public static class ProtectedInstallationFile
         var trustedInstaller = new SecurityIdentifier("S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464");
         var administrators = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
         var system = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
-        bool Trusted(IdentityReference? sid) => Equals(sid, administrators) || Equals(sid, system) || Equals(sid, trustedInstaller);
 
         const FileSystemRights writeAccess = FileSystemRights.Write | FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles
-            | FileSystemRights.ChangePermissions | FileSystemRights.TakeOwnership;
+                                             | FileSystemRights.ChangePermissions | FileSystemRights.TakeOwnership;
         var drive = Path.GetPathRoot(path)!;
         if (drive.StartsWith(@"\\", StringComparison.Ordinal) || new DriveInfo(drive).DriveType != DriveType.Fixed)
         {
@@ -51,5 +50,9 @@ public static class ProtectedInstallationFile
                 throw new UnauthorizedAccessException("An administrator-protected installation folder is required: " + current);
             }
         }
+
+        return;
+
+        bool Trusted(IdentityReference? sid) => Equals(sid, administrators) || Equals(sid, system) || Equals(sid, trustedInstaller);
     }
 }

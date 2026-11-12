@@ -59,7 +59,7 @@ public sealed class WireViewPlugin : ISensorPlugin
         {
             Latest = null;
             _stream.Hub.Reset();
-            return new PluginSample(PluginState.NoDevice, [], "WireView not available.");
+            return new PluginSample(PluginState.NoDevice, [], "WireView Pro II not available.");
         }
 
         var now = _clock.GetUtcNow();

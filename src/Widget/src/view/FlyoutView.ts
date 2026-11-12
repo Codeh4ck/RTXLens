@@ -93,7 +93,7 @@ export class FlyoutView {
                     (
                         {
                             'asus-astral': 'ROG Astral',
-                            'wireview-pro2': 'WireView Pro 2',
+                            'wireview-pro2': 'WireView Pro II',
                             'msi-psu': 'MSI MPG PSU'
                         } as Record<string, string>
                     )[id] ?? id;
@@ -114,13 +114,13 @@ export class FlyoutView {
                         throw new Error('Invalid cached device configuration.');
                     }
 
-                    this.section(body, 'WireView device settings', configurationRows(device as Record<string, unknown>));
+                    this.section(body, 'WireView Pro II device settings', configurationRows(device as Record<string, unknown>));
                 } catch {
                     if (controller.signal.aborted) {
                         return;
                     }
 
-                    this.section(body, 'WireView device settings', [{ label: 'Device configuration', value: 'Unavailable' }]);
+                    this.section(body, 'WireView Pro II device settings', [{ label: 'Device configuration', value: 'Unavailable' }]);
                 }
             }
         } catch (error) {

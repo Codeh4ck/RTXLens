@@ -8,6 +8,7 @@ public sealed class ConnectorProfileEditorViewModel : EditableObject
     private readonly Dictionary<string, string> _connectors;
     public string Id { get; }
     public string Name { get; }
+    public string DisplayName => Id == "wireview-pro2" && Name == "WireView" ? "WireView Pro II" : Name;
     public ConnectorMetricEditorViewModel[] Metrics { get; }
     public bool HasMsi { get; }
     public int MsiConnectorIndex { get; set => Edit(ref field, value); }

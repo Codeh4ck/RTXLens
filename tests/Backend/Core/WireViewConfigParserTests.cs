@@ -163,24 +163,6 @@ internal static class WireViewConfigParserTests
         var desired = CreateConfigBytes(96);
         var frames = new List<byte[]>();
         var reads = 0;
-        byte[] Read()
-        {
-            reads++;
-            if (reads == 1)
-            {
-                TestAssert.Equal(2, frames.Count);
-                TestAssert.True(frames.All(frame => frame[0] == 0x06), "Settings must be verified before storing.");
-            }
-            else
-            {
-                TestAssert.Equal((byte)2, frames[2][5]);
-                TestAssert.Equal((byte)1, frames[3][5]);
-            }
-
-            var readBack = (byte[])desired.Clone();
-            readBack[0] = 0x7F;
-            return readBack;
-        }
 
         var saved = WireViewProReader.WriteAndVerifyConfig(desired, frames.Add, Read, _ => { });
         TestAssert.Equal(2, reads);
@@ -201,6 +183,27 @@ internal static class WireViewConfigParserTests
         catch (IOException)
         {
             TestAssert.Equal(2, frames.Count);
+        }
+
+        return;
+
+        byte[] Read()
+        {
+            reads++;
+            if (reads == 1)
+            {
+                TestAssert.Equal(2, frames.Count);
+                TestAssert.True(frames.All(frame => frame[0] == 0x06), "Settings must be verified before storing.");
+            }
+            else
+            {
+                TestAssert.Equal((byte)2, frames[2][5]);
+                TestAssert.Equal((byte)1, frames[3][5]);
+            }
+
+            var readBack = (byte[])desired.Clone();
+            readBack[0] = 0x7F;
+            return readBack;
         }
     }
 

@@ -4,6 +4,7 @@ using RTXLens.Installer.Actions.Startup;
 
 namespace RTXLens.App.Platform.Startup;
 
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
 internal static class StartupRegistration
 {
     private const string Key = @"Software\Microsoft\Windows\CurrentVersion\Run";

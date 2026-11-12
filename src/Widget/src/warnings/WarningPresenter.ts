@@ -74,7 +74,7 @@ export class WarningPresenter {
             (
                 {
                     'asus-astral': 'Astral',
-                    'wireview-pro2': 'WireView',
+                    'wireview-pro2': 'WireView Pro II',
                     'msi-psu': 'MSI PSU'
                 } as Record<string, string>
             )[pluginId] ?? pluginId

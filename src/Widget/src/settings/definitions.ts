@@ -9,8 +9,8 @@ const panelOptions: SettingOption[] = [
     ['autoStatus', 'Automatic status source'],
     ['asusPins', 'ROG Astral pins'],
     ['nvidiaStatus', 'GPU status (GenericNvidia)'],
-    ['wireviewPins', 'WireView pins'],
-    ['wireviewStatus', 'WireView temperatures and faults'],
+    ['wireviewPins', 'WireView Pro II pins'],
+    ['wireviewStatus', 'WireView Pro II temperatures and faults'],
     ['msiConnector1', 'MSI PSU connector 1'],
     ['msiConnector2', 'MSI PSU connector 2'],
     ['msiStatus', 'MSI PSU status'],
@@ -82,7 +82,7 @@ add(layout, 'updateFrequency', 'Update check frequency', 'combobox', 'Daily', { 
 const sources = layout;
 
 for (const prefix of ['asus', 'wireview']) {
-    const label = prefix === 'asus' ? 'Astral' : 'WireView';
+    const label = prefix === 'asus' ? 'Astral' : 'WireView Pro II';
     add(sources, `${prefix}Metric`, `${label} pin metric`, 'combobox', 'A', { options: options('A', 'W', 'V') });
     add(sources, `${prefix}Compare`, `${label}: show PSU current beneath pins`, 'switch', false);
     add(sources, `${prefix}Connector`, `${label}: PSU comparison connector`, 'combobox', '1', { options: options('1', '2') });

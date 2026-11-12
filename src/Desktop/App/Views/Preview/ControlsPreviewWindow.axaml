@@ -1,0 +1,156 @@
+<views:LensWindow xmlns="https://github.com/avaloniaui"
+        xmlns:views="using:RTXLens.App.Views.Shell"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:RTXLens.App.Controls"
+        xmlns:preview="using:RTXLens.App.ViewModels.Preview"
+        xmlns:svg="clr-namespace:Avalonia.Svg;assembly=Svg.Controls.Avalonia"
+        x:Class="RTXLens.App.Views.Preview.ControlsPreviewWindow"
+        x:DataType="preview:ControlsPreviewViewModel"
+        Title="RTX Lens - Control preview"
+        Icon="/Assets/monitor.ico"
+        Width="1160" Height="830" MinWidth="800" MinHeight="540">
+    <views:LensWindow.Body>
+        <ScrollViewer Name="PreviewScroll" HorizontalScrollBarVisibility="Disabled">
+            <Grid Margin="24" RowDefinitions="Auto,Auto,Auto,*" RowSpacing="16" ColumnDefinitions="*,320" ColumnSpacing="16">
+                <Grid Grid.ColumnSpan="2" ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="12">
+                    <Border Width="4" Background="{DynamicResource PrimaryBrush}" CornerRadius="2" />
+                    <StackPanel Grid.Column="1" Spacing="2">
+                        <TextBlock Classes="heading" Text="RTX LENS" />
+                        <TextBlock Classes="caption" Text="CONTROL PREVIEW · SAMPLE TELEMETRY" />
+                    </StackPanel>
+                    <Button Grid.Column="2" Click="OpenCharts" VerticalAlignment="Center">
+                        <StackPanel Classes="button-content">
+                            <Image Width="15" Height="15" Source="{svg:SvgImage /Assets/Icons/vramusage.svg}" />
+                            <TextBlock Text="Chart controls" />
+                        </StackPanel>
+                    </Button>
+                    <ToggleSwitch Grid.Column="3" IsChecked="{Binding Appearance.LightTheme}"
+                                  IsEnabled="{Binding Appearance.IsReady}" OnContent="Light theme" OffContent="Dark theme" />
+                </Grid>
+
+                <Border Grid.Row="1" Grid.ColumnSpan="2" Background="{DynamicResource InsetBrush}"
+                        BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1" CornerRadius="8" Padding="5">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <RadioButton GroupName="PreviewTabs" Theme="{StaticResource NavigationTabTheme}"
+                                     Content="ROG Astral" IsChecked="True" />
+                        <RadioButton GroupName="PreviewTabs" Theme="{StaticResource NavigationTabTheme}" Content="GPU status" />
+                        <RadioButton GroupName="PreviewTabs" Theme="{StaticResource NavigationTabTheme}" Content="MSI PSU" />
+                    </StackPanel>
+                </Border>
+
+                <Grid Grid.Row="2" Grid.ColumnSpan="2" ColumnDefinitions="*,*,*" ColumnSpacing="12">
+                    <controls:MetricDisplay Classes="tile" Label="Connector power" Value="37.6" Unit="W"
+                                            Icon="{svg:SvgImage /Assets/Icons/power.svg}" />
+                    <controls:MetricDisplay Grid.Column="1" Classes="tile" Label="Total current" Value="3.12" Unit="A"
+                                            Icon="{svg:SvgImage /Assets/Icons/pin.svg}" />
+                    <controls:MetricDisplay Grid.Column="2" Classes="tile" Label="Voltage" Value="12.05" Unit="V"
+                                            Icon="{svg:SvgImage /Assets/Icons/voltage.svg}" />
+                </Grid>
+
+                <StackPanel Grid.Row="3" Spacing="16">
+                    <controls:SectionPanel Header="GPU status">
+                        <controls:SectionPanel.HeaderActions>
+                            <ContentControl Theme="{StaticResource StatusMessageTheme}" Classes="badge success" Content="Ready" />
+                        </controls:SectionPanel.HeaderActions>
+
+                        <StackPanel Spacing="9">
+                            <TextBlock Classes="caption" Text="NVIDIA GeForce RTX 5090" />
+                            <controls:MetricDisplay Label="Core clock" Value="285" Unit="MHz" Icon="{svg:SvgImage /Assets/Icons/vcore.svg}" />
+                            <controls:MetricDisplay Label="VRAM usage" Value="2.74 GB / 31.84 GB (9%)"
+                                                    Icon="{svg:SvgImage /Assets/Icons/vramusage.svg}" />
+                            <controls:MetricDisplay Label="Core / VRAM temp" Value="33.2 / 44.0" Unit="°C"
+                                                    Icon="{svg:SvgImage /Assets/Icons/vtemp.svg}" />
+                        </StackPanel>
+                    </controls:SectionPanel>
+
+                    <controls:SectionPanel Header="Pin distribution">
+                        <Grid ColumnDefinitions="*,*,*,*,*,*" ColumnSpacing="8">
+                            <controls:PinBar Label="P1" Reading="0.51 A" FillFraction="0.051" Headroom="+8.69 A"
+                                             Comparison="0.56 A" PeakFraction="0.68" BaselineFraction="0.32" />
+                            <controls:PinBar Grid.Column="1" Label="P2" Reading="0.53 A" FillFraction="0.053" Headroom="+8.67 A" />
+                            <controls:PinBar Grid.Column="2" Label="P3" Reading="0.51 A" FillFraction="0.051" Headroom="+8.69 A" />
+                            <controls:PinBar Grid.Column="3" Label="P4" Reading="0.50 A" FillFraction="0.05" Headroom="+8.70 A" />
+                            <controls:PinBar Grid.Column="4" Label="P5" Reading="0.53 A" FillFraction="0.053" Headroom="+8.67 A" />
+                            <controls:PinBar Grid.Column="5" Label="P6" Reading="0.54 A" FillFraction="0.054" Headroom="+8.66 A" />
+                        </Grid>
+                    </controls:SectionPanel>
+
+                    <controls:SectionPanel Header="Event Log">
+                        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
+                            <controls:ColumnHeader Name="TimeColumn" Label="Time" Width="132" MaxWidth="280"
+                                                   SortIndicator="{Binding SortIndicator}" SortCommand="{Binding ToggleSortCommand}" />
+                            <TextBlock Grid.Column="1" Text="Message" VerticalAlignment="Center" />
+                            <TextBlock Grid.Row="1" Text="{Binding FirstEventTime}" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding FirstEventMessage}" />
+                            <TextBlock Grid.Row="2" Text="{Binding SecondEventTime}" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SecondEventMessage}" />
+                        </Grid>
+                    </controls:SectionPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Row="3" Grid.Column="1" Spacing="16">
+                    <controls:SectionPanel Header="Appearance">
+                        <StackPanel Spacing="10" IsEnabled="{Binding Appearance.IsReady}">
+                            <HeaderedContentControl Header="Primary" Theme="{StaticResource SettingsRowTheme}">
+                                <ColorPicker Color="{Binding Appearance.Primary}" IsAlphaEnabled="False"
+                                             AutomationProperties.Name="Primary color" HorizontalAlignment="Right" />
+                            </HeaderedContentControl>
+                            <HeaderedContentControl Header="Secondary" Theme="{StaticResource SettingsRowTheme}">
+                                <ColorPicker Color="{Binding Appearance.Secondary}" IsAlphaEnabled="False"
+                                             AutomationProperties.Name="Secondary color" HorizontalAlignment="Right" />
+                            </HeaderedContentControl>
+                            <HeaderedContentControl Header="Tertiary" Theme="{StaticResource SettingsRowTheme}">
+                                <ColorPicker Color="{Binding Appearance.Tertiary}" IsAlphaEnabled="False"
+                                             AutomationProperties.Name="Tertiary color" HorizontalAlignment="Right" />
+                            </HeaderedContentControl>
+                            <HeaderedContentControl Header="Background" Theme="{StaticResource SettingsRowTheme}">
+                                <ColorPicker Color="{Binding Appearance.Background}" IsAlphaEnabled="False"
+                                             AutomationProperties.Name="Background color" HorizontalAlignment="Right" />
+                            </HeaderedContentControl>
+
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <Button Classes="primary-action" Command="{Binding Appearance.SaveCommand}">
+                                    <StackPanel Classes="button-content">
+                                        <Image Width="14" Height="14" Source="{svg:SvgImage /Assets/Icons/wireview-apply.svg}" />
+                                        <TextBlock Text="Save colors" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Grid.Column="1" Command="{Binding Appearance.ResetPaletteCommand}">
+                                    <StackPanel Classes="button-content">
+                                        <Image Width="14" Height="14" Source="{svg:SvgImage /Assets/Icons/refresh.svg}" />
+                                        <TextBlock Text="Reset" />
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+
+                            <ContentControl Theme="{StaticResource StatusMessageTheme}" Classes="banner"
+                                            Classes.error="{Binding Appearance.HasError}"
+                                            Classes.success="{Binding !Appearance.HasError}"
+                                            IsVisible="{Binding Appearance.Message, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                            Content="{Binding Appearance.Message}" />
+                        </StackPanel>
+                    </controls:SectionPanel>
+
+                    <controls:SectionPanel Header="Status examples">
+                        <StackPanel Spacing="8">
+                            <ContentControl Theme="{StaticResource StatusMessageTheme}" Classes="banner success" Content="Settings saved." />
+                            <ContentControl Theme="{StaticResource StatusMessageTheme}" Classes="banner warning"
+                                            Content="Readings are stale." />
+                            <ContentControl Theme="{StaticResource StatusMessageTheme}" Classes="banner error" Content="Device disconnected." />
+                        </StackPanel>
+                    </controls:SectionPanel>
+
+                    <controls:SectionPanel Header="Source priority">
+                        <controls:EditableList Name="SourcePriorityList" ShowAddButton="False"
+                                               ItemsSource="{Binding SourcePriority.Sources}"
+                                               SelectedItem="{Binding SourcePriority.SelectedSource, Mode=TwoWay}"
+                                               AddCommand="{Binding SourcePriority.AddCommand}"
+                                               MoveUpCommand="{Binding SourcePriority.MoveUpCommand}"
+                                               MoveDownCommand="{Binding SourcePriority.MoveDownCommand}"
+                                               RemoveCommand="{Binding SourcePriority.RemoveCommand}" />
+                    </controls:SectionPanel>
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+    </views:LensWindow.Body>
+</views:LensWindow>

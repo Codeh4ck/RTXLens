@@ -39,11 +39,13 @@
         <ComponentGroup Id="ServiceFiles" Directory="ServiceFolder">
             <Files Include="$(var.PayloadDirectory)/Service/**">
                 <Exclude Files="$(var.PayloadDirectory)/Service/RTXLens.Service.exe" />
+                <Exclude Files="$(var.PayloadDirectory)/Service/**/*.pdb" />
             </Files>
         </ComponentGroup>
         <ComponentGroup Id="DesktopFiles" Directory="AppInstallFolder">
             <Files Include="$(var.PayloadDirectory)/Desktop/**">
                 <Exclude Files="$(var.PayloadDirectory)/Desktop/RTXLens.App.exe" />
+                <Exclude Files="$(var.PayloadDirectory)/Desktop/**/*.pdb" />
             </Files>
         </ComponentGroup>
         <Component Id="MonitorService" Directory="ServiceFolder" Guid="687B182A-D108-4E89-9822-1ECE38448E40" Bitness="always64">

@@ -28,8 +28,11 @@ public sealed class IniDocument
     {
         (_encoding, _preamble, EncodingName) = DecodeEncoding(bytes);
         var text = _encoding.GetString(bytes, _preamble.Length, bytes.Length - _preamble.Length);
-        _lines = SplitLines().Matches(text).Cast<Match>().Where(match => match.Length > 0)
-            .Select(match => new Line(match.Groups[1].Value, match.Groups[2].Value)).ToList();
+        _lines =
+        [
+            .. SplitLines().Matches(text).Cast<Match>().Where(match => match.Length > 0)
+                .Select(match => new Line(match.Groups[1].Value, match.Groups[2].Value))
+        ];
         _newline = _lines.FirstOrDefault(line => line.Ending.Length > 0)?.Ending ?? "\r\n";
 
         ValidateStructure();

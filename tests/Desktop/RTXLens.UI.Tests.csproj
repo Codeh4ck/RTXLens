@@ -1,12 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk">
-    <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <EnableTelemetryDebug Condition="'$(EnableTelemetryDebug)' == ''">true</EnableTelemetryDebug>
+    </PropertyGroup>
     <ItemGroup>
+        <ProjectReference Include="../../src/Desktop/App/RTXLens.App.csproj" />
+        <PackageReference Include="Avalonia.Headless" />
         <ProjectReference Include="../../src/Desktop/Presentation/RTXLens.Presentation.csproj" />
         <ProjectReference Include="../../src/Plugins/Asus/Contracts/RTXLens.Plugins.Asus.Contracts.csproj" />
         <ProjectReference Include="../../src/Plugins/WireView/Contracts/RTXLens.Plugins.WireView.Contracts.csproj" />
         <Compile Include="../Backend/Infrastructure/TestRunner.cs" Link="Infrastructure/TestRunner.cs" />
         <Compile Include="../Backend/Infrastructure/TestAssert.cs" Link="Infrastructure/TestAssert.cs" />
     </ItemGroup>
+    <PropertyGroup Condition="'$(EnableTelemetryDebug)' == 'true'">
+        <DefineConstants>$(DefineConstants);TELEMETRY_DEBUG</DefineConstants>
+    </PropertyGroup>
     <ItemGroup Condition="'$(EnableTelemetryDebug)' == 'true'">
         <ProjectReference Include="../../src/Desktop/Debugging/RTXLens.Debugging.csproj" />
     </ItemGroup>

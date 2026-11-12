@@ -104,7 +104,8 @@ public sealed class DashboardViewModel : ObservableObject
         RefreshPsuComparisons(DateTimeOffset.UtcNow);
     }
 
-    public void Apply(SensorSnapshot snapshot, AppPreferences preferences, DateTimeOffset now, bool updateDetails = true)
+    public void Apply(SensorSnapshot snapshot, AppPreferences preferences, DateTimeOffset now, bool updateDetails = true,
+        string? detailPanelId = null)
     {
         if (_configuration is { } configured)
         {
@@ -133,7 +134,7 @@ public sealed class DashboardViewModel : ObservableObject
         WarningSummary = snapshot.Warnings is null ? "Update the backend service to enable shared warning policies."
             : states.Length == 0 ? "No active warnings" : $"{states.Length} warning conditions - shared service state";
         Raise(nameof(WarningSummary));
-        if (updateDetails)
+        if (updateDetails && detailPanelId != "msi-psu")
         {
             GpuStatus.Apply(snapshot, _configuration, preferences, now);
         }
@@ -141,11 +142,11 @@ public sealed class DashboardViewModel : ObservableObject
         _preferences = preferences;
         foreach (var panel in Panels)
         {
-            panel.Apply(snapshot, preferences, now, updateDetails);
+            panel.Apply(snapshot, preferences, now, updateDetails && (detailPanelId is null || detailPanelId == panel.Id));
         }
 
         RefreshReportingPanels();
-        if (updateDetails)
+        if (updateDetails && detailPanelId != "msi-psu")
         {
             RefreshPsuComparisons(now);
         }
@@ -204,7 +205,14 @@ public sealed class DashboardViewModel : ObservableObject
         var available = Panels.Where(panel => panel is { Enabled: true, IsReporting: true }).ToArray();
         HasAlternativeGpuStatus = available.Any(panel => panel.IsWireView || panel.IsAsus);
         var reporting = available.Where(panel => !panel.IsNvidia || _preferences.ShowSeparateGpuStatusTab || !HasAlternativeGpuStatus)
-            .OrderBy(panel => panel.IsMsi ? 3 : panel.IsNvidia ? 2 : panel.IsAsus ? 1 : 0)
+            .OrderBy(panel => panel.Id switch
+            {
+                "wireview-pro2" => 0,
+                "asus-astral" => 1,
+                "msi-psu" => 2,
+                "generic-nvidia" => 3,
+                _ => 4
+            })
             .ThenBy(panel => panel.Id, StringComparer.Ordinal).ToArray();
         if (SelectedPanel is not null && !reporting.Contains(SelectedPanel))
         {

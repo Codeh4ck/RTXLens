@@ -20,6 +20,10 @@ public interface IMonitoringApi
         Task.FromException<SettingsProfileCatalog>(new NotSupportedException("GPU settings profiles require a running monitoring service."));
     Task<SettingsProfileCatalog> ApplySettingsProfileAsync(SettingsProfileRequest request, CancellationToken token) =>
         Task.FromException<SettingsProfileCatalog>(new NotSupportedException("GPU settings profiles require a running monitoring service."));
+    Task<SettingsProfileCatalog> UpdateSettingsProfileAsync(SettingsProfile profile, CancellationToken token) =>
+        Task.FromException<SettingsProfileCatalog>(new NotSupportedException("Editing saved GPU chart profiles requires the monitoring service."));
+    Task<SettingsProfileCatalog> DeleteSettingsProfileAsync(string id, CancellationToken token) =>
+        Task.FromException<SettingsProfileCatalog>(new NotSupportedException("Deleting GPU chart profiles requires the monitoring service."));
     Task<DeviceWarningProfileCatalog> GetDeviceWarningProfilesAsync(CancellationToken token) =>
         Task.FromException<DeviceWarningProfileCatalog>(new NotSupportedException("Warning profiles require a running monitoring service."));
     Task SaveDeviceWarningProfileAsync(DeviceWarningProfile profile, CancellationToken token) =>

@@ -138,7 +138,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
             }
         }
 
-        Volatile.Write(ref _notices, notices.OrderBy(notice => notice.StartedAt).ThenBy(notice => notice.Id).ToArray());
+        Volatile.Write(ref _notices, [.. notices.OrderBy(notice => notice.StartedAt).ThenBy(notice => notice.Id)]);
         return Task.CompletedTask;
     }
 

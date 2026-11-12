@@ -1,3 +1,9 @@
+1.1.0 - Avalonia desktop app
+- Port the RTX Lens desktop app to Avalonia with refreshed controls and customizable color themes.
+- Restore single-instance startup, window placement, Safeguard+ execution reports and MSI fan curve defaults.
+- Package the self-contained Avalonia desktop app with the RTX Lens installer.
+- Use the official WireView Pro II name in the iCUE widget.
+
 1.0.9 - NVIDIA diagnostics and GPU status
 - Add read-only NVIDIA diagnostics for boost limits, time spent limited, performance states, power limits and PCIe link status, traffic and replays.
 - Add dedicated GPU Power Status and GPU PCIe Status panels. Show the GPU Status tab by default for new users.

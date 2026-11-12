@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using RTXLens.Contracts.Discovery;
+using RTXLens.Contracts.Enums;
 using RTXLens.Contracts.Monitoring;
 using RTXLens.Contracts.Sensors;
 using RTXLens.Presentation.Infrastructure;
@@ -35,8 +36,14 @@ public sealed class ConnectorProfilesEditorViewModel : EditableObject
                 .Concat(catalog?.Plugins.Where(plugin => plugin.ConnectorMetrics.Length > 0).Select(plugin => plugin.Id) ?? [])
                 .Distinct(StringComparer.Ordinal).ToArray();
             var choices = ids.Select(id => new ConnectorPluginChoice(id,
-                id == "generic-nvidia" ? "Nvidia" : id == "wireview-pro2" ? "WireView" : id == "asus-astral" ? "ROG Astral"
-                : catalog?.Plugins.FirstOrDefault(plugin => plugin.Id == id)?.Name ?? id)).ToArray();
+                id switch
+                {
+                    "generic-nvidia" => "Nvidia",
+                    "wireview-pro2" => "WireView Pro II",
+                    "asus-astral" => "ROG Astral",
+                    "msi-psu" => "MSI PSU",
+                    _ => catalog?.Plugins.FirstOrDefault(plugin => plugin.Id == id)?.Name ?? id
+                })).ToArray();
 
             foreach (var profile in options.Profiles)
             {
@@ -68,11 +75,33 @@ public sealed class ConnectorProfilesEditorViewModel : EditableObject
         {
             foreach (var metric in profile.Metrics)
             {
-                var resolved = snapshot.Selections.FirstOrDefault(selection => selection.Name == ConnectorProfiles.SelectionName(metric.Metric));
-                var reading = snapshot.Sensors.FirstOrDefault(reading => reading.Identity.Key == resolved?.SensorKey);
-                metric.Resolution = profile != SelectedProfile || profile.Id != _appliedProfileId ? "Select this profile and apply to use it."
-                    : reading is null ? "Unavailable - no usable connector source"
-                    : $"{resolved!.State} - {new SensorChoice(reading.Identity).Label}";
+                if (profile != SelectedProfile || profile.Id != _appliedProfileId)
+                {
+                    metric.Resolution = "Select this profile and apply to use it.";
+                    continue;
+                }
+
+                var selectionName = ConnectorProfiles.SelectionName(metric.Metric);
+                var resolved = snapshot.Selections.FirstOrDefault(selection => selection.Name == selectionName);
+                var reading = resolved?.SensorKey is { } sensorKey
+                    ? snapshot.Sensors.FirstOrDefault(reading => reading.Identity.Key == sensorKey)
+                    : null;
+
+                if (reading is null)
+                {
+                    metric.Resolution = "Unavailable - no source is reporting a usable reading";
+                    continue;
+                }
+
+                var source = metric.AvailableSources.FirstOrDefault(choice => choice.Id == reading.Identity.PluginId)?.Label
+                    ?? "a reporting plugin";
+                if (reading.Identity is { Component: SensorComponent.PsuConnector, ConnectorId: "1" or "2" } identity)
+                {
+                    source = $"{source} · Connector {identity.ConnectorId}";
+                }
+
+                var fallback = resolved?.State == SelectionState.Fallback ? " (fallback)" : string.Empty;
+                metric.Resolution = $"Using {source}{fallback}";
             }
         }
     }

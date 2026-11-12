@@ -1,0 +1,107 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:RTXLens.App.Controls;assembly=RTXLens.App"
+        xmlns:svg="clr-namespace:Avalonia.Svg;assembly=Svg.Controls.Avalonia"
+        x:Class="RTXLens.UI.Tests.Controls.ControlGalleryWindow"
+        Title="RTX Lens - Control gallery" Width="940" Height="652">
+    <Grid Margin="24" RowDefinitions="Auto,*" RowSpacing="16" ColumnDefinitions="*,*" ColumnSpacing="16">
+        <Grid Grid.ColumnSpan="2" ColumnDefinitions="Auto,*" ColumnSpacing="12">
+            <Border Width="4" Background="{DynamicResource PrimaryBrush}" CornerRadius="2" />
+            <StackPanel Grid.Column="1" Spacing="2">
+                <TextBlock Classes="heading" Text="RTX Lens control gallery" />
+                <TextBlock Classes="caption" Text="Avalonia desktop preview" />
+            </StackPanel>
+        </Grid>
+
+        <StackPanel Grid.Row="1" Spacing="14">
+            <controls:SectionPanel Header="Buttons">
+                <WrapPanel ItemSpacing="8" LineSpacing="8">
+                    <Button Name="ApplySettingsButton" Classes="primary-action">
+                        <StackPanel Classes="button-content">
+                            <Image Width="14" Height="14"
+                                   Source="{svg:SvgImage avares://RTXLens.App/Assets/Icons/wireview-apply.svg}" />
+                            <TextBlock Text="Apply settings" />
+                        </StackPanel>
+                    </Button>
+                    <Button>
+                        <StackPanel Classes="button-content">
+                            <Image Width="14" Height="14"
+                                   Source="{svg:SvgImage avares://RTXLens.App/Assets/Icons/refresh.svg}" />
+                            <TextBlock Text="Refresh" />
+                        </StackPanel>
+                    </Button>
+                    <Button IsEnabled="False">
+                        <StackPanel Classes="button-content">
+                            <Image Width="14" Height="14"
+                                   Source="{svg:SvgImage avares://RTXLens.App/Assets/Icons/chart-export.svg}" />
+                            <TextBlock Text="Export" />
+                        </StackPanel>
+                    </Button>
+                </WrapPanel>
+            </controls:SectionPanel>
+
+            <controls:SectionPanel Header="Toggles and selections">
+                <StackPanel Spacing="8">
+                    <ToggleSwitch Name="RememberWindowSizeToggle" IsChecked="True"
+                                  OnContent="Remember window size" OffContent="Remember window size" />
+                    <ToggleSwitch OnContent="Include values in legend" OffContent="Include values in legend" />
+                    <CheckBox Name="ConnectorCurrentCheckBox" IsChecked="True" Content="Show connector current" />
+                    <StackPanel Orientation="Horizontal" Spacing="16">
+                        <RadioButton Name="AutomaticFanModeRadioButton" GroupName="FanMode" IsChecked="True" Content="Automatic" />
+                        <RadioButton GroupName="FanMode" Content="Fan curve" />
+                    </StackPanel>
+                </StackPanel>
+            </controls:SectionPanel>
+
+            <controls:SectionPanel Header="Feedback">
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                    <ContentControl Theme="{StaticResource StatusMessageTheme}" Classes="banner success" Content="Settings saved." />
+                    <ContentControl Grid.Column="1" Theme="{StaticResource StatusMessageTheme}" Classes="banner warning"
+                                    Content="Readings are stale." />
+                </Grid>
+            </controls:SectionPanel>
+        </StackPanel>
+
+        <controls:SectionPanel Grid.Row="1" Grid.Column="1" Header="Text fields and selectors" VerticalAlignment="Top">
+            <StackPanel Spacing="14">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Device name" />
+                    <TextBox Name="DeviceNameTextBox" Text="WireView Pro II" AutomationProperties.Name="Device name" />
+                </StackPanel>
+
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Telemetry source" />
+                        <ComboBox SelectedIndex="0" HorizontalAlignment="Stretch" AutomationProperties.Name="Telemetry source">
+                            <ComboBoxItem Content="Automatic" />
+                            <ComboBoxItem Content="WireView" />
+                            <ComboBoxItem Content="ROG Astral" />
+                        </ComboBox>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="6">
+                        <TextBlock Text="Polling interval (ms)" />
+                        <NumericUpDown Name="PollingIntervalInput" Minimum="100" Maximum="5000" Increment="100"
+                                       Value="1000" FormatString="0"
+                                       AutomationProperties.Name="Polling interval (milliseconds)" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Notes" />
+                    <TextBox Height="84" AcceptsReturn="True" TextWrapping="Wrap" AutomationProperties.Name="Notes">
+                        <TextBox.Text>
+                            Connector 2 readings captured during the GPU load test. Review the pin spread after the next run.
+                        </TextBox.Text>
+                    </TextBox>
+                </StackPanel>
+
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="2">
+                    <TextBlock Text="Display brightness" />
+                    <TextBlock Grid.Column="1" Text="65%" Foreground="{DynamicResource PrimaryBrush}" />
+                    <Slider Grid.Row="1" Grid.ColumnSpan="2" Minimum="0" Maximum="100" Value="65"
+                            AutomationProperties.Name="Display brightness (percent)" />
+                </Grid>
+            </StackPanel>
+        </controls:SectionPanel>
+    </Grid>
+</Window>

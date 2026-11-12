@@ -7,8 +7,7 @@
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <Grid x:Name="ApplicationHeader" ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="14" SizeChanged="ApplicationHeader_SizeChanged">
             <StackPanel Orientation="Horizontal" Spacing="12">
-                <Grid Width="8"><Border x:Name="AccentGlow" Background="{ThemeResource MonitorAccent}" CornerRadius="4" Opacity="0.2"/>
-                    <Border Width="4" Background="{ThemeResource MonitorAccent}" CornerRadius="2"/></Grid>
+                <Border Width="4" Margin="2,0" Background="{ThemeResource MonitorAccent}" CornerRadius="2"/>
                 <StackPanel><TextBlock Text="RTX LENS" FontSize="22" FontWeight="SemiBold" Foreground="{ThemeResource MonitorForeground}"/>
                     <TextBlock x:Name="ModeLabel" Text="POWER · PINS · PROTECTION" Style="{StaticResource MonitorCaption}"/></StackPanel>
             </StackPanel>

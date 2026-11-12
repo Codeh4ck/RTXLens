@@ -1,7 +1,7 @@
 RTX Lens includes third-party software with its own license terms.
 
 .NET runtime and libraries - .NET Foundation / Microsoft, MIT and component licenses.
-Windows App SDK / WinUI - Microsoft, applicable package/runtime terms reproduced below.
+Avalonia UI - MIT License. Dependency and runtime notices follow below.
 LibreHardwareMonitor - Mozilla Public License 2.0.
 HidSharp - Apache License 2.0.
 WiX Toolset / DTF / Burn runtime components - Microsoft Reciprocal License and component notices.

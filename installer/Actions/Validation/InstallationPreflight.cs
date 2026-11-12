@@ -1,6 +1,8 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
 using Microsoft.Win32;
 using RTXLens.Installer.Actions.Configuration;
 using RTXLens.Installer.Actions.Services;
@@ -9,6 +11,11 @@ namespace RTXLens.Installer.Actions.Validation;
 
 public static class InstallationPreflight
 {
+    private const FileAttributes UnsafeEntry = FileAttributes.Directory | FileAttributes.ReparsePoint;
+    private static readonly Regex ProfileFileName = new(
+        @"\A(?:active-profile\.txt|device-warnings\.json|[0-9a-f]{32}\.profile\.json)(?:\.[0-9a-f]{32}\.tmp)?\z",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
     public static void CheckDesktopClosed(string installDirectory, bool legacy = false)
     {
         foreach (var process in Process.GetProcessesByName(legacy ? "Rtx5090Monitoring.App" : "RTXLens.App"))
@@ -36,8 +43,9 @@ public static class InstallationPreflight
                                                Path.GetFullPath(installDirectory).TrimEnd(Path.DirectorySeparatorChar),
                                                StringComparison.OrdinalIgnoreCase));
 
-        if (!managed && (string.IsNullOrEmpty(legacyDirectory) || !LegacyInstallationMigration.SamePath(installDirectory, legacyDirectory!)) && Directory.Exists(installDirectory) && Directory.GetFileSystemEntries(installDirectory).Length > 0
-            && !AfterburnerBackupCleanup.ContainsOnlyBackupLeftovers(installDirectory))
+        var migratingInPlace = !string.IsNullOrEmpty(legacyDirectory)
+            && LegacyInstallationMigration.SamePath(installDirectory, legacyDirectory!);
+        if (!managed && !migratingInPlace && Directory.Exists(installDirectory) && !ContainsOnlyPreservedData(installDirectory))
         {
             throw new IOException("The destination contains files not managed by this installer. Choose an empty dedicated folder or remove the previous unmanaged installation first.");
         }
@@ -54,6 +62,27 @@ public static class InstallationPreflight
             throw new IOException("An unmanaged RTXLensService installation already exists. Remove that service registration before installing this release. Runtime configuration will be preserved.");
         }
     }
+
+    public static bool ContainsOnlyPreservedData(string installDirectory) =>
+        IsPlainDirectory(installDirectory) && Directory.EnumerateFileSystemEntries(installDirectory).All(path =>
+            string.Equals(Path.GetFileName(path), "Desktop", StringComparison.OrdinalIgnoreCase)
+            && IsPlainDirectory(path) && Directory.EnumerateFileSystemEntries(path).All(IsPreservedDesktopDirectory));
+
+    private static bool IsPreservedDesktopDirectory(string path)
+    {
+        var name = Path.GetFileName(path);
+        if (string.Equals(name, "AfterburnerBackups", StringComparison.OrdinalIgnoreCase))
+        {
+            return AfterburnerBackupCleanup.IsKnownBackupDirectory(path);
+        }
+
+        return string.Equals(name, "config", StringComparison.OrdinalIgnoreCase) && IsPlainDirectory(path)
+            && Directory.EnumerateFileSystemEntries(path).All(file =>
+                (File.GetAttributes(file) & UnsafeEntry) == 0 && ProfileFileName.IsMatch(Path.GetFileName(file)));
+    }
+
+    private static bool IsPlainDirectory(string path) =>
+        Directory.Exists(path) && (File.GetAttributes(path) & UnsafeEntry) == FileAttributes.Directory;
 
     public static void CheckLegacyServiceOwnership(string directory)
     {

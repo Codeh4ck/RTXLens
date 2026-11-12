@@ -25,12 +25,12 @@ MODIFY / REPAIR / UNINSTALL
 Use Windows Settings > Apps > RTX Lens, or run the same setup EXE again.
 Modify lets you add/remove the desktop component without removing the service.
 Uninstall removes the installed service, app, shortcuts, startup entries and RTX Lens's Afterburner backups.
-Setup can reuse an installation folder left behind by an older uninstaller if it contains only those backups.
+Setup can reuse an installation folder that contains only saved profiles or leftover RTX Lens Afterburner backups.
 Uninstall-RTXLens.ps1 is an optional launcher for the registered cached uninstaller.
 Exit the desktop app using its tray menu first; unsaved configuration drafts are not forcibly discarded.
 
-Backend settings (%ProgramData%\RTXLens) and desktop preferences
-(%LocalAppData%\RTXLens) are retained during upgrade and uninstall.
+Backend settings (%ProgramData%\RTXLens), saved GPU chart and device warning profiles (Desktop\config),
+and desktop preferences (%LocalAppData%\RTXLens) are retained during upgrade and uninstall.
 The widget is imported and removed separately in iCUE.
 Shared Microsoft redistributables are retained because other applications can use them.
 

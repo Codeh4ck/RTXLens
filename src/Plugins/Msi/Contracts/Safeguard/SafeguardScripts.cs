@@ -40,12 +40,11 @@ public static class SafeguardScripts
         new("Sender", "Sender", SafeguardParameterType.Mailbox),
         new("Recipients", "Recipients (comma separated)", SafeguardParameterType.Mailboxes, Minimum: 1, Maximum: 10));
 
-    public static IReadOnlyList<SafeguardScriptDefinition> All { get; } = Array.AsReadOnly(new[]
-    {
+    public static IReadOnlyList<SafeguardScriptDefinition> All { get; } = Array.AsReadOnly([
         new SafeguardScriptDefinition(LowPower, "Low power profile & shutdown", "LowPowerAndShutdown.ps1", Parameters(Delay)),
         new SafeguardScriptDefinition(Notify, "Low power profile, shutdown & notify", "LowPowerShutdownAndNotify.ps1", NotificationParameters),
         new SafeguardScriptDefinition(Simulation, "Simulation", "SimulateSafeguard.ps1", NotificationParameters)
-    });
+    ]);
 
     public static SafeguardScriptDefinition Get(string id) => All.FirstOrDefault(script => script.Id == id)
         ?? throw new ArgumentException("Select a bundled Safeguard+ script.");

@@ -133,7 +133,7 @@ internal sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagn
         var states = new int[PStateCount];
         Array.Fill(states, UnknownPState);
         return getStates is not null && getStates(handle, states, PStateCount * sizeof(int)) == 0
-            ? states.Where(state => state is >= 0 and < PStateCount).Distinct().Order().ToArray()
+            ? [.. states.Where(state => state is >= 0 and < PStateCount).Distinct().Order()]
             : null;
     }
 
@@ -141,9 +141,9 @@ internal sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagn
     {
         identity = default;
         var parts = id.Split('/');
-        return parts.Length == 5 && parts[0] == "nvidia-pci"
-            && Hex(parts[1], out identity.Bus) && Hex(parts[2], out identity.Slot)
-            && Hex(parts[3], out identity.DeviceId) && Hex(parts[4], out identity.SubsystemId);
+        return parts is ["nvidia-pci", _, _, _, _]
+               && Hex(parts[1], out identity.Bus) && Hex(parts[2], out identity.Slot)
+               && Hex(parts[3], out identity.DeviceId) && Hex(parts[4], out identity.SubsystemId);
 
         static bool Hex(string text, out uint value) =>
             uint.TryParse(text, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out value);

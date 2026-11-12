@@ -104,6 +104,17 @@ internal static class ConnectorProfileTests
     {
         var selector = new MsiConnectorSelection("msi-psu");
         var now = DateTimeOffset.UtcNow;
+
+        TestAssert.Equal(0, selector.Select(Frame(0, 0), null).Length);
+        TestAssert.Equal("2", selector.Select(Frame(0, 1), null).Single().ConnectorId);
+        TestAssert.Equal("2", selector.Select(Frame(0, 0), null).Single().ConnectorId);
+        TestAssert.Equal(0, selector.Select(Frame(1, 1), null).Length);
+        TestAssert.Equal("1", selector.Select(Frame(1, 1), "1").Single().ConnectorId);
+        TestAssert.Equal(0, selector.Select(Frame(0, 0, "new-psu"), null).Length);
+        var incomplete = Frame(0, 1);
+        TestAssert.Equal(0, selector.Select(incomplete with { Sensors = [.. incomplete.Sensors.Skip(1)] }, null).Length);
+        return;
+
         SensorSnapshot Frame(double first, double second, string device = "psu0")
         {
             var readings = new List<SensorReading>();
@@ -118,15 +129,6 @@ internal static class ConnectorProfileTests
 
             return new SensorSnapshot(1, 1, now, [.. readings], [new PluginHealth("msi-psu", PluginState.Ready, now, null)], []);
         }
-
-        TestAssert.Equal(0, selector.Select(Frame(0, 0), null).Length);
-        TestAssert.Equal("2", selector.Select(Frame(0, 1), null).Single().ConnectorId);
-        TestAssert.Equal("2", selector.Select(Frame(0, 0), null).Single().ConnectorId);
-        TestAssert.Equal(0, selector.Select(Frame(1, 1), null).Length);
-        TestAssert.Equal("1", selector.Select(Frame(1, 1), "1").Single().ConnectorId);
-        TestAssert.Equal(0, selector.Select(Frame(0, 0, "new-psu"), null).Length);
-        var incomplete = Frame(0, 1);
-        TestAssert.Equal(0, selector.Select(incomplete with { Sensors = incomplete.Sensors.Skip(1).ToArray() }, null).Length);
     }
 
     private sealed class Provider(string id, int? power, int? current, int? voltage, bool dedicated = false) : IConnectorSourceProvider

@@ -19,10 +19,8 @@ internal static class SafeguardReportRenderer
 
     public static (string Html, string Plain) Render(SafeguardReport report)
     {
-        var script = SafeguardScripts.All.FirstOrDefault(candidate => candidate.Id == report.ScriptId);
-        var simulation = script?.IsSimulation == true;
-        var telemetry = report.Telemetry;
-        var title = simulation ? "Safeguard+ simulation" : "Safeguard+ execution report";
+        var blocks = Describe(report);
+        var title = blocks.OfType<SafeguardReportHeading>().First().Title;
         var html = new StringBuilder($"""
             <!doctype html>
             <html lang="en">
@@ -40,116 +38,33 @@ internal static class SafeguardReportRenderer
 
         var plain = new StringBuilder();
 
-        if (report.IsTestEmail)
+        foreach (var block in blocks)
         {
-            Paragraph("TEST EMAIL. This report uses live sensor readings from the time the test was requested. No Safeguard+ action ran.", "#ffd15c");
-        }
-
-        html.Append($"""
-                            <tr><td style="padding:12px 4px 18px;border-bottom:1px solid {Border};">
-                                <p style="margin:0 0 6px;color:{Accent};font-size:12px;font-weight:bold;">RTX LENS</p>
-                                <h1 style="margin:0;color:{Text};font-size:24px;">{Encode(title)}</h1>
-                                <p style="margin:6px 0 0;color:{Muted};">{Encode(report.MachineName)}</p>
-                            </td></tr>
-            """);
-
-        plain.AppendLine("RTX Lens").AppendLine(title).AppendLine(report.MachineName);
-
-        if (simulation && !report.IsTestEmail)
-        {
-            Paragraph("Validation only. The low-power action and shutdown were simulated.", "#ffd15c");
-        }
-
-        AddPanel("Execution", null, [
-            (report.IsTestEmail ? "Requested" : "Triggered", FormatTime(report.StartedAt)),
-            ("Connector", report.Connector?.ToString(CultureInfo.InvariantCulture) ?? "Unavailable"),
-            ("Script", script?.Name ?? report.ScriptId),
-            ("Script version", report.ScriptVersion?.ToString(CultureInfo.InvariantCulture) ?? "Unavailable"),
-            (simulation ? "Simulated shutdown delay" : "Shutdown delay", report.DelayMs is { } delay ? $"{delay} ms" : "Unavailable"),
-            ("Status", report.Status),
-            ("Finished", report.FinishedAt is { } finished ? FormatTime(finished) : "-"),
-            (report.IsTestEmail ? "Test ID" : "Execution ID", report.Id.ToString("N"))
-        ]);
-
-        AddPanel("Execution steps", null, report.Steps.Length == 0
-            ? [("Status", "No execution steps were recorded.")]
-            : report.Steps.Select(step => (step.Name, $"{FormatTime(step.Timestamp)} · {step.Result}" + (step.ExitCode is { } code ? $" (exit code {code})" : ""))));
-
-        if (report.MailSettings is { } mail)
-        {
-            AddPanel("Email delivery", null, [
-                ("SMTP server", $"{mail.Host}:{mail.Port} ({mail.Security})"),
-                ("Sender", mail.Sender),
-                ("Recipients", string.Join(", ", mail.Recipients)),
-                ("Authentication", mail.Authenticate ? "Configured" : "None"),
-                ("Status", report.Delivery?.Status ?? "Pending"),
-                ("Details", report.Delivery?.Detail ?? "-")
-            ]);
-        }
-
-        html.Append($"""<tr><td style="padding:20px 4px 0;"><h2 style="margin:0;color:{Text};font-size:19px;">Sensor snapshot</h2></td></tr>""");
-
-        plain.AppendLine().AppendLine("Sensor snapshot");
-
-        if (telemetry is not { Readings.Length: > 0 })
-        {
-            Paragraph("No sensor readings were captured at or before this trigger.", Muted);
-        }
-        else
-        {
-            Paragraph($"Captured {FormatTime(telemetry.CapturedAt)}. Pin numbers follow each device's reported order.", Muted);
-
-            foreach (var device in telemetry.Readings.GroupBy(reading => (reading.Identity.PluginId, reading.Identity.DeviceId)))
+            switch (block)
             {
-                var source = SourceName(device.Key.PluginId);
-                var observed = device.Max(reading => reading.ObservedAt);
-                var subtitle = $"{device.Key.DeviceId} · Last sample {FormatTime(observed)}";
-
-                var general = device
-                    .Where(reading => !IsPin(reading) && !reading.Identity.IsGpuDiagnostic())
-                    .OrderBy(reading => reading.Identity.Component)
-                    .ThenBy(reading => reading.Identity.Channel)
-                    .ThenBy(reading => reading.Identity.Metric)
-                    .ToArray();
-
-                if (general.Length > 0)
-                {
-                    AddPanel(source, subtitle, general.Select(reading => (Label(reading.Identity), FormatValue(reading))));
-                }
-
-                var connectors = device.Where(IsPin).GroupBy(reading => reading.Identity.ConnectorId);
-
-                foreach (var connector in connectors)
-                {
-                    var heading = connector.Key is null ? $"{source} · Pins" : $"{source} · Connector {connector.Key} pins";
-                    var activeProfile = telemetry.SettingsProfile;
-                    var profile = activeProfile?.AppliesToConnector(device.Key.PluginId, device.Key.DeviceId) == true ? activeProfile.Profile : null;
-
-                    var cableRating = general
-                        .FirstOrDefault(reading => reading is { Identity.Metric: SensorMetric.PowerCapability, Quality: ReadingQuality.Valid, Value: > 0 })?.Value;
-
-                    foreach (var group in connector
-                                 .GroupBy(reading => reading.Identity.Metric)
-                                 .OrderBy(group => group.Key switch
-                                 {
-                                     SensorMetric.Current => 0,
-                                     SensorMetric.Power => 1,
-                                     SensorMetric.Voltage => 2,
-                                     _ => 3
-                                 }))
-                    {
-                        var readings = group.OrderBy(reading => reading.Identity.Channel).ToArray();
-
-                        if (PinScale(group.Key, profile, cableRating) is { } scale)
-                        {
-                            AddPinChart(heading, subtitle, scale, readings);
-                        }
-                        else
-                        {
-                            AddPanel(heading, subtitle, readings.Select(reading => (Label(reading.Identity), FormatValue(reading))));
-                        }
-                    }
-                }
+                case SafeguardReportNotice notice:
+                    Paragraph(notice.Text, notice.IsWarning ? "#ffd15c" : Muted);
+                    break;
+                case SafeguardReportHeading { Subtitle: { } machine } heading:
+                    html.Append($"""
+                        <tr><td style="padding:12px 4px 18px;border-bottom:1px solid {Border};">
+                            <p style="margin:0 0 6px;color:{Accent};font-size:12px;font-weight:bold;">RTX LENS</p>
+                            <h1 style="margin:0;color:{Text};font-size:24px;">{Encode(heading.Title)}</h1>
+                            <p style="margin:6px 0 0;color:{Muted};">{Encode(machine)}</p>
+                        </td></tr>
+                        """);
+                    plain.AppendLine("RTX Lens").AppendLine(heading.Title).AppendLine(machine);
+                    break;
+                case SafeguardReportHeading heading:
+                    html.Append($"""<tr><td style="padding:20px 4px 0;"><h2 style="margin:0;color:{Text};font-size:19px;">{Encode(heading.Title)}</h2></td></tr>""");
+                    plain.AppendLine().AppendLine(heading.Title);
+                    break;
+                case SafeguardReportRows rows:
+                    AddPanel(rows.Title, rows.Subtitle, rows.Rows);
+                    break;
+                case SafeguardReportPinChart chart:
+                    AddPinChart(chart);
+                    break;
             }
         }
 
@@ -163,33 +78,25 @@ internal static class SafeguardReportRenderer
             plain.AppendLine(value);
         }
 
-        void AddPinChart(string heading, string subtitle, (string Label, string Unit, double Min, double Max) scale, SensorReading[] pins)
+        void AddPinChart(SafeguardReportPinChart chart)
         {
             const int height = 88;
-            var chartTitle = $"{heading} · {scale.Label}";
 
-            OpenPanel(chartTitle, subtitle);
+            OpenPanel(chart.Title, chart.Subtitle);
 
             html.Append($"""
                 <tr><td colspan="2" style="padding:0 12px 12px;">
-                    <p style="margin:0 0 8px;color:{Muted};font-size:12px;">Scale {scale.Min.ToString("0.##", CultureInfo.InvariantCulture)}
-                        to {scale.Max.ToString("0.##", CultureInfo.InvariantCulture)} {scale.Unit}</p>
+                    <p style="margin:0 0 8px;color:{Muted};font-size:12px;">Scale {chart.Minimum.ToString("0.##", CultureInfo.InvariantCulture)}
+                        to {chart.Maximum.ToString("0.##", CultureInfo.InvariantCulture)} {chart.Unit}</p>
                     <table width="100%" cellspacing="0" cellpadding="0" role="presentation"><tr>
                 """);
 
-            foreach (var pin in pins)
+            foreach (var (label, value, fraction) in chart.Pins)
             {
-                var label = $"P{pin.Identity.Channel}";
-                var value = FormatValue(pin);
-                var fill = 0;
-
-                if (pin is { Quality: ReadingQuality.Valid, Value: { } number } && double.IsFinite(number) && number > scale.Min)
-                {
-                    fill = Math.Max(1, (int)Math.Round(height * Math.Clamp((number - scale.Min) / (scale.Max - scale.Min), 0, 1)));
-                }
+                var fill = fraction > 0 ? Math.Max(1, (int)Math.Round(height * fraction)) : 0;
 
                 html.Append($"""
-                    <td width="{100 / pins.Length}%" align="center" valign="bottom" style="padding:0 3px;">
+                    <td width="{100 / chart.Pins.Count}%" align="center" valign="bottom" style="padding:0 3px;">
                         <div style="margin-bottom:4px;color:{Text};font-size:12px;font-weight:bold;">{Encode(value)}</div>
                         <table width="70%" cellspacing="0" cellpadding="0" role="presentation" bgcolor="{Border}"
                             style="background:{Border};margin:0 auto;">
@@ -252,6 +159,128 @@ internal static class SafeguardReportRenderer
         }
     }
 
+    public static IReadOnlyList<SafeguardReportBlock> Describe(SafeguardReport report)
+    {
+        var script = SafeguardScripts.All.FirstOrDefault(candidate => candidate.Id == report.ScriptId);
+        var simulation = script?.IsSimulation == true;
+        var telemetry = report.Telemetry;
+        var title = simulation ? "Safeguard+ simulation" : "Safeguard+ execution report";
+        var blocks = new List<SafeguardReportBlock>();
+        if (report.IsTestEmail)
+        {
+            blocks.Add(new SafeguardReportNotice("TEST EMAIL. This report uses live sensor readings from the time the test was requested. No Safeguard+ action ran.", IsWarning: true));
+        }
+
+        blocks.Add(new SafeguardReportHeading(title, report.MachineName));
+
+        if (simulation && !report.IsTestEmail)
+        {
+            blocks.Add(new SafeguardReportNotice("Validation only. The low-power action and shutdown were simulated.", IsWarning: true));
+        }
+
+        AddPanel("Execution", null, [
+            (report.IsTestEmail ? "Requested" : "Triggered", FormatTime(report.StartedAt)),
+            ("Connector", report.Connector?.ToString(CultureInfo.InvariantCulture) ?? "Unavailable"),
+            ("Script", script?.Name ?? report.ScriptId),
+            ("Script version", report.ScriptVersion?.ToString(CultureInfo.InvariantCulture) ?? "Unavailable"),
+            (simulation ? "Simulated shutdown delay" : "Shutdown delay", report.DelayMs is { } delay ? $"{delay} ms" : "Unavailable"),
+            ("Status", report.Status),
+            ("Finished", report.FinishedAt is { } finished ? FormatTime(finished) : "-"),
+            (report.IsTestEmail ? "Test ID" : "Execution ID", report.Id.ToString("N"))
+        ]);
+
+        AddPanel("Execution steps", null, report.Steps.Length == 0
+            ? [("Status", "No execution steps were recorded.")]
+            : report.Steps.Select(step => (step.Name, $"{FormatTime(step.Timestamp)} · {step.Result}" + (step.ExitCode is { } code ? $" (exit code {code})" : ""))));
+
+        if (report.MailSettings is { } mail)
+        {
+            AddPanel("Email delivery", null, [
+                ("SMTP server", $"{mail.Host}:{mail.Port} ({mail.Security})"),
+                ("Sender", mail.Sender),
+                ("Recipients", string.Join(", ", mail.Recipients)),
+                ("Authentication", mail.Authenticate ? "Configured" : "None"),
+                ("Status", report.Delivery?.Status ?? "Pending"),
+                ("Details", report.Delivery?.Detail ?? "-")
+            ]);
+        }
+
+        blocks.Add(new SafeguardReportHeading("Sensor snapshot"));
+
+        if (telemetry is not { Readings.Length: > 0 })
+        {
+            blocks.Add(new SafeguardReportNotice("No sensor readings were captured at or before this trigger."));
+        }
+        else
+        {
+            blocks.Add(new SafeguardReportNotice($"Captured {FormatTime(telemetry.CapturedAt)}. Pin numbers follow each device's reported order."));
+
+            foreach (var device in telemetry.Readings.GroupBy(reading => (reading.Identity.PluginId, reading.Identity.DeviceId)))
+            {
+                var source = SourceName(device.Key.PluginId);
+                var observed = device.Max(reading => reading.ObservedAt);
+                var subtitle = $"{device.Key.DeviceId} · Last sample {FormatTime(observed)}";
+
+                var general = device
+                    .Where(reading => !IsPin(reading) && !reading.Identity.IsGpuDiagnostic())
+                    .OrderBy(reading => reading.Identity.Component)
+                    .ThenBy(reading => reading.Identity.Channel)
+                    .ThenBy(reading => reading.Identity.Metric)
+                    .ToArray();
+
+                if (general.Length > 0)
+                {
+                    AddPanel(source, subtitle, general.Select(reading => (Label(reading.Identity), FormatValue(reading))));
+                }
+
+                var connectors = device.Where(IsPin).GroupBy(reading => reading.Identity.ConnectorId);
+
+                foreach (var connector in connectors)
+                {
+                    var heading = connector.Key is null ? $"{source} · Pins" : $"{source} · Connector {connector.Key} pins";
+                    var activeProfile = telemetry.SettingsProfile;
+                    var profile = activeProfile?.AppliesToConnector(device.Key.PluginId, device.Key.DeviceId) == true ? activeProfile.Profile : null;
+
+                    var cableRating = general
+                        .FirstOrDefault(reading => reading is { Identity.Metric: SensorMetric.PowerCapability, Quality: ReadingQuality.Valid, Value: > 0 })?.Value;
+
+                    foreach (var group in connector
+                                 .GroupBy(reading => reading.Identity.Metric)
+                                 .OrderBy(group => group.Key switch
+                                 {
+                                     SensorMetric.Current => 0,
+                                     SensorMetric.Power => 1,
+                                     SensorMetric.Voltage => 2,
+                                     _ => 3
+                                 }))
+                    {
+                        var readings = group.OrderBy(reading => reading.Identity.Channel).ToArray();
+
+                        if (PinScale(group.Key, profile, cableRating) is { } scale)
+                        {
+                            blocks.Add(new SafeguardReportPinChart($"{heading} · {scale.Label}", subtitle, scale.Unit, scale.Min, scale.Max,
+                            [
+                                .. readings.Select(pin => new SafeguardReportPin($"P{pin.Identity.Channel}", FormatValue(pin),
+                                    pin is { Quality: ReadingQuality.Valid, Value: { } number } && double.IsFinite(number)
+                                        ? Math.Clamp((number - scale.Min) / (scale.Max - scale.Min), 0, 1)
+                                        : 0))
+                            ]));
+                        }
+                        else
+                        {
+                            AddPanel(heading, subtitle, readings.Select(reading => (Label(reading.Identity), FormatValue(reading))));
+                        }
+                    }
+                }
+            }
+        }
+
+        return blocks;
+
+        void AddPanel(string heading, string? subtitle, IEnumerable<(string Label, string Value)> rows) =>
+            blocks.Add(new SafeguardReportRows(heading, subtitle, [.. rows]));
+    }
+
     private static (string Label, string Unit, double Min, double Max)? PinScale(SensorMetric metric, SettingsProfile? profile, double? cableRating) => metric switch
     {
         SensorMetric.Current => ("Current", "A", 0, profile?.CurrentCeiling ?? 10),
@@ -268,7 +297,7 @@ internal static class SafeguardReportRenderer
     private static string SourceName(string id) => id switch
     {
         "asus-astral" => "ROG Astral",
-        "wireview-pro2" => "WireView Pro 2",
+        "wireview-pro2" => "WireView Pro II",
         "msi-psu" => "MSI PSU",
         "generic-nvidia" => "NVIDIA GPU status",
         _ => id
@@ -287,7 +316,7 @@ internal static class SafeguardReportRenderer
             SensorComponent.GpuFan => $"Fan {identity.Channel}",
             SensorComponent.GpuConnector or SensorComponent.PsuConnector => $"Connector {identity.ConnectorId ?? identity.Channel?.ToString()}",
             SensorComponent.GpuPin or SensorComponent.PsuPin => $"P{identity.Channel}",
-            SensorComponent.MonitorBoard => identity.Channel switch { 1 => "Board in", 2 => "Board out", _ => "WireView" },
+            SensorComponent.MonitorBoard => identity.Channel switch { 1 => "Board in", 2 => "Board out", _ => "WireView Pro II" },
             SensorComponent.ExternalProbe => $"External probe {identity.Channel}",
             SensorComponent.Psu => "PSU",
             _ => identity.Component.ToString()
@@ -351,3 +380,18 @@ internal static class SafeguardReportRenderer
         return $"{text} {unit}".TrimEnd() + (reading.Derived ? " (derived)" : "");
     }
 }
+
+internal abstract record SafeguardReportBlock;
+
+internal sealed record SafeguardReportHeading(string Title, string? Subtitle = null) : SafeguardReportBlock;
+
+internal sealed record SafeguardReportNotice(string Text, bool IsWarning = false) : SafeguardReportBlock;
+
+internal sealed record SafeguardReportRows(string Title, string? Subtitle, IReadOnlyList<(string Label, string Value)> Rows)
+    : SafeguardReportBlock;
+
+internal sealed record SafeguardReportPinChart(
+    string Title, string Subtitle, string Unit, double Minimum, double Maximum, IReadOnlyList<SafeguardReportPin> Pins)
+    : SafeguardReportBlock;
+
+internal sealed record SafeguardReportPin(string Label, string Value, double Fraction);

@@ -178,7 +178,7 @@ internal sealed class DeviceWarningEvaluator
     public static string SourceLabel(DeviceWarningProfile profile) => profile.PluginId switch
     {
         "asus-astral" => "ROG Astral",
-        "wireview-pro2" => "WireView Pro 2",
+        "wireview-pro2" => "WireView Pro II",
         _ => $"MSI PSU connector {profile.ConnectorId}"
     };
 

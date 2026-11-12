@@ -1,4 +1,5 @@
 using System.Globalization;
+using RTXLens.Contracts.Enums;
 using RTXLens.Debugging.Models;
 using RTXLens.Presentation.Infrastructure;
 
@@ -6,6 +7,8 @@ namespace RTXLens.Debugging.ViewModels;
 
 public sealed class DebugMetricViewModel(DebugMetricDefinition definition) : ObservableObject
 {
+    public const string NotReported = "Not reported";
+
     private DebugMetricMode _mode;
     private double _value = definition.DefaultValue;
     public DebugMetricDefinition Definition { get; } = definition;
@@ -51,13 +54,47 @@ public sealed class DebugMetricViewModel(DebugMetricDefinition definition) : Obs
             }
         }
     }
-    public string LiveText { get; private set => Set(ref field, value); } = "Not reported";
+    public string LiveText { get; private set => Set(ref field, value); } = NotReported;
     public string EffectiveText { get; private set => Set(ref field, value); } = "Effective: not reported";
+    public string EffectiveValueText { get; private set => Set(ref field, value); } = NotReported;
+    public string? EffectiveQuality { get; private set => Set(ref field, value); }
     public string Error { get; private set => Set(ref field, value); } = "";
 
     public bool BooleanValue { get => Math.Abs(Value - 1) < 0.0001; set => Value = value ? 1 : 0; }
-    public void UpdateEffective(double? value, string quality) => EffectiveText = $"Effective: {value?.ToString("0.##", CultureInfo.CurrentCulture) ?? "—"} · {quality} · Live: {LiveText}";
-    public void UpdateLive(double? value) => LiveText = value?.ToString("0.##", CultureInfo.CurrentCulture) ?? "Not reported";
+    public void UpdateEffective(double? value, string quality)
+    {
+        EffectiveValueText = value is { } reading ? FormatReading(reading) : NotReported;
+        EffectiveQuality = quality is nameof(ReadingQuality.Valid) or NotReported ? null : quality;
+        EffectiveText = $"Effective: {EffectiveValueText} · {quality} · Live: {LiveText}";
+    }
+
+    public void UpdateLive(double? value) => LiveText = value is { } reading ? FormatReading(reading) : NotReported;
+
+    private string FormatReading(double value)
+    {
+        if (Definition.IsBoolean)
+        {
+            return value == 0 ? "Off" : "On";
+        }
+
+        var unit = Definition.Unit switch
+        {
+            SensorUnit.Watts => " W",
+            SensorUnit.Amperes => " A",
+            SensorUnit.Volts => " V",
+            SensorUnit.Celsius => " °C",
+            SensorUnit.Megahertz => " MHz",
+            SensorUnit.Rpm => " RPM",
+            SensorUnit.Percent => "%",
+            SensorUnit.Megabytes => " MB",
+            SensorUnit.BytesPerSecond => " B/s",
+            SensorUnit.MegabitsPerSecond => " Mb/s",
+            SensorUnit.Seconds => " s",
+            _ => ""
+        };
+
+        return value.ToString("0.###", CultureInfo.CurrentCulture) + unit;
+    }
 
     public void Reset()
     {

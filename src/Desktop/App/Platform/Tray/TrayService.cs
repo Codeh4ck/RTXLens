@@ -1,7 +1,9 @@
 using System.Runtime.InteropServices;
-using Microsoft.UI.Dispatching;
 using RTXLens.App.Platform.Interop;
+#if !AVALONIA_DESKTOP
+using Microsoft.UI.Dispatching;
 using RTXLens.App.Platform.Windowing;
+#endif
 
 namespace RTXLens.App.Platform.Tray;
 
@@ -9,7 +11,7 @@ internal sealed partial class TrayService : IDisposable
 {
     private const uint CallbackMessage = 0x800B;
     private readonly nint _window;
-    private readonly DispatcherQueue _dispatcher;
+    private readonly Action<Action> _dispatch;
     private readonly Action _show;
     private readonly Action _settings;
     private readonly Action _exit;
@@ -22,10 +24,17 @@ internal sealed partial class TrayService : IDisposable
     private bool _disposed;
     public bool IsAvailable { get; private set; }
 
+#if !AVALONIA_DESKTOP
     public TrayService(nint window, DispatcherQueue dispatcher, Action show, Action settings, Action exit, Action<bool> minimizeChanged)
+        : this(window, action => dispatcher.TryEnqueue(() => action()), show, settings, exit, minimizeChanged)
+    {
+    }
+#endif
+
+    public TrayService(nint window, Action<Action> dispatch, Action show, Action settings, Action exit, Action<bool> minimizeChanged)
     {
         _window = window;
-        _dispatcher = dispatcher;
+        _dispatch = dispatch;
         _show = show;
         _settings = settings;
         _exit = exit;
@@ -99,6 +108,7 @@ internal sealed partial class TrayService : IDisposable
 
     private nint ProcessMessage(nint window, uint message, nuint wParam, nint lParam)
     {
+#if !AVALONIA_DESKTOP
         if (message == NativeConstants.GetMinMaxInfo)
         {
             var result = NativeMethods.CallWindowProcW(_previous, window, message, wParam, lParam);
@@ -120,6 +130,7 @@ internal sealed partial class TrayService : IDisposable
             return result;
         }
 
+#endif
         if (message == _taskbarCreated)
         {
             AddIcon();
@@ -127,13 +138,13 @@ internal sealed partial class TrayService : IDisposable
 
         if (message == _showMessage)
         {
-            _dispatcher.TryEnqueue(() => _show());
+            _dispatch(() => _show());
         }
 
         switch (message)
         {
             case NativeConstants.WindowSize:
-                _dispatcher.TryEnqueue(() => _minimizeChanged(wParam == 1));
+                _dispatch(() => _minimizeChanged(wParam == 1));
                 break;
             case CallbackMessage:
                 {
@@ -141,7 +152,7 @@ internal sealed partial class TrayService : IDisposable
                     switch (action)
                     {
                         case NativeConstants.LeftDoubleClick or NativeConstants.TraySelect or NativeConstants.TrayKeyboardSelect or NativeConstants.BalloonClick:
-                            _dispatcher.TryEnqueue(() => _show());
+                            _dispatch(() => _show());
                             break;
                         case NativeConstants.ContextMenu or NativeConstants.RightButtonUp:
                             ShowMenu();
@@ -172,13 +183,13 @@ internal sealed partial class TrayService : IDisposable
             switch (command)
             {
                 case NativeConstants.CommandOpen:
-                    _dispatcher.TryEnqueue(() => _show());
+                    _dispatch(() => _show());
                     break;
                 case NativeConstants.CommandSettings:
-                    _dispatcher.TryEnqueue(() => _settings());
+                    _dispatch(() => _settings());
                     break;
                 case NativeConstants.CommandExit:
-                    _dispatcher.TryEnqueue(() => _exit());
+                    _dispatch(() => _exit());
                     break;
             }
 

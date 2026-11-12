@@ -35,7 +35,6 @@ public sealed partial class MainWindow : Window
 
         PageHost.FontSize = 14 * preferences.TextScale;
         Tabs.FontSize = 14 * preferences.TextScale;
-        AccentGlow.Visibility = preferences.ReducedEffects ? Visibility.Collapsed : Visibility.Visible;
     }
 
     internal void ShowPanel(string id)

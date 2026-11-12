@@ -1,65 +1,45 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
-        <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
-        <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
-        <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
         <RuntimeIdentifier>win-x64</RuntimeIdentifier>
         <PlatformTarget>x64</PlatformTarget>
-        <UseWinUI>true</UseWinUI>
-        <WindowsPackageType>None</WindowsPackageType>
-        <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-        <ApplicationManifest>app.manifest</ApplicationManifest>
         <ApplicationIcon>Assets/monitor.ico</ApplicationIcon>
-        <EnableWindowsTargeting>true</EnableWindowsTargeting>
-        <OutputPath Condition="'$(EnableTelemetryDebug)' == 'true'">bin/$(Configuration)-TelemetryDebug/</OutputPath>
-        <IntermediateOutputPath Condition="'$(EnableTelemetryDebug)' == 'true'">obj/$(Configuration)-TelemetryDebug/</IntermediateOutputPath>
+        <ApplicationManifest>app.manifest</ApplicationManifest>
+        <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+        <!-- Keep the WinUI source as a parity reference while the Avalonia views replace it. -->
+        <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+        <DefineConstants>$(DefineConstants);AVALONIA_DESKTOP</DefineConstants>
     </PropertyGroup>
-    <ItemGroup>
-        <Content Update="Assets/monitor.ico" CopyToOutputDirectory="PreserveNewest" />
-        <Content Update="Assets/Icons/*.svg" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-        <PackageReference Include="Markdig" />
-        <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" />
-        <PackageReference Include="System.Security.Cryptography.ProtectedData" />
-        <Compile Include="../../../installer/Actions/Startup/ElevatedStartupTask.cs" Link="Platform/Startup/ElevatedStartupTask.cs" />
-        <Compile Include="../../Common/SafeguardReporting/*.cs" Link="SafeguardReporting/%(Filename)%(Extension)" />
-        <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" />
-        <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" />
-        <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" />
-        <PackageReference Include="Microsoft.Windows.SDK.BuildTools" PrivateAssets="all" />
-        <ProjectReference Include="../Presentation/RTXLens.Presentation.csproj" />
-        <ProjectReference Include="../../Plugins/Asus/Contracts/RTXLens.Plugins.Asus.Contracts.csproj" />
-        <ProjectReference Include="../../Plugins/WireView/Contracts/RTXLens.Plugins.WireView.Contracts.csproj" />
-    </ItemGroup>
+
     <ItemGroup Condition="'$(EnableTelemetryDebug)' == 'true'">
         <ProjectReference Include="../Debugging/RTXLens.Debugging.csproj" />
+        <Compile Include="Views/Simulation/*.cs" />
     </ItemGroup>
-    <ItemGroup Condition="'$(EnableTelemetryDebug)' != 'true'">
-        <Compile Remove="Debugging/**/*.cs;Demo/**/*.cs;Diagnostics/**/*.cs" />
-        <Page Remove="Debugging/**/*.xaml" />
+
+    <ItemGroup>
+        <Compile Include="Program.cs;App.axaml.cs;Themes/**/*.cs;ViewModels/**/*.cs;Views/Preview/*.axaml.cs" />
+        <Compile Include="Views/Shell/*.cs;Views/Hardware/*.cs;Views/Settings/*.cs;Views/Performance/*.cs" />
+        <Compile Include="Views/Diagnostics/*.cs;Views/Configuration/*.cs;Views/Safeguard/*.cs" />
+        <Compile Include="Controls/ColumnHeader.cs;Controls/MetricDisplay.cs;Controls/SectionPanel.cs" />
+        <Compile Include="Controls/EditableList.cs;Controls/PinBar.cs;Controls/PinTrack.cs;Controls/ValidatedNumberInput.cs" />
+        <Compile Include="Msi/Afterburner/AfterburnerElevatedOperation.cs;Msi/Afterburner/AfterburnerProcessControl.cs" />
+        <Compile Include="Controls/ReadingText.cs;Controls/RangeMarkerTrack.cs" />
+        <Compile Include="Controls/Charts/**/*.cs" />
+        <Compile Include="Platform/DesktopBuild.cs;Platform/Interop/*.cs;Platform/Tray/TrayService.cs" />
+        <Compile Include="Platform/Startup/StartupRegistration.cs;Platform/Startup/SingleInstance.cs;Services/DesktopEventLog.cs" />
+        <Compile Include="../../../Installer/Actions/Startup/ElevatedStartupTask.cs" Link="Platform/Startup/ElevatedStartupTask.cs" />
+        <InternalsVisibleTo Include="RTXLens.UI.Tests" />
+        <AvaloniaResource Include="Assets/monitor.ico;Assets/Icons/*.svg" />
+        <Content Include="Assets/monitor.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+        <ProjectReference Include="../Client/RTXLens.Client.csproj" />
+        <ProjectReference Include="../Presentation/RTXLens.Presentation.csproj" />
+        <PackageReference Include="Avalonia.Desktop" />
+        <PackageReference Include="Avalonia.Themes.Fluent" />
+        <PackageReference Include="Avalonia.Controls.ColorPicker" />
+        <PackageReference Include="Svg.Controls.Avalonia" />
+        <PackageReference Include="CommunityToolkit.Mvvm" />
+        <PackageReference Include="Markdig" />
+        <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+        <Compile Include="../../Common/SafeguardReporting/*.cs" Link="SafeguardReporting/%(Filename)%(Extension)" />
     </ItemGroup>
-    <!-- Keep SDK runtime files in the output without showing their links as project sources. -->
-    <Target Name="HideWindowsAppSdkPayloadInExplorer"
-            AfterTargets="AddMicrosoftWindowsAppSDKPayloadFilesFromComponents"
-            Condition="'$(WindowsAppSDKSelfContained)' == 'true'">
-        <ItemGroup>
-            <None Update="@(MicrosoftWindowsAppSDKFiles)" Visible="false" />
-            <ReferenceCopyLocalPaths Update="@(MicrosoftWindowsAppSDKFilesRes)" Visible="false" />
-        </ItemGroup>
-    </Target>
-    <Target Name="IncludeCompiledXamlInPortablePublish" AfterTargets="ComputeFilesToPublish">
-        <Error Condition="!Exists('$(OutDir)$(AssemblyName).pri')" Text="The app resource index is missing. Build the WinUI project before publishing." />
-        <ItemGroup>
-            <CompiledXamlForPublish Include="$(OutDir)**/*.xbf" />
-            <CompiledXamlForPublish Remove="$(OutDir)Debugging/**/*.xbf" Condition="'$(EnableTelemetryDebug)' != 'true'" />
-            <ResolvedFileToPublish Include="$(OutDir)$(AssemblyName).pri">
-                <RelativePath>$(AssemblyName).pri</RelativePath>
-                <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-            </ResolvedFileToPublish>
-            <ResolvedFileToPublish Include="@(CompiledXamlForPublish)">
-                <RelativePath>%(CompiledXamlForPublish.RecursiveDir)%(CompiledXamlForPublish.Filename)%(CompiledXamlForPublish.Extension)</RelativePath>
-                <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-            </ResolvedFileToPublish>
-        </ItemGroup>
-    </Target>
 </Project>

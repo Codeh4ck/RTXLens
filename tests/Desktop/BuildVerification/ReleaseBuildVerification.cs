@@ -10,37 +10,27 @@ internal static class ReleaseBuildVerification
         using var stream = File.OpenRead(Path.Combine(directory, "RTXLens.App.dll"));
         using var pe = new PEReader(stream);
         var metadata = pe.GetMetadataReader();
-        foreach (var handle in metadata.TypeDefinitions)
+        var types = metadata.TypeDefinitions.Select(metadata.GetTypeDefinition).ToArray();
+        if (!types.Any(type => metadata.GetString(type.Namespace) == "RTXLens.App.Views.Simulation"
+                && metadata.GetString(type.Name) == "DebugConsoleWindow")
+            || !File.Exists(Path.Combine(directory, "RTXLens.Debugging.dll")))
         {
-            var definition = metadata.GetTypeDefinition(handle);
-            var name = metadata.GetString(definition.Namespace);
-            if (name.StartsWith("RTXLens.App.Debugging", StringComparison.Ordinal)
-                || name.StartsWith("RTXLens.App.Demo", StringComparison.Ordinal)
-                || name.StartsWith("RTXLens.App.Diagnostics", StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException("Ordinary Release includes a simulation type: " + name);
-            }
-        }
-        var methods = metadata.MethodDefinitions.Select(handle => metadata.GetString(metadata.GetMethodDefinition(handle).Name)).ToArray();
-        if (methods.Any(method => method is "OpenDebugConsole" or "PublishDebugFrame" or "InitializeDebugging" or "get_Debug"))
-        {
-            throw new InvalidOperationException("Ordinary Release includes a debug activation method.");
+            throw new InvalidOperationException("Release is missing the telemetry debug console or its simulation library.");
         }
 
-        foreach (var handle in metadata.AssemblyReferences)
+        foreach (var type in types)
         {
-            var name = metadata.GetString(metadata.GetAssemblyReference(handle).Name);
-            if (name is "RTXLens.Debugging" or "RTXLens.Plugins.Asus.Analysis" or "RTXLens.Plugins.WireView.Analysis" or "RTXLens.Warnings")
+            var typeNamespace = metadata.GetString(type.Namespace);
+            var typeName = metadata.GetString(type.Name);
+            if (typeNamespace.StartsWith("RTXLens.App.Debugging", StringComparison.Ordinal)
+                || typeNamespace.StartsWith("RTXLens.App.Demo", StringComparison.Ordinal)
+                || typeNamespace.StartsWith("RTXLens.App.Diagnostics", StringComparison.Ordinal)
+                || typeName == "AfterburnerChangesWindow")
             {
-                throw new InvalidOperationException("Ordinary Release references a simulation dependency: " + name);
+                throw new InvalidOperationException($"Release includes a developer-only type: {typeNamespace}.{typeName}");
             }
         }
-        if (Directory.EnumerateFiles(directory, "RTXLens.Debugging.*", SearchOption.AllDirectories).Any()
-            || Directory.Exists(Path.Combine(directory, "Debugging")))
-        {
-            throw new InvalidOperationException("Ordinary Release includes simulation artifacts.");
-        }
 
-        Console.WriteLine("PASS: Ordinary Release contains no debug/demo/diagnostic types, debug activation methods, debugging references or debug XAML/artifacts.");
+        Console.WriteLine("PASS: Release includes the telemetry debug console and excludes developer-only views.");
     }
 }

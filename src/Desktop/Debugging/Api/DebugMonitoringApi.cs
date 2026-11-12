@@ -38,7 +38,7 @@ public sealed class DebugMonitoringApi(DebugSession session, TimeProvider clock)
     {
         token.ThrowIfCancellationRequested();
         var configuration = session.GetSimulatedWireViewConfiguration()
-            ?? throw new IOException("The simulated WireView is not available.");
+            ?? throw new IOException("The simulated WireView Pro II is not available.");
 
         // Refresh should reload the editor even when the saved values are unchanged.
         return Task.FromResult(configuration with { });

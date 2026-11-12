@@ -47,6 +47,23 @@ internal static class DeviceWarningProfileTests
             NotificationPolicy = new WarningPolicy { RepeatWhileActive = true }
         };
         var profiles = new[] { Astral, Msi, wireView };
+
+        var first = Evaluate(0);
+        TestAssert.Equal(1, first.States.Length);
+        TestAssert.Equal(null, first.States.Single().ProfileId);
+        var active = Evaluate(3);
+        TestAssert.Equal(4, active.States.Count(state => state.Phase == WarningPhase.Active));
+        TestAssert.True(active.States.Any(state => state.ProfileId == Astral.Id && state.Title.StartsWith("ROG Astral")), "Astral warning source");
+        TestAssert.True(active.States.Any(state => state.ProfileId == Msi.Id && state.Title.StartsWith("MSI PSU connector 2")), "PSU connector warning source");
+        TestAssert.True(active.States.Any(state => state.ProfileId == wireView.Id && state.Title.StartsWith("WireView Pro II")), "WireView warning source");
+
+        var recovered = Evaluate(5, psu: 1);
+        TestAssert.Equal(WarningPhase.Recovering, recovered.States.Single(state => state.ProfileId == Msi.Id).Phase);
+        var reminder = Evaluate(8, psu: 1);
+        TestAssert.False(reminder.States.Any(state => state.ProfileId == Msi.Id), "The other PSU connector must not keep the profile active.");
+        TestAssert.Equal(wireView.Id, reminder.States.Single(state => state.NotificationSequence == reminder.Sequence).ProfileId);
+        return;
+
         WarningSnapshot Evaluate(int seconds, double astral = 6.5, double psu = 6.4, double wire = 6.2)
         {
             var snapshot = Frame(seconds, astral, psu, wire);
@@ -57,21 +74,6 @@ internal static class DeviceWarningProfileTests
             return warnings.Evaluate(result.Snapshot, configuration, snapshot.Timestamp, result.Warnings,
                 observation => observation.PluginId != "asus-astral" && observation.TypeId != ActiveSettingsProfile.WireViewProfileOvercurrent);
         }
-
-        var first = Evaluate(0);
-        TestAssert.Equal(1, first.States.Length);
-        TestAssert.Equal(null, first.States.Single().ProfileId);
-        var active = Evaluate(3);
-        TestAssert.Equal(4, active.States.Count(state => state.Phase == WarningPhase.Active));
-        TestAssert.True(active.States.Any(state => state.ProfileId == Astral.Id && state.Title.StartsWith("ROG Astral")), "Astral warning source");
-        TestAssert.True(active.States.Any(state => state.ProfileId == Msi.Id && state.Title.StartsWith("MSI PSU connector 2")), "PSU connector warning source");
-        TestAssert.True(active.States.Any(state => state.ProfileId == wireView.Id && state.Title.StartsWith("WireView Pro 2")), "WireView warning source");
-
-        var recovered = Evaluate(5, psu: 1);
-        TestAssert.Equal(WarningPhase.Recovering, recovered.States.Single(state => state.ProfileId == Msi.Id).Phase);
-        var reminder = Evaluate(8, psu: 1);
-        TestAssert.False(reminder.States.Any(state => state.ProfileId == Msi.Id), "The other PSU connector must not keep the profile active.");
-        TestAssert.Equal(wireView.Id, reminder.States.Single(state => state.NotificationSequence == reminder.Sequence).ProfileId);
     }
 
     private static void Uses5080ActivationAndRequiresFreshSustainedSamples()
@@ -79,7 +81,6 @@ internal static class DeviceWarningProfileTests
         var evaluator = new DeviceWarningEvaluator();
         var configuration = Configuration();
         var start = Frame(0, 5, 0, 0, lowAstral: 4);
-        DeviceWarningEvaluation Evaluate(SensorSnapshot snapshot) => evaluator.Evaluate(snapshot, configuration, [Astral], SettingsProfile.Rtx5080);
 
         TestAssert.False(Evaluate(start).Warnings.Any(item => item.Observation.Active), "The initial sample must not trigger a warning.");
         TestAssert.False(Evaluate(start with { Timestamp = start.Timestamp.AddSeconds(3) }).Warnings.Any(item => item.Observation.Active),
@@ -89,6 +90,9 @@ internal static class DeviceWarningProfileTests
 
         var stale = Evaluate(Frame(3, 5, 0, 0, lowAstral: 4) with { Timestamp = start.Timestamp.AddSeconds(30) });
         TestAssert.False(stale.Warnings.Any(item => item.Observation.Available), "Stale samples must not sustain warnings.");
+        return;
+
+        DeviceWarningEvaluation Evaluate(SensorSnapshot snapshot) => evaluator.Evaluate(snapshot, configuration, [Astral], SettingsProfile.Rtx5080);
     }
 
     private static void ShutdownRequiresContinuousWarningAndSurvivesReboot()
@@ -102,18 +106,6 @@ internal static class DeviceWarningProfileTests
         var evaluator = new DeviceWarningEvaluator();
         var configuration = Configuration();
         var profile = Msi with { ShutdownAfterSeconds = 2 };
-
-        void Evaluate(int seconds, double current, bool useNewSample = true)
-        {
-            var frame = Frame(seconds, 0, current, 0);
-            if (!useNewSample)
-            {
-                frame = frame with { Sensors = [.. frame.Sensors.Select(sensor => sensor with { ObservedAt = frame.Timestamp.AddSeconds(-2) })] };
-            }
-
-            var result = evaluator.Evaluate(frame, configuration, [profile], SettingsProfile.Rtx5080);
-            coordinator.Evaluate(result.Shutdowns);
-        }
 
         try
         {
@@ -149,6 +141,20 @@ internal static class DeviceWarningProfileTests
             {
                 Directory.Delete(path);
             }
+        }
+
+        return;
+
+        void Evaluate(int seconds, double current, bool useNewSample = true)
+        {
+            var frame = Frame(seconds, 0, current, 0);
+            if (!useNewSample)
+            {
+                frame = frame with { Sensors = [.. frame.Sensors.Select(sensor => sensor with { ObservedAt = frame.Timestamp.AddSeconds(-2) })] };
+            }
+
+            var result = evaluator.Evaluate(frame, configuration, [profile], SettingsProfile.Rtx5080);
+            coordinator.Evaluate(result.Shutdowns);
         }
     }
 

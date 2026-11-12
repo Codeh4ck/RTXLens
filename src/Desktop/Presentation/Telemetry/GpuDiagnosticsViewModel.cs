@@ -9,8 +9,11 @@ namespace RTXLens.Presentation.Telemetry;
 public sealed class GpuDiagnosticsViewModel : ObservableObject
 {
     private const string Unavailable = "Unavailable";
-    private static readonly NvidiaClockReason[] ClockReasons = Enum.GetValues<NvidiaClockReason>()
-        .Where(reason => reason != NvidiaClockReason.None).ToArray();
+    private static readonly NvidiaClockReason[] ClockReasons =
+    [
+        .. Enum.GetValues<NvidiaClockReason>()
+            .Where(reason => reason != NvidiaClockReason.None)
+    ];
     private static readonly NvidiaClockReason[] TimedReasons =
     [
         NvidiaClockReason.SoftwarePowerCap,

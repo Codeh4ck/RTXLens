@@ -2,8 +2,8 @@
   "author": "Nikolas Andreou",
   "id": "com.nikolasandreou.rtx5090monitor",
   "name": "RTX Lens",
-  "description": "Read-only WireView Pro 2, ROG Astral and MSI MPG Ai1300TS/Ai1600TS telemetry. Configure the monitoring service in the RTX Lens desktop app.",
-  "version": "1.0.9",
+  "description": "Read-only WireView Pro II, ROG Astral and MSI MPG Ai1300TS/Ai1600TS telemetry. Configure the monitoring service in the RTX Lens desktop app.",
+  "version": "1.1.0",
   "preview_icon": "resources/icon.svg",
   "min_framework_version": "1.0.0",
   "os": [

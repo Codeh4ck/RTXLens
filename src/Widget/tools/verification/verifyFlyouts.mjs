@@ -46,7 +46,7 @@ export async function verifyFlyouts(page, base, properties, setTransform, reques
         await page.locator('.configuration-notice').waitFor();
         assert.equal(await page.locator('.widget-flyout').getAttribute('data-mode'), 'configuration');
         assert.ok(requests.filter(request => request.url.endsWith('/configuration')).length > before, 'Double tap fetches current settings');
-        assert.match(await page.locator('.flyout-body').innerText(), /ROG Astral[\s\S]*WireView Pro 2[\s\S]*MSI MPG PSU/);
+        assert.match(await page.locator('.flyout-body').innerText(), /ROG Astral[\s\S]*WireView Pro II[\s\S]*MSI MPG PSU/);
         assert.match(await page.locator('.flyout-body').innerText(), /Per-pin overcurrent \(A\)[\s\S]*9.2/);
         assert.equal(await page.locator('.widget-flyout input,.widget-flyout select,.widget-flyout textarea').count(), 0);
         const bounds = await page.locator('.widget-flyout').boundingBox();

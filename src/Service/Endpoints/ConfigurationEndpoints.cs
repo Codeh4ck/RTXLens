@@ -18,6 +18,30 @@ internal static class ConfigurationEndpoints
             return Results.Json(profiles.Catalog(), AppJsonContext.Default.SettingsProfileCatalog);
         }).AddEndpointFilter<ApiExceptionFilter>();
 
+        endpoints.MapPut("/settings-profiles/{id}", (string id, SettingsProfile settings, HttpContext context,
+            SettingsProfileStore store, SettingsProfileResolver profiles) =>
+        {
+            if (!WarningProfileEndpoints.IsLocalClient(context.Request))
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+
+            store.Update(id, settings);
+            return Results.Json(profiles.Catalog(), AppJsonContext.Default.SettingsProfileCatalog);
+        }).AddEndpointFilter<ApiExceptionFilter>();
+
+        endpoints.MapDelete("/settings-profiles/{id}", (string id, HttpContext context,
+            SettingsProfileStore store, SettingsProfileResolver profiles) =>
+        {
+            if (!WarningProfileEndpoints.IsLocalClient(context.Request))
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+
+            store.Delete(id);
+            return Results.Json(profiles.Catalog(), AppJsonContext.Default.SettingsProfileCatalog);
+        }).AddEndpointFilter<ApiExceptionFilter>();
+
         endpoints.MapGet("/configuration", (HttpContext context, IRuntimeConfiguration configuration) => ConfigurationPrecondition.Respond(context, configuration.Current));
 
         endpoints.MapPut("/configuration",

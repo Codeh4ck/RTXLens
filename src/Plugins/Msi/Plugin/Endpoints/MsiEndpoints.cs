@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Routing;
 using RTXLens.Core.Http;
 using RTXLens.Core.Plugins;
 using RTXLens.Plugins.Msi.Serialization;
+using RTXLens.Plugins.Msi.Device;
+using RTXLens.Plugins.Msi.Contracts.Devices;
 
 namespace RTXLens.Plugins.Msi.Endpoints;
 
@@ -27,7 +29,16 @@ public static class MsiEndpoints
 
         group.MapGet("/devices", async (PluginRuntimeManager runtime, CancellationToken token) =>
         {
-            var devices = await runtime.ExecuteAsync(MsiPlugin.PluginId, plugin => ((MsiPlugin)plugin).Devices, token);
+            MsiDeviceInfo[] devices;
+            try
+            {
+                devices = await runtime.ExecuteAsync(MsiPlugin.PluginId, plugin => ((MsiPlugin)plugin).Devices, token);
+            }
+            catch (PluginUnavailableException)
+            {
+                devices = await Task.Run(MsiPsuReader.DiscoverDevices, token);
+            }
+
             return Results.Json(devices, MsiJsonContext.Default.MsiDeviceInfoArray);
         });
     }

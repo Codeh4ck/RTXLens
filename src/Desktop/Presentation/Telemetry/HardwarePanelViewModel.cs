@@ -194,7 +194,14 @@ public sealed class HardwarePanelViewModel : ObservableObject
     public HardwarePanelViewModel(PluginInfo plugin)
     {
         Id = plugin.Id;
-        Name = Id switch { "wireview-pro2" => "WireView", "asus-astral" => "ROG Astral", "msi-psu" => "MSI PSU", "generic-nvidia" => "GPU status", _ => plugin.Name };
+        Name = Id switch
+        {
+            "wireview-pro2" => "WireView Pro II",
+            "asus-astral" => "ROG Astral",
+            "msi-psu" => "MSI PSU",
+            "generic-nvidia" => "GPU Status",
+            _ => plugin.Name
+        };
         _capabilities = plugin.Capabilities;
         Enabled = plugin.Enabled;
         State = plugin.State.ToString();
