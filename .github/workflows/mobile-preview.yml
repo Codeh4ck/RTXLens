@@ -97,10 +97,13 @@ jobs:
       - run: npm ci
       - run: npm run typecheck && npm test
 
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+
       - name: Generate and build the Android app
         shell: bash
         run: |
-          sdkmanager 'platforms;android-37'
           npx --no-install expo prebuild --platform android --clean --no-install
           cd android
           ./gradlew :app:assembleRelease --no-daemon
