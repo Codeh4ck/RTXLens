@@ -203,6 +203,7 @@ internal static class AvaloniaDashboardTests
             Dispatcher.UIThread.RunJobs();
             var requested = window.GetVisualDescendants().OfType<MetricDisplay>().Single(item => item.Label == "Requested fan duty");
             TestAssert.Equal("25 %", requested.Value);
+            AssertReadoutRow();
             var scroll = window.GetVisualDescendants().OfType<ScrollViewer>().Single(viewer => viewer.Name == "CurvePointScroll");
             TestAssert.True(scroll.Extent.Height > scroll.Viewport.Height, "Only the point list should scroll at the minimum window height.");
             var done = window.GetVisualDescendants().OfType<Button>().Single(button => AutomationProperties.GetName(button) == "Done");
@@ -255,23 +256,7 @@ internal static class AvaloniaDashboardTests
             window.Height = defaultHeight;
             Dispatcher.UIThread.RunJobs();
 
-            var readouts = window.GetVisualDescendants().OfType<MetricDisplay>().ToArray();
-            TestAssert.Equal(3, readouts.Length);
-            var firstReadoutY = readouts[0].TranslatePoint(default, window)!.Value.Y;
-            var labels = readouts.Select(readout => readout.GetVisualDescendants().OfType<TextBlock>()
-                .Single(label => label.Text == readout.Label)).ToArray();
-            foreach (var readout in readouts)
-            {
-                TestAssert.Equal(firstReadoutY, readout.TranslatePoint(default, window)!.Value.Y);
-            }
-
-            foreach (var label in labels)
-            {
-                var singleLine = new TextBlock { Text = label.Text, FontFamily = label.FontFamily, FontSize = label.FontSize };
-                singleLine.Measure(Size.Infinity);
-                TestAssert.True(label.Bounds.Height <= singleLine.DesiredSize.Height + 1, $"'{label.Text}' should fit on one line.");
-            }
-
+            AssertReadoutRow();
             AvaloniaControlsTests.Capture(window, screenshotDirectory, "fan-curve.png");
             cancel.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             TestAssert.True(!window.IsVisible, "Cancel should close the curve editor.");
@@ -283,6 +268,29 @@ internal static class AvaloniaDashboardTests
             {
                 window.Close();
             }
+        }
+
+        void AssertReadoutRow()
+        {
+            var readouts = window.GetVisualDescendants().OfType<MetricDisplay>().ToArray();
+            TestAssert.Equal(3, readouts.Length);
+            var firstReadoutY = readouts[0].TranslatePoint(default, window)!.Value.Y;
+            var rightEdge = 0d;
+
+            foreach (var readout in readouts)
+            {
+                var position = readout.TranslatePoint(default, window)!.Value;
+                TestAssert.Equal(firstReadoutY, position.Y);
+                TestAssert.True(position.X >= rightEdge, "Readout cards should appear next to each other.");
+                rightEdge = position.X + readout.Bounds.Width;
+
+                var label = readout.GetVisualDescendants().OfType<TextBlock>().Single(item => item.Text == readout.Label);
+                var singleLine = new TextBlock { Text = label.Text, FontFamily = label.FontFamily, FontSize = label.FontSize };
+                singleLine.Measure(Size.Infinity);
+                TestAssert.True(label.Bounds.Height <= singleLine.DesiredSize.Height + 1, $"'{label.Text}' should fit on one line.");
+            }
+
+            TestAssert.True(rightEdge <= window.ClientSize.Width, "The readout row should fit inside the window.");
         }
 
         var applyWindow = new FanCurveWindow(editor, shell);

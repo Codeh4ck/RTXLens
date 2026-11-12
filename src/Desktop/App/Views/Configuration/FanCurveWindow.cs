@@ -127,19 +127,6 @@ internal sealed class FanCurveWindow : LensWindow
         var readingDuty = false;
         MsiSnapshot? liveSnapshot = null;
         var live = shell.Dashboard.Panels.FirstOrDefault(panel => panel.IsMsi)?.Msi;
-        if (live is not null)
-        {
-            var readings = AdaptiveCards(width => width >= 780 ? 3 : width >= 540 ? 2 : 1,
-                Hardware.HardwarePage.Readout(live.Temperature), Hardware.HardwarePage.Readout(live.FanSpeed), requestedReadout);
-            left.Children.Add(readings);
-            live.Temperature.PropertyChanged += LiveChanged;
-            live.FanDuty.PropertyChanged += LiveChanged;
-        }
-        else
-        {
-            left.Children.Add(requestedReadout);
-        }
-
         var chartPanel = new SectionPanel { Header = "Temperature / fan duty", Content = left };
         var chartColumn = new Grid
         {
@@ -152,6 +139,29 @@ internal sealed class FanCurveWindow : LensWindow
         columns.ColumnDefinitions[0].Width = new GridLength(2.2, GridUnitType.Star);
         columns.ColumnDefinitions[1].MinWidth = 340;
         columns.Margin = new Thickness(20);
+
+        if (live is not null)
+        {
+            var readings = Columns(Hardware.HardwarePage.Readout(live.Temperature), Hardware.HardwarePage.Readout(live.FanSpeed),
+                requestedReadout);
+            readings.ColumnDefinitions[1].Width = new GridLength(0.85, GridUnitType.Star);
+            readings.ColumnDefinitions[2].Width = new GridLength(1.15, GridUnitType.Star);
+
+            columns.RowDefinitions = new RowDefinitions("Auto,*");
+            columns.RowSpacing = 12;
+            Grid.SetColumnSpan(readings, 2);
+            Grid.SetRow(chartColumn, 1);
+            Grid.SetRow(right, 1);
+            columns.Children.Add(readings);
+
+            live.Temperature.PropertyChanged += LiveChanged;
+            live.FanDuty.PropertyChanged += LiveChanged;
+        }
+        else
+        {
+            left.Children.Add(requestedReadout);
+        }
+
         Body = columns;
 
         var synchronizing = false;
