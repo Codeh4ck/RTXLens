@@ -11,10 +11,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: mobile-preview-${{ github.ref }}
-  cancel-in-progress: true
-
 env:
   CI: '1'
 
@@ -23,6 +19,9 @@ jobs:
     name: iPhone IPA for AltStore
     runs-on: macos-26
     timeout-minutes: 40
+    concurrency:
+      group: mobile-preview-ios-${{ github.ref }}
+      cancel-in-progress: true
     defaults:
       run:
         working-directory: src/Mobile
@@ -75,6 +74,9 @@ jobs:
     name: Android test APK
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    concurrency:
+      group: mobile-preview-android-${{ github.ref }}
+      cancel-in-progress: true
     defaults:
       run:
         working-directory: src/Mobile
