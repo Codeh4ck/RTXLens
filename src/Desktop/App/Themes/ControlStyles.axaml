@@ -1,0 +1,232 @@
+<Styles xmlns="https://github.com/avaloniaui" xmlns:controls="using:RTXLens.App.Controls"
+        xmlns:charts="using:RTXLens.App.Controls.Charts">
+    <Style Selector="Window">
+        <Setter Property="Background" Value="{DynamicResource WindowBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+        <Setter Property="FontFamily" Value="Segoe UI" />
+        <Setter Property="FontSize" Value="{DynamicResource DesktopFontSize}" />
+    </Style>
+
+    <Style Selector="TextBlock.heading">
+        <Setter Property="FontSize" Value="{DynamicResource DesktopHeadingFontSize}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style Selector="TextBlock.caption">
+        <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+        <Setter Property="FontSize" Value="{DynamicResource DesktopCaptionFontSize}" />
+    </Style>
+
+    <Style Selector="TextBlock.unreported-reading">
+        <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+    </Style>
+
+    <Style Selector="FlyoutPresenter.boost-details">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="MaxWidth" Value="480" />
+    </Style>
+
+    <Style Selector="Border.panel-frame">
+        <Setter Property="Background" Value="{DynamicResource PanelBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+    </Style>
+
+    <Style Selector="Border.icon-surface">
+        <Setter Property="Background" Value="{DynamicResource IconSurfaceBrush}" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Padding" Value="5" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector="Button">
+        <Setter Property="Theme" Value="{StaticResource HudButtonTheme}" />
+    </Style>
+
+    <Style Selector="Button > StackPanel.button-content">
+        <Setter Property="Orientation" Value="Horizontal" />
+        <Setter Property="Spacing" Value="7" />
+    </Style>
+
+    <Style Selector="StackPanel.button-content > Image, StackPanel.button-content > PathIcon, StackPanel.button-content > TextBlock">
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector="ToggleSwitch /template/ Ellipse#SwitchKnobOn, ToggleSwitch /template/ Ellipse#SwitchKnobOff">
+        <!-- Preserve the track center when the knob and track round to different pixel widths. -->
+        <Setter Property="UseLayoutRounding" Value="False" />
+    </Style>
+
+    <Style Selector="ToggleSwitch /template/ Border#OuterBorder">
+        <Setter Property="Background" Value="{DynamicResource InsetBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}" />
+    </Style>
+
+    <Style Selector="ToggleSwitch /template/ Border#SwitchKnobBounds">
+        <Setter Property="Background" Value="{DynamicResource TrackBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />
+    </Style>
+
+    <Style Selector="ToggleSwitch /template/ Ellipse#SwitchKnobOff">
+        <Setter Property="Fill" Value="{DynamicResource TextBrush}" />
+    </Style>
+
+    <Style Selector="ToggleSwitch /template/ Ellipse#SwitchKnobOn">
+        <Setter Property="Fill" Value="{DynamicResource PrimaryBrush}" />
+    </Style>
+
+    <Style Selector="Expander">
+        <Setter Property="Background" Value="{DynamicResource PanelBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}" />
+        <Setter Property="MinHeight" Value="36" />
+        <Setter Property="Padding" Value="10" />
+    </Style>
+
+    <Style Selector="Expander /template/ ToggleButton#ExpanderHeader">
+        <Setter Property="Background" Value="{DynamicResource PanelBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}" />
+    </Style>
+
+    <Style Selector="Expander /template/ ToggleButton#ExpanderHeader:pointerover /template/ Border#ToggleButtonBackground,
+                     Expander /template/ ToggleButton#ExpanderHeader:focus-visible /template/ Border#ToggleButtonBackground">
+        <Setter Property="Background" Value="{DynamicResource TrackBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />
+    </Style>
+
+    <Style Selector="Expander /template/ ToggleButton#ExpanderHeader:pressed /template/ Border#ToggleButtonBackground">
+        <Setter Property="Background" Value="{DynamicResource InsetBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />
+    </Style>
+
+    <Style Selector="Expander /template/ ToggleButton#ExpanderHeader /template/ Border#ExpandCollapseChevronBorder">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+
+    <Style Selector="Expander /template/ ToggleButton#ExpanderHeader /template/ Path#ExpandCollapseChevron">
+        <Setter Property="Stroke" Value="{DynamicResource IconBrush}" />
+    </Style>
+
+    <Style Selector="Border.event-header">
+        <Setter Property="Background" Value="{DynamicResource InsetBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+
+    <Style Selector="ListBox.event-rows">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="ItemContainerTheme" Value="{StaticResource EventRowTheme}" />
+    </Style>
+
+    <Style Selector="TextBox, ComboBox, NumericUpDown">
+        <Setter Property="CornerRadius" Value="5" />
+    </Style>
+
+    <Style Selector="TextBox.profile-name:focus /template/ Border#PART_BorderElement">
+        <Setter Property="Background" Value="{DynamicResource TextControlBackground}" />
+    </Style>
+
+    <Style Selector="TextBlock.guide-step">
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style Selector="TextBox[AcceptsReturn=true]">
+        <Setter Property="VerticalContentAlignment" Value="Top" />
+        <Setter Property="LineHeight" Value="20" />
+    </Style>
+
+    <Style Selector="NumericUpDown /template/ TextBox#PART_TextBox">
+        <Setter Property="Margin" Value="0" />
+    </Style>
+
+    <Style Selector="NumericUpDown /template/ TextBox#PART_TextBox /template/ Border#PART_BorderElement">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
+    <Style Selector="NumericUpDown.curve-point /template/ ButtonSpinner /template/ RepeatButton">
+        <Setter Property="MinWidth" Value="23" />
+        <Setter Property="Width" Value="23" />
+        <Setter Property="Padding" Value="0" />
+    </Style>
+
+    <Style Selector="NumericUpDown.curve-point /template/ TextBox#PART_TextBox">
+        <Setter Property="Padding" Value="6,0" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector="NumericUpDown:focus-within /template/ ButtonSpinner#PART_Spinner">
+        <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />
+    </Style>
+
+    <Style Selector="NumericUpDown /template/ ButtonSpinner /template/ RepeatButton">
+        <Style Selector="^:not(:pointerover):not(:pressed) /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource HudHoverSurfaceBrush}" />
+        </Style>
+        <Style Selector="^:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource HudPressedSurfaceBrush}" />
+        </Style>
+        <Style Selector="^:disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+    </Style>
+
+    <Style Selector="NumericUpDown /template/ ButtonSpinner:not(:left) /template/ RepeatButton#PART_DecreaseButton">
+        <Style Selector="^ /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="CornerRadius" Value="0,4,3,0" />
+        </Style>
+    </Style>
+
+    <Style Selector="NumericUpDown /template/ ButtonSpinner:left /template/ RepeatButton#PART_IncreaseButton">
+        <Style Selector="^ /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="CornerRadius" Value="4,0,0,3" />
+        </Style>
+    </Style>
+
+    <Style Selector="NumericUpDown /template/ ButtonSpinner /template/ RepeatButton PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource IconBrush}" />
+    </Style>
+
+    <Style Selector="CheckBox /template/ Border#NormalRectangle">
+        <Setter Property="CornerRadius" Value="5" />
+    </Style>
+
+    <Style Selector="RadioButton /template/ Ellipse#CheckGlyph">
+        <Setter Property="Width" Value="10" />
+        <Setter Property="Height" Value="10" />
+    </Style>
+
+    <Style Selector=":is(charts|XyPlot)">
+        <Setter Property="AxisBrush" Value="{DynamicResource MutedTextBrush}" />
+        <Setter Property="GridBrush" Value="{DynamicResource PanelBorderBrush}" />
+        <Setter Property="AccentBrush" Value="{DynamicResource PrimaryBrush}" />
+        <Setter Property="PlotBackground" Value="{DynamicResource InsetBrush}" />
+        <Setter Property="ReadoutBackground" Value="{DynamicResource PanelBrush}" />
+        <Setter Property="ReadoutForeground" Value="{DynamicResource TextBrush}" />
+    </Style>
+
+    <Style Selector="controls|PinTrack">
+        <Setter Property="TrackBrush" Value="{DynamicResource TrackBrush}" />
+        <Setter Property="FillBrush" Value="{DynamicResource PrimaryBrush}" />
+        <Setter Property="PeakBrush" Value="{DynamicResource TertiaryBrush}" />
+        <Setter Property="BaselineBrush" Value="{DynamicResource SecondaryBrush}" />
+    </Style>
+
+    <Style Selector="controls|PinTrack.warning">
+        <Setter Property="FillBrush" Value="{DynamicResource WarningBrush}" />
+    </Style>
+
+    <Style Selector="controls|PinTrack.error">
+        <Setter Property="FillBrush" Value="{DynamicResource ErrorBrush}" />
+    </Style>
+</Styles>

@@ -8,7 +8,7 @@ namespace RTXLens.Core;
 
 public sealed class ConnectorProfileResolver(IEnumerable<IConnectorSourceProvider> providers)
 {
-    private readonly IConnectorSourceProvider[] _providers = providers.ToArray();
+    private readonly IConnectorSourceProvider[] _providers = [.. providers];
 
     public ConnectorProfiles CreateDefaults()
     {

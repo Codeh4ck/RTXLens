@@ -86,7 +86,7 @@ public static class AfterburnerDiscovery
             }
         }
 
-        return installations.DistinctBy(item => item.Directory, StringComparer.OrdinalIgnoreCase).ToArray();
+        return [.. installations.DistinctBy(item => item.Directory, StringComparer.OrdinalIgnoreCase)];
     }
 
     public static AfterburnerInstallation Inspect(string directory)
@@ -112,9 +112,12 @@ public static class AfterburnerDiscovery
         return new(directory, version.FileVersion ?? "Unknown", File.Exists(plugin), config);
     }
 
+    public static bool IsSupportedVersion(string fileVersion) =>
+        Version.TryParse(fileVersion, out var version) && version >= new Version(4, 6, 7);
+
     public static void RequireSupported(AfterburnerInstallation installation, bool requireFiles = true)
     {
-        if (!Version.TryParse(installation.Version, out var version) || version < new Version(4, 6, 7))
+        if (!IsSupportedVersion(installation.Version))
         {
             throw new InvalidOperationException("Safeguard+ configuration requires Afterburner 4.6.7 or newer.");
         }

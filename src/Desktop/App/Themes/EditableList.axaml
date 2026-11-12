@@ -1,0 +1,83 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:controls="using:RTXLens.App.Controls">
+    <StreamGeometry x:Key="ListAddIcon">M 7,1 H 9 V 7 H 15 V 9 H 9 V 15 H 7 V 9 H 1 V 7 H 7 Z</StreamGeometry>
+    <StreamGeometry x:Key="ListMoveUpIcon">M 7,4 L 3,8 L 1.6,6.6 L 8,0.2 L 14.4,6.6 L 13,8 L 9,4 V 15 H 7 Z</StreamGeometry>
+    <StreamGeometry x:Key="ListMoveDownIcon">M 7,1 H 9 V 12 L 13,8 L 14.4,9.4 L 8,15.8 L 1.6,9.4 L 3,8 L 7,12 Z</StreamGeometry>
+    <StreamGeometry x:Key="ListRemoveIcon">
+        F0 M 6,1 H 10 V 3 H 14 V 4.5 H 2 V 3 H 6 Z
+        M 3.5,5.5 H 12.5 L 12,15 H 4 Z M 5.1,7 L 5.4,13.5 H 10.6 L 10.9,7 Z
+        M 6.5,8 H 7.5 V 12.5 H 6.5 Z M 8.5,8 H 9.5 V 12.5 H 8.5 Z
+    </StreamGeometry>
+
+    <ControlTheme x:Key="EditableListItemTheme" TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+        <Setter Property="Padding" Value="10,7" />
+        <Setter Property="Margin" Value="0,0,0,2" />
+        <Setter Property="CornerRadius" Value="4" />
+
+        <Style Selector="^:selected /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource HudAccentSurfaceBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />
+            <Setter Property="BorderThickness" Value="2,0,0,0" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="{x:Type controls:EditableList}" TargetType="controls:EditableList">
+        <Setter Property="MaxHeight" Value="256" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid ColumnDefinitions="*,Auto">
+                    <ListBox Name="PART_List"
+                             ItemsSource="{TemplateBinding ItemsSource}"
+                             ItemTemplate="{TemplateBinding ItemTemplate}"
+                             SelectedItem="{TemplateBinding SelectedItem, Mode=TwoWay}"
+                             ItemContainerTheme="{StaticResource EditableListItemTheme}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             Background="{DynamicResource InsetBrush}"
+                             BorderBrush="{DynamicResource PanelBorderBrush}"
+                             BorderThickness="1" CornerRadius="6" Padding="4" />
+
+                    <StackPanel Grid.Column="1" Spacing="6" VerticalAlignment="Top">
+                        <Button Name="PART_Add" IsVisible="{TemplateBinding ShowAddButton}" Command="{TemplateBinding AddCommand}"
+                                AutomationProperties.Name="Add item" ToolTip.Tip="Add item"
+                                IsEnabled="{TemplateBinding AddCommand, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <PathIcon Data="{StaticResource ListAddIcon}" />
+                        </Button>
+                        <Button Name="PART_MoveUp" IsVisible="{TemplateBinding ShowMoveUpButton}" Command="{TemplateBinding MoveUpCommand}"
+                                AutomationProperties.Name="Move up" ToolTip.Tip="Move up"
+                                CommandParameter="{TemplateBinding SelectedItem}"
+                                IsEnabled="{TemplateBinding MoveUpCommand, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <PathIcon Data="{StaticResource ListMoveUpIcon}" />
+                        </Button>
+                        <Button Name="PART_MoveDown" IsVisible="{TemplateBinding ShowMoveDownButton}"
+                                AutomationProperties.Name="Move down" ToolTip.Tip="Move down"
+                                Command="{TemplateBinding MoveDownCommand}" CommandParameter="{TemplateBinding SelectedItem}"
+                                IsEnabled="{TemplateBinding MoveDownCommand, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <PathIcon Data="{StaticResource ListMoveDownIcon}" />
+                        </Button>
+                        <Button Name="PART_Remove" IsVisible="{TemplateBinding ShowRemoveButton}" Command="{TemplateBinding RemoveCommand}"
+                                AutomationProperties.Name="Remove item" ToolTip.Tip="Remove item"
+                                CommandParameter="{TemplateBinding SelectedItem}"
+                                IsEnabled="{TemplateBinding RemoveCommand, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <PathIcon Data="{StaticResource ListRemoveIcon}" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^ /template/ Button">
+            <Setter Property="Width" Value="36" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Margin" Value="8,0,0,0" />
+            <Setter Property="Padding" Value="0" />
+        </Style>
+
+        <Style Selector="^ /template/ Button > PathIcon">
+            <Setter Property="Width" Value="15" />
+            <Setter Property="Height" Value="15" />
+            <Setter Property="Foreground" Value="{DynamicResource IconBrush}" />
+        </Style>
+    </ControlTheme>
+</ResourceDictionary>

@@ -1,0 +1,100 @@
+<views:LensWindow xmlns="https://github.com/avaloniaui"
+        xmlns:views="using:RTXLens.App.Views.Shell"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:RTXLens.App.Controls"
+        xmlns:charts="using:RTXLens.App.Controls.Charts"
+        x:Class="RTXLens.App.Views.Preview.ChartsPreviewWindow"
+        Title="RTX Lens - Chart controls"
+        Icon="/Assets/monitor.ico"
+        Width="1120" Height="860" MinWidth="800" MinHeight="540">
+    <Window.Styles>
+        <Style Selector="PathIcon.chart-action-icon">
+            <Setter Property="Width" Value="13" />
+            <Setter Property="Height" Value="13" />
+            <Setter Property="Foreground" Value="{DynamicResource IconBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </Window.Styles>
+
+    <views:LensWindow.Body>
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="24" Spacing="16">
+                <Grid ColumnDefinitions="4,*" ColumnSpacing="12">
+                    <Border Background="{DynamicResource PrimaryBrush}" CornerRadius="2" />
+                    <StackPanel Grid.Column="1" Spacing="2">
+                        <TextBlock Classes="heading" Text="Chart controls" />
+                        <TextBlock Classes="caption" Text="Sample data" />
+                    </StackPanel>
+                </Grid>
+
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
+                    <controls:SectionPanel Header="PSU fan curve">
+                        <StackPanel Spacing="6">
+                            <charts:SimpleCurveControl Name="FanCurve" Height="250"
+                                                       AutomationProperties.Name="PSU temperature and fan duty curve" />
+                            <TextBlock Classes="caption" Text="Solid marker: reported duty. Open marker: requested duty." TextWrapping="Wrap" />
+                            <TextBlock Classes="caption" Text="Drag a point or double-click the plot to add one." TextWrapping="Wrap" />
+                        </StackPanel>
+                    </controls:SectionPanel>
+
+                    <controls:SectionPanel Grid.Column="1" Header="GPU voltage / frequency curve">
+                        <StackPanel Spacing="6">
+                            <charts:SimpleCurveControl Name="VoltageFrequencyCurve" Height="250"
+                                                  AutomationProperties.Name="GPU voltage and frequency curve" />
+                            <TextBlock Classes="caption" Text="Voltage points are fixed. Drag a point vertically to change its frequency."
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </controls:SectionPanel>
+                </Grid>
+
+                <controls:SectionPanel Header="Performance Chart">
+                    <StackPanel Spacing="10">
+                        <WrapPanel ItemSpacing="8" LineSpacing="8">
+                            <Button Click="ShowStart" ToolTip.Tip="Go to start">
+                                <StackPanel Classes="button-content">
+                                    <PathIcon Classes="chart-action-icon" Data="M 2,2 H 4 V 14 H 2 Z M 13,2 L 5,8 L 13,14 Z" />
+                                    <TextBlock Text="Start" />
+                                </StackPanel>
+                            </Button>
+                            <Button Click="ShowEnd" ToolTip.Tip="Go to end">
+                                <StackPanel Classes="button-content">
+                                    <PathIcon Classes="chart-action-icon" Data="M 12,2 H 14 V 14 H 12 Z M 3,2 L 11,8 L 3,14 Z" />
+                                    <TextBlock Text="End" />
+                                </StackPanel>
+                            </Button>
+                            <Button Click="ZoomIn">
+                                <StackPanel Classes="button-content">
+                                    <PathIcon Classes="chart-action-icon" Data="M 7,2 H 9 V 7 H 14 V 9 H 9 V 14 H 7 V 9 H 2 V 7 H 7 Z" />
+                                    <TextBlock Text="Zoom in" />
+                                </StackPanel>
+                            </Button>
+                            <Button Click="ZoomOut">
+                                <StackPanel Classes="button-content">
+                                    <PathIcon Classes="chart-action-icon" Data="M 2,7 H 14 V 9 H 2 Z" />
+                                    <TextBlock Text="Zoom out" />
+                                </StackPanel>
+                            </Button>
+                            <Button Click="Fit">
+                                <StackPanel Classes="button-content">
+                                    <PathIcon Classes="chart-action-icon"
+                                              Data="M 1,6 V 1 H 6 V 3 H 3 V 6 Z M 10,1 H 15 V 6 H 13 V 3 H 10 Z
+                                                    M 1,10 H 3 V 13 H 6 V 15 H 1 Z M 13,10 H 15 V 15 H 10 V 13 H 13 Z" />
+                                    <TextBlock Text="Fit session" />
+                                </StackPanel>
+                            </Button>
+                            <ToggleSwitch Margin="4,0,0,0" OnContent="Follow latest" OffContent="Follow latest"
+                                          IsChecked="{Binding #PerformancePlot.FollowLatest, Mode=TwoWay}" />
+                            <ToggleSwitch OnContent="Legend values" OffContent="Legend values"
+                                          IsChecked="{Binding #PerformancePlot.ShowLegendValues, Mode=TwoWay}" />
+                        </WrapPanel>
+
+                        <charts:XyLineChart Name="PerformancePlot" Height="224"
+                                            AutomationProperties.Name="Connector current over elapsed time" />
+                        <TextBlock Classes="caption"
+                                   Text="Drag to pan. Ctrl + wheel zooms. Hover over the chart to inspect readings." TextWrapping="Wrap" />
+                    </StackPanel>
+                </controls:SectionPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </views:LensWindow.Body>
+</views:LensWindow>

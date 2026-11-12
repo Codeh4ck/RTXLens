@@ -340,9 +340,8 @@ internal sealed class LegacySafeguardMigration(string previous, string destinati
         var security = Directory.Exists(path) ? (FileSystemSecurity)Directory.GetAccessControl(path) : File.GetAccessControl(path);
         var administrators = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
         var system = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
-        bool Trusted(IdentityReference? identity) => Equals(identity, administrators) || Equals(identity, system);
         const FileSystemRights writes = FileSystemRights.Write | FileSystemRights.Delete | FileSystemRights.ChangePermissions
-            | FileSystemRights.TakeOwnership | FileSystemRights.DeleteSubdirectoriesAndFiles;
+                                        | FileSystemRights.TakeOwnership | FileSystemRights.DeleteSubdirectoriesAndFiles;
 
         if (!Trusted(security.GetOwner(typeof(SecurityIdentifier)))
             || security.GetAccessRules(true, true, typeof(SecurityIdentifier)).OfType<FileSystemAccessRule>()
@@ -351,6 +350,10 @@ internal sealed class LegacySafeguardMigration(string previous, string destinati
         {
             throw new UnauthorizedAccessException("An unprotected Safeguard+ record cannot be migrated: " + path);
         }
+
+        return;
+
+        bool Trusted(IdentityReference? identity) => Equals(identity, administrators) || Equals(identity, system);
     }
 
     private static string ScriptPath(string installation, string script) => Path.Combine(installation, "Service", "SafeguardScripts", script);

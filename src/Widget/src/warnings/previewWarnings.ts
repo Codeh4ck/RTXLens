@@ -6,7 +6,7 @@ export const warningOptions = [
     ['imbalance', 'Preview: current imbalance'],
     ['core', 'Preview: GPU core temperature'],
     ['memory', 'Preview: VRAM temperature'],
-    ['wireview', 'Preview: WireView device faults'],
+    ['wireview', 'Preview: WireView Pro II device faults'],
     ['offline', 'Preview: service offline'],
     ['stale', 'Preview: stale telemetry'],
     ['electrical', 'Preview: overcurrent + imbalance'],
@@ -42,7 +42,7 @@ export function previewWarnings(selection: string): WarningNotice[] {
         },
         wireview: {
             id: 'preview/wireview',
-            title: 'WireView device faults',
+            title: 'WireView Pro II device faults',
             detail: 'Overtemperature, wire overcurrent and current imbalance reported by the device.',
             icon: 'overcurrent'
         },

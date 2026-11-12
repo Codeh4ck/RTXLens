@@ -34,12 +34,12 @@ public sealed class DebugSession : ObservableObject
     private bool _batch;
     private MonitoringOptions? _monitoringOverride;
     private RTXLens.Contracts.Warnings.WarningOptions? _warningOverride;
-    private WarningEngine _warningEngine = new(Catalog.DebugWarningCatalog.Registry);
+    private WarningEngine _warningEngine = new(DebugWarningCatalog.Registry);
 
     public event Action<bool>? Changed;
 
     public string LastNotification { get; private set => Set(ref field, value); } = "No debug notifications yet.";
-    public DebugPluginViewModel[] Plugins { get; } = [new("wireview-pro2", "WireView"), new("asus-astral", "ROG Astral"), new("msi-psu", "MSI PSU"), new("generic-nvidia", "GenericNvidia")];
+    public DebugPluginViewModel[] Plugins { get; } = [new("wireview-pro2", "WireView Pro II"), new("asus-astral", "ROG Astral"), new("msi-psu", "MSI PSU"), new("generic-nvidia", "GenericNvidia")];
 
     public void ReportNotification(string title, string message) => LastNotification = "DEBUG · " + title + " · " + message;
 
@@ -56,7 +56,7 @@ public sealed class DebugSession : ObservableObject
             _wireViewConfiguration = null;
             _wireViewDeviceId = null;
             _asus.Reset();
-            _warningEngine = new WarningEngine(Catalog.DebugWarningCatalog.Registry);
+            _warningEngine = new WarningEngine(DebugWarningCatalog.Registry);
             _revision++;
             Changed?.Invoke(true);
         }
@@ -173,7 +173,7 @@ public sealed class DebugSession : ObservableObject
     public DeviceConfig ApplySimulatedWireViewConfiguration(DeviceConfig changes)
     {
         var current = GetSimulatedWireViewConfiguration()
-            ?? throw new InvalidOperationException("The simulated WireView is not available.");
+            ?? throw new InvalidOperationException("The simulated WireView Pro II is not available.");
         if (changes.EditToken != current.EditToken)
         {
             throw new InvalidOperationException("Simulated settings changed. Refresh before applying your changes.");
@@ -240,7 +240,7 @@ public sealed class DebugSession : ObservableObject
             throw new InvalidOperationException("Debug simulation is disabled.");
         }
 
-        var catalog = _liveCatalog.Plugins.Select(plugin => plugin with { Warnings = Catalog.DebugWarningCatalog.ForPlugin(plugin.Id) }).ToList();
+        var catalog = _liveCatalog.Plugins.Select(plugin => plugin with { Warnings = DebugWarningCatalog.ForPlugin(plugin.Id) }).ToList();
         var readings = _liveSnapshot?.Sensors.ToList() ?? [];
         var health = _liveSnapshot?.Plugins.ToList() ?? [];
         var alerts = _liveSnapshot?.Alerts.ToList() ?? [];
@@ -282,7 +282,7 @@ public sealed class DebugSession : ObservableObject
                 var state = plugin.Enabled ? plugin.State : PluginState.Disabled;
 
                 info = new PluginInfo(plugin.Id, plugin.Name, plugin.Enabled, state, state == PluginState.Ready ? now : null,
-                    "DEBUG simulated plugin", Capabilities(plugin.Id)) { Warnings = Catalog.DebugWarningCatalog.ForPlugin(plugin.Id) };
+                    "DEBUG simulated plugin", Capabilities(plugin.Id)) { Warnings = DebugWarningCatalog.ForPlugin(plugin.Id) };
 
                 catalog.Add(info);
                 health.Add(new PluginHealth(plugin.Id, state, state == PluginState.Ready ? now : null, info.Message));
@@ -400,7 +400,7 @@ public sealed class DebugSession : ObservableObject
 
                 var effective = readings.FirstOrDefault(reading =>
                     reading.Identity.PluginId == plugin.Id && metric.Definition.Matches(reading.Identity));
-                metric.UpdateEffective(effective?.Value, effective?.Quality.ToString() ?? "Not reported");
+                metric.UpdateEffective(effective?.Value, effective?.Quality.ToString() ?? DebugMetricViewModel.NotReported);
             }
         }
 

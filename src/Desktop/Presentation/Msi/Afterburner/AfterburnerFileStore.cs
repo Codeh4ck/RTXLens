@@ -70,7 +70,7 @@ public sealed partial class AfterburnerFileStore(string installation, string bac
             backups.AddRange(legacy.Backups().Where(item => !Directory.Exists(Path.Combine(BackupDirectory, item.Id))));
         }
 
-        return backups.OrderByDescending(item => item.CreatedAt).ToArray();
+        return [.. backups.OrderByDescending(item => item.CreatedAt)];
     }
 
     public string BackupFingerprint(string id) => Convert.ToHexString(SHA256.HashData(

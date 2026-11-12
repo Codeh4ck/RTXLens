@@ -5,6 +5,9 @@ using RTXLens.Contracts.Security;
 
 namespace RTXLens.Installer.Actions.Startup;
 
+#if !NETFRAMEWORK
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
+#endif
 internal static class ElevatedStartupTask
 {
     private const int TaskNotFound = unchecked((int)0x80070002);

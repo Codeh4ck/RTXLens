@@ -45,6 +45,24 @@ public sealed class MonitoringApiClient(HttpClient http) : IMonitoringApi
     public async Task<SettingsProfileCatalog> ApplySettingsProfileAsync(SettingsProfileRequest request, CancellationToken token)
     {
         using var response = await http.PutAsJsonAsync("settings-profiles", request, ClientJsonContext.Default.SettingsProfileRequest, token);
+        return await ReadSettingsProfilesAsync(response, token);
+    }
+
+    public async Task<SettingsProfileCatalog> UpdateSettingsProfileAsync(SettingsProfile profile, CancellationToken token)
+    {
+        using var response = await http.PutAsJsonAsync($"settings-profiles/{Uri.EscapeDataString(profile.Id)}", profile,
+            ClientJsonContext.Default.SettingsProfile, token);
+        return await ReadSettingsProfilesAsync(response, token);
+    }
+
+    public async Task<SettingsProfileCatalog> DeleteSettingsProfileAsync(string id, CancellationToken token)
+    {
+        using var response = await http.DeleteAsync($"settings-profiles/{Uri.EscapeDataString(id)}", token);
+        return await ReadSettingsProfilesAsync(response, token);
+    }
+
+    private static async Task<SettingsProfileCatalog> ReadSettingsProfilesAsync(HttpResponseMessage response, CancellationToken token)
+    {
         await EnsureSuccessAsync(response, token);
         return await response.Content.ReadFromJsonAsync(ClientJsonContext.Default.SettingsProfileCatalog, token)
             ?? throw new InvalidDataException("The service returned an empty GPU settings profile response.");
@@ -99,8 +117,11 @@ public sealed class MonitoringApiClient(HttpClient http) : IMonitoringApi
 
     public Task<AsusDeviceInfo[]> GetAsusDevicesAsync(CancellationToken token) =>
         GetAsync("plugins/asus-astral/devices", ClientJsonContext.Default.AsusDeviceInfoArray, token);
-    public Task<NvidiaDeviceInfo[]> GetNvidiaDevicesAsync(CancellationToken token) =>
-        GetAsync("plugins/generic-nvidia/devices", ClientJsonContext.Default.NvidiaDeviceInfoArray, token);
+    public Task<NvidiaDeviceInfo[]> GetNvidiaDevicesAsync(CancellationToken token) => GetNvidiaDevicesAsync(true, token);
+
+    public Task<NvidiaDeviceInfo[]> GetNvidiaDevicesAsync(bool refresh, CancellationToken token) =>
+        GetAsync(refresh ? "plugins/generic-nvidia/devices" : "plugins/generic-nvidia/devices?refresh=false",
+            ClientJsonContext.Default.NvidiaDeviceInfoArray, token);
 
     public Task<MsiDeviceInfo[]> GetMsiDevicesAsync(CancellationToken token) =>
         GetAsync("plugins/msi-psu/devices", ClientJsonContext.Default.MsiDeviceInfoArray, token);

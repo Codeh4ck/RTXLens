@@ -17,6 +17,7 @@ public sealed class MsiSettingsEditorViewModel : EditableObject
     public ObservableCollection<MsiFanCurvePointViewModel> CurvePoints { get; } = [];
     public double ResponseDelaySeconds { get => _responseDelay; set => Edit(ref _responseDelay, value); }
     public bool CanAddCurvePoint => CurvePoints.Count < 6;
+    public bool CanRemoveCurvePoint => CurvePoints.Count > 2;
     public bool IsCurve => FanModeIndex == (int)MsiFanControl.Curve;
 
     public ObservableCollection<PsuChoice> Devices { get; } = [];
@@ -74,6 +75,7 @@ public sealed class MsiSettingsEditorViewModel : EditableObject
         CurvePoints.CollectionChanged += (_, _) =>
         {
             Raise(nameof(CanAddCurvePoint));
+            Raise(nameof(CanRemoveCurvePoint));
             NotifyEdited();
         };
 
@@ -115,16 +117,16 @@ public sealed class MsiSettingsEditorViewModel : EditableObject
             DevicePath = SelectedDevice.Id,
             FanControl = (MsiFanControl)FanModeIndex,
             FanDutyPercent = NumericInput.Integer(FanDutyPercent, "MSI fan duty"),
-            FanCurve = new MsiFanCurve
-            {
-                Points = [.. CurvePoints.Select(point => point.Build())],
-                ResponseDelaySeconds = NumericInput.Integer(ResponseDelaySeconds, "Fan curve response delay")
-            }
+            FanCurve = BuildCurve()
         };
 
         options.Validate();
         return options;
     }
+
+    public MsiFanCurve BuildCurve() => new(
+        [.. CurvePoints.Select(point => point.Build())],
+        NumericInput.Integer(ResponseDelaySeconds, "Fan curve response delay"));
 
     public void AddCurvePoint(double? temperature = null, double? duty = null)
     {
@@ -135,7 +137,7 @@ public sealed class MsiSettingsEditorViewModel : EditableObject
 
         try
         {
-            Build();
+            BuildCurve().Validate();
         }
         catch (ArgumentException)
         {
@@ -191,7 +193,7 @@ public sealed class MsiSettingsEditorViewModel : EditableObject
 
     public void RemoveCurvePoint(MsiFanCurvePointViewModel point)
     {
-        if (CurvePoints.Count <= 2)
+        if (!CanRemoveCurvePoint)
         {
             return;
         }

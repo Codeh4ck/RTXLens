@@ -26,10 +26,10 @@ public sealed class ConnectorMetricEditorViewModel : EditableObject
 
     public void AddSource()
     {
-        if (Candidate is not null && Sources.All(source => source.Id != Candidate.Id))
+        if (Candidate is { } candidate && Sources.All(source => source.Id != candidate.Id))
         {
-            Sources.Add(Candidate);
-            SelectedSource = Candidate;
+            Sources.Add(candidate);
+            SelectedSource = candidate;
         }
     }
 

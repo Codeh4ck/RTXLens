@@ -83,35 +83,12 @@ public sealed class GpuStatusViewModel : ObservableObject
         {
             "None" => [],
             "WireView" when snapshot.Plugins.Any(plugin => plugin is { PluginId: "wireview-pro2", State: PluginState.Ready }) =>
-                snapshot.Sensors.Where(reading => reading.Identity.PluginId == "wireview-pro2").ToArray(),
+                [.. snapshot.Sensors.Where(reading => reading.Identity.PluginId == "wireview-pro2")],
             "WireView" => [],
             _ => readings
         };
         var electricalAge = options.ElectricalSource == "WireView"
             ? configuration?.Configuration.Plugins.GetValueOrDefault("wireview-pro2")?.StaleAfterMs ?? 5000 : _staleAfterMs;
-
-        double? Input(SensorMetric metric)
-        {
-            var selection = snapshot.Selections.FirstOrDefault(item => item.Name == ConnectorProfiles.SelectionName(metric));
-            if (configuration?.Configuration.Monitoring.ConnectorProfiles.Version == 1 || selection is not null)
-            {
-                var selected = snapshot.Sensors.FirstOrDefault(reading => reading.Identity.Key == selection?.SensorKey);
-                var age = configuration?.Configuration.Plugins.GetValueOrDefault(selected?.Identity.PluginId ?? "")?.StaleAfterMs ?? 5000;
-                return selected is { Quality: ReadingQuality.Valid, Value: { } number } && double.IsFinite(number)
-                    && snapshot.Plugins.Any(plugin => plugin.PluginId == selected.Identity.PluginId && plugin.State == PluginState.Ready)
-                    && now - selected.ObservedAt <= TimeSpan.FromMilliseconds(age) ? number : null;
-            }
-
-            if (electrical.Select(reading => reading.Identity.DeviceId).Distinct().Take(2).Count() != 1)
-            {
-                return null;
-            }
-
-            var reading = electrical.FirstOrDefault(reading => reading.Identity is { Component: SensorComponent.GpuConnector, Channel: 1 }
-                && reading.Identity.Metric == metric);
-            return reading is { Quality: ReadingQuality.Valid, Value: { } value } && double.IsFinite(value)
-                && now - reading.ObservedAt <= TimeSpan.FromMilliseconds(electricalAge) ? value : null;
-        }
 
         PowerText = Format(Input(SensorMetric.Power), "W", 1);
         CurrentText = Format(Input(SensorMetric.Current), "A", 2);
@@ -155,6 +132,29 @@ public sealed class GpuStatusViewModel : ObservableObject
         HasSecondFan = fans.Length > 1;
 
         return;
+
+        double? Input(SensorMetric metric)
+        {
+            var selection = snapshot.Selections.FirstOrDefault(item => item.Name == ConnectorProfiles.SelectionName(metric));
+            if (configuration?.Configuration.Monitoring.ConnectorProfiles.Version == 1 || selection is not null)
+            {
+                var selected = snapshot.Sensors.FirstOrDefault(reading => reading.Identity.Key == selection?.SensorKey);
+                var age = configuration?.Configuration.Plugins.GetValueOrDefault(selected?.Identity.PluginId ?? "")?.StaleAfterMs ?? 5000;
+                return selected is { Quality: ReadingQuality.Valid, Value: { } number } && double.IsFinite(number)
+                                                                                        && snapshot.Plugins.Any(plugin => plugin.PluginId == selected.Identity.PluginId && plugin.State == PluginState.Ready)
+                                                                                        && now - selected.ObservedAt <= TimeSpan.FromMilliseconds(age) ? number : null;
+            }
+
+            if (electrical.Select(reading => reading.Identity.DeviceId).Distinct().Take(2).Count() != 1)
+            {
+                return null;
+            }
+
+            var reading = electrical.FirstOrDefault(reading => reading.Identity is { Component: SensorComponent.GpuConnector, Channel: 1 }
+                                                               && reading.Identity.Metric == metric);
+            return reading is { Quality: ReadingQuality.Valid, Value: { } value } && double.IsFinite(value)
+                                                                                  && now - reading.ObservedAt <= TimeSpan.FromMilliseconds(electricalAge) ? value : null;
+        }
 
         string Fan(SensorReading? fan)
         {

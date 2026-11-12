@@ -127,6 +127,58 @@ internal sealed class SettingsProfileStore
         }
     }
 
+    public void Update(string id, SettingsProfile settings)
+    {
+        lock (_gate)
+        {
+            RequireCustomProfile(id);
+
+            var saved = settings with { Id = id };
+            if (!saved.IsValid())
+            {
+                throw new ArgumentException("Check the profile name and chart limits.");
+            }
+
+            WriteAtomically(Path.Combine(_directory, id + ".profile.json"),
+                JsonSerializer.Serialize(saved, AppJsonContext.Default.SettingsProfile));
+            _profiles[id] = saved;
+
+            if (_selectedId == id)
+            {
+                _session = null;
+            }
+        }
+    }
+
+    public void Delete(string id)
+    {
+        lock (_gate)
+        {
+            RequireCustomProfile(id);
+            File.Delete(Path.Combine(_directory, id + ".profile.json"));
+            _profiles.Remove(id);
+
+            if (_selectedId == id)
+            {
+                _selectedId = "auto";
+                _session = null;
+            }
+        }
+    }
+
+    private void RequireCustomProfile(string id)
+    {
+        if (!_profiles.ContainsKey(id))
+        {
+            throw new KeyNotFoundException("GPU chart profile not found.");
+        }
+
+        if (!Guid.TryParseExact(id, "N", out _))
+        {
+            throw new ArgumentException("Built-in GPU chart profiles cannot be changed or deleted.");
+        }
+    }
+
     internal string DirectoryPath => _directory;
 
     internal static void WriteAtomically(string path, string content)

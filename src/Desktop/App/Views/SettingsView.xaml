@@ -17,14 +17,13 @@
                     <ToggleSwitch Header="Use Fahrenheit" IsOn="{x:Bind Model.Fahrenheit, Mode=TwoWay}"/>
                     <ToggleSwitch Header="Show peak markers" IsOn="{x:Bind Model.ShowPeakHold, Mode=TwoWay}"/>
                     <ToggleSwitch Header="Show pin current headroom" IsOn="{x:Bind Model.ShowHeadroom, Mode=TwoWay}"/>
-                    <ToggleSwitch Header="Reduce visual effects" IsOn="{x:Bind Model.ReducedEffects, Mode=TwoWay}"/>
                 </StackPanel>
             </controls:SectionPanel>
             <controls:SectionPanel Header="Desktop behavior">
                 <StackPanel Spacing="16">
                     <ComboBox Header="Startup tab" SelectedIndex="{x:Bind Model.StartupTabIndex, Mode=TwoWay}" MinWidth="240">
                         <ComboBoxItem Content="First reporting plugin" />
-                        <ComboBoxItem Content="WireView" />
+                        <ComboBoxItem Content="WireView Pro II" />
                         <ComboBoxItem Content="ROG Astral" />
                         <ComboBoxItem Content="GPU status" />
                         <ComboBoxItem Content="MSI PSU" />

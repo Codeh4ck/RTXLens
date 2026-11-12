@@ -17,8 +17,7 @@ public sealed class AsusGpuReader(NvidiaTelemetryReader reader) : IAsusGpuReader
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var devices = reader.GetDevices().Where(device => Matches(HardwareType.GpuNvidia, device.Name)).ToArray();
-        devices = [.. devices.Where(device => IsAstral(reader.Read(device.Id, _pollIntervalMs, cancellationToken)))];
+        var devices = DiscoverAstral(reader, _pollIntervalMs, cancellationToken);
 
         Devices = [.. devices.Select(device => new AsusDeviceInfo(device.Id, device.Name))];
 
@@ -41,6 +40,10 @@ public sealed class AsusGpuReader(NvidiaTelemetryReader reader) : IAsusGpuReader
 
         return new AsusGpuData(selected.Id, selected.Name, [.. readings], sample.ObservedAt);
     }
+
+    internal static NvidiaDevice[] DiscoverAstral(NvidiaTelemetryReader reader, int pollIntervalMs, CancellationToken token) =>
+        [.. reader.GetDevices().Where(device => Matches(HardwareType.GpuNvidia, device.Name)
+            && IsAstral(reader.Read(device.Id, pollIntervalMs, token)))];
 
     public static bool IsAstral(NvidiaSample? sample) => sample?.Sensors.Any(sensor => sensor is { Name: "12VHPWR Pin 1", Type: SensorType.Current }) == true;
 

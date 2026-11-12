@@ -5,7 +5,7 @@
     xmlns:controls="using:RTXLens.App.Controls">
     <controls:SectionPanel Header="Device warning profiles">
         <StackPanel Spacing="12">
-            <TextBlock Text="Each enabled profile monitors its own source. WireView firmware alerts still report independently."
+            <TextBlock Text="Each enabled profile monitors its own source. WireView Pro II firmware alerts still report independently."
                 TextWrapping="Wrap" Style="{StaticResource MonitorCaption}" />
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <ComboBox x:Name="Profiles" AutomationProperties.Name="Warning profile" MinWidth="220" SelectionChanged="ProfileChanged" />

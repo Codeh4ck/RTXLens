@@ -6,7 +6,7 @@ public static class AfterburnerConfiguration
 {
     public const string PluginFile = "Plugins/Monitoring/PSU.cfg";
     public const string ProfileFile = "Profiles/MSIAfterburner.cfg";
-    public static IReadOnlyList<string> FileNames { get; } = Array.AsReadOnly(new[] { PluginFile, ProfileFile });
+    public static IReadOnlyList<string> FileNames { get; } = Array.AsReadOnly([PluginFile, ProfileFile]);
 
     public static AfterburnerInspection Inspect(byte[] pluginBytes, byte[] profileBytes)
     {

@@ -1,0 +1,80 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Dark">
+            <Color x:Key="DefaultPrimaryColor">#39EED1</Color>
+            <Color x:Key="DefaultSecondaryColor">#7DDCC7</Color>
+            <Color x:Key="DefaultTertiaryColor">#C29BFF</Color>
+            <Color x:Key="DefaultBackgroundColor">#090E17</Color>
+
+            <Color x:Key="SystemAccentColor">#39EED1</Color>
+            <Color x:Key="SystemAccentColorLight1">#6DFFE8</Color>
+            <Color x:Key="SystemAccentColorDark1">#30D3BA</Color>
+            <Color x:Key="HudOnAccentColor">#091516</Color>
+            <Color x:Key="HudInputColor">#0C1724</Color>
+            <Color x:Key="HudInputStrokeColor">#3A606D</Color>
+            <Color x:Key="HudAccentSurfaceColor">#122F35</Color>
+            <Color x:Key="HudHoverSurfaceColor">#173E46</Color>
+            <Color x:Key="HudPressedSurfaceColor">#1E5057</Color>
+
+            <SolidColorBrush x:Key="WindowBackgroundBrush" Color="{StaticResource DefaultBackgroundColor}" />
+            <SolidColorBrush x:Key="PanelBrush">#111927</SolidColorBrush>
+            <SolidColorBrush x:Key="InsetBrush">#0C1422</SolidColorBrush>
+            <SolidColorBrush x:Key="TrackBrush">#1B273C</SolidColorBrush>
+            <SolidColorBrush x:Key="PanelBorderBrush">#29384D</SolidColorBrush>
+            <SolidColorBrush x:Key="TextBrush">#E6EEFB</SolidColorBrush>
+            <SolidColorBrush x:Key="MutedTextBrush">#ABBCD0</SolidColorBrush>
+            <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource DefaultPrimaryColor}" />
+            <SolidColorBrush x:Key="SecondaryBrush" Color="{StaticResource DefaultSecondaryColor}" />
+            <SolidColorBrush x:Key="TertiaryBrush" Color="{StaticResource DefaultTertiaryColor}" />
+            <Color x:Key="IconColor">#24BCAA</Color>
+            <SolidColorBrush x:Key="IconBrush" Color="{StaticResource IconColor}" />
+            <SolidColorBrush x:Key="IconSurfaceBrush">#7DDCC7</SolidColorBrush>
+            <SolidColorBrush x:Key="SuccessBrush">#64E5A7</SolidColorBrush>
+            <SolidColorBrush x:Key="SuccessSurfaceBrush">#143329</SolidColorBrush>
+            <SolidColorBrush x:Key="WarningBrush">#FFC66D</SolidColorBrush>
+            <SolidColorBrush x:Key="WarningSurfaceBrush">#392B17</SolidColorBrush>
+            <SolidColorBrush x:Key="ErrorBrush">#FF819A</SolidColorBrush>
+            <SolidColorBrush x:Key="ErrorSurfaceBrush">#3A1E2B</SolidColorBrush>
+            <SolidColorBrush x:Key="FaultCardBrush">#3A1E2B</SolidColorBrush>
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key="Light">
+            <Color x:Key="DefaultPrimaryColor">#007F76</Color>
+            <Color x:Key="DefaultSecondaryColor">#0C665B</Color>
+            <Color x:Key="DefaultTertiaryColor">#713EB5</Color>
+            <Color x:Key="DefaultBackgroundColor">#F3F6FA</Color>
+
+            <Color x:Key="SystemAccentColor">#007F76</Color>
+            <Color x:Key="SystemAccentColorLight1">#00736B</Color>
+            <Color x:Key="SystemAccentColorDark1">#00685F</Color>
+            <Color x:Key="HudOnAccentColor">#FFFFFF</Color>
+            <Color x:Key="HudInputColor">#F4FAFA</Color>
+            <Color x:Key="HudInputStrokeColor">#6B9E9C</Color>
+            <Color x:Key="HudAccentSurfaceColor">#DDEFEF</Color>
+            <Color x:Key="HudHoverSurfaceColor">#D0E9E8</Color>
+            <Color x:Key="HudPressedSurfaceColor">#BFDCDC</Color>
+
+            <SolidColorBrush x:Key="WindowBackgroundBrush" Color="{StaticResource DefaultBackgroundColor}" />
+            <SolidColorBrush x:Key="PanelBrush">#FFFFFF</SolidColorBrush>
+            <SolidColorBrush x:Key="InsetBrush">#F5F8FC</SolidColorBrush>
+            <SolidColorBrush x:Key="TrackBrush">#E6EDF5</SolidColorBrush>
+            <SolidColorBrush x:Key="PanelBorderBrush">#D1DCE9</SolidColorBrush>
+            <SolidColorBrush x:Key="TextBrush">#172235</SolidColorBrush>
+            <SolidColorBrush x:Key="MutedTextBrush">#52647B</SolidColorBrush>
+            <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource DefaultPrimaryColor}" />
+            <SolidColorBrush x:Key="SecondaryBrush" Color="{StaticResource DefaultSecondaryColor}" />
+            <SolidColorBrush x:Key="TertiaryBrush" Color="{StaticResource DefaultTertiaryColor}" />
+            <Color x:Key="IconColor">#007F76</Color>
+            <SolidColorBrush x:Key="IconBrush" Color="{StaticResource IconColor}" />
+            <SolidColorBrush x:Key="IconSurfaceBrush">#BEEDE1</SolidColorBrush>
+            <SolidColorBrush x:Key="SuccessBrush">#14734A</SolidColorBrush>
+            <SolidColorBrush x:Key="SuccessSurfaceBrush">#E4F5EB</SolidColorBrush>
+            <SolidColorBrush x:Key="WarningBrush">#965500</SolidColorBrush>
+            <SolidColorBrush x:Key="WarningSurfaceBrush">#FFF1D8</SolidColorBrush>
+            <SolidColorBrush x:Key="ErrorBrush">#B12E48</SolidColorBrush>
+            <SolidColorBrush x:Key="ErrorSurfaceBrush">#FCE7EC</SolidColorBrush>
+            <SolidColorBrush x:Key="FaultCardBrush">#702034</SolidColorBrush>
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

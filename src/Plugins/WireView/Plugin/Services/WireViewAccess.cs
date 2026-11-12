@@ -8,6 +8,6 @@ internal static class WireViewAccess
         runtime.ExecuteAsync(WireViewPlugin.PluginId, plugin =>
         {
             var wireView = (WireViewPlugin)plugin;
-            return wireView.Latest is null ? throw new PluginUnavailableException("WireView Pro 2 device is either not available or not connected.") : operation(wireView);
+            return wireView.Latest is null ? throw new PluginUnavailableException("WireView Pro II device is either not available or not connected.") : operation(wireView);
         }, token);
 }

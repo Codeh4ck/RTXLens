@@ -9,6 +9,7 @@ using RTXLens.Presentation.Msi.Afterburner;
 namespace RTXLens.App.Msi.Afterburner;
 
 // This entry point edits validated INI files or requests a normal exit of the selected Afterburner installation. It never runs alarm commands.
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
 internal static class AfterburnerElevatedOperation
 {
     private static string ResultsDirectory => Path.Combine(AfterburnerFileStore.DefaultBackupRoot, "OperationResults");
@@ -93,10 +94,11 @@ internal static class AfterburnerElevatedOperation
                 ?? throw new InvalidDataException("Configuration request is empty.");
             var installation = AfterburnerDiscovery.Inspect(operation.Installation);
             AfterburnerDiscovery.RequireSupported(installation, operation.Action is "save" or "apply" or "stop-for-restart");
-            if (operation.Action is not ("delete" or "stop-for-restart"))
+            if (operation.Action is "apply" or "restore")
             {
                 AfterburnerDiscovery.RequireStopped();
             }
+
             var store = new AfterburnerFileStore(installation.Directory, AfterburnerFileStore.DefaultBackupRoot, AfterburnerFileStore.LegacyBackupDirectoryFor(installation.Directory));
             var lockPath = Path.Combine(AfterburnerFileStore.DefaultBackupRoot, ".operation.lock");
             AfterburnerFileStore.EnsureNoLinks(lockPath);

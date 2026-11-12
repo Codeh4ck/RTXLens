@@ -21,8 +21,13 @@ internal static class PackageTests
         var directories = Read(database, "SELECT `Directory`, `Directory_Parent`, `DefaultDir` FROM `Directory`").ToDictionary(row => row[0]);
         var components = Read(database, "SELECT `Component`, `Directory_`, `Attributes` FROM `Component`").ToDictionary(row => row[0]);
         var files = Read(database, "SELECT `File`, `Component_`, `FileName`, `FileSize`, `Language` FROM `File`");
+        Check.That(files.All(row => !LongName(row[2]).EndsWith(".pdb", StringComparison.OrdinalIgnoreCase)),
+            "MSI excludes debug symbols from the desktop and service payloads.");
+
         var payloadRoot = Path.GetFullPath(payload).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        var expected = Directory.GetFiles(payloadRoot, "*", SearchOption.AllDirectories).ToDictionary(file => file.Substring(payloadRoot.Length), StringComparer.OrdinalIgnoreCase);
+        var expected = Directory.EnumerateFiles(payloadRoot, "*", SearchOption.AllDirectories)
+            .Where(file => !file.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(file => file.Substring(payloadRoot.Length), StringComparer.OrdinalIgnoreCase);
         foreach (var row in files)
         {
             var directory = components[row[1]][1];
@@ -70,13 +75,12 @@ internal static class PackageTests
         var actions = Read(database, "SELECT `Action`, `Type` FROM `CustomAction`").ToDictionary(row => row[0]);
         Check.That((int.Parse(actions["RestoreConfiguration"][1]) & 0x500) == 0x500, "Configuration restore is a rollback action.");
         Check.That((int.Parse(actions["RemoveStartupRegistration"][1]) & 0x600) == 0x600, "Startup cleanup occurs only when uninstall/feature removal commits.");
-        int Order(string action) => int.Parse(sequence[action][1]);
         Check.That(Order("RemoveExistingProducts") < Order("InstallFiles")
-            && Order("InstallFiles") < Order("PrepareLegacyMigration")
-            && Order("PrepareLegacyMigration") < Order("RestoreLegacyMigration")
-            && Order("RestoreLegacyMigration") < Order("CaptureLegacyMigration")
-            && Order("CaptureLegacyMigration") < Order("ApplyLegacyMigration")
-            && Order("ApplyLegacyMigration") < Order("StartServices"),
+                   && Order("InstallFiles") < Order("PrepareLegacyMigration")
+                   && Order("PrepareLegacyMigration") < Order("RestoreLegacyMigration")
+                   && Order("RestoreLegacyMigration") < Order("CaptureLegacyMigration")
+                   && Order("CaptureLegacyMigration") < Order("ApplyLegacyMigration")
+                   && Order("ApplyLegacyMigration") < Order("StartServices"),
             "Setup migrates preserved data before starting the new service and rolls it back before restoring the old product.");
         Check.That(Order("VerifyServiceHealth") < Order("CleanLegacyMigration")
             && (int.Parse(actions["CleanLegacyMigration"][1]) & 0xE00) == 0xE00,
@@ -103,6 +107,8 @@ internal static class PackageTests
             Check.That(BitConverter.ToUInt16(bytes, BitConverter.ToInt32(bytes, 0x3c) + 4) == 0x8664, "Embedded native custom-action host matches the x64 MSI architecture.");
         }
         Console.WriteLine($"PASS: Validated {files.Count} packaged files, OS detection and installer lifecycle tables without executing an installation.");
+        return;
+        int Order(string action) => int.Parse(sequence[action][1]);
     }
 
     private static void CheckLanguageMetadata(string language, string relative)

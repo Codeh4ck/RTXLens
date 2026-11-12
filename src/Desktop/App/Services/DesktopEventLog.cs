@@ -168,7 +168,8 @@ internal sealed class DesktopEventLog
     }
 
     private static JsonElement[] Items(JsonElement value) => value.ValueKind == JsonValueKind.Array
-        ? value.EnumerateArray().ToArray() : [];
+        ? [.. value.EnumerateArray()]
+        : [];
 
     private static bool IsPrivate(string name) => PrivateNames
         .Any(part => name.Contains(part, StringComparison.OrdinalIgnoreCase));

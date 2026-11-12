@@ -492,8 +492,8 @@ internal sealed partial class AppRuntime
                 _liveWireViewConfiguration = configuration;
             }
 #endif
-            panel.SetDeviceConfiguration(configuration, simulation ? "Simulated WireView settings loaded." : null);
-            OperationCompleted?.Invoke(simulation ? "Simulated WireView settings loaded" : "WireView device settings read");
+            panel.SetDeviceConfiguration(configuration, simulation ? "Simulated WireView Pro II settings loaded." : null);
+            OperationCompleted?.Invoke(simulation ? "Simulated WireView Pro II settings loaded" : "WireView Pro II device settings read");
         }
         catch (Exception exception) when (exception is HttpRequestException or MonitoringApiException or IOException
             or OperationCanceledException or System.Text.Json.JsonException)

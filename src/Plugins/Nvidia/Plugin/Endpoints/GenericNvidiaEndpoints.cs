@@ -16,10 +16,10 @@ public static class GenericNvidiaEndpoints
     {
         var group = endpoints.MapGroup("/plugins/generic-nvidia").AddEndpointFilter<ApiExceptionFilter>();
 
-        group.MapGet("/devices", async (NvidiaTelemetryReader reader, CancellationToken token) =>
+        group.MapGet("/devices", async (NvidiaTelemetryReader reader, bool? refresh, CancellationToken token) =>
         {
-            var devices = await Task.Run(() => reader.GetDevices(refresh: true), token);
-            return Results.Json(devices.Select(device => new NvidiaDeviceInfo(device.Id, device.Name, device.LegacyId)).ToArray(),
+            var devices = await Task.Run(() => reader.GetDevices(refresh: refresh != false), token);
+            return Results.Json([.. devices.Select(device => new NvidiaDeviceInfo(device.Id, device.Name, device.LegacyId))],
                 GenericNvidiaJsonContext.Default.NvidiaDeviceInfoArray);
         });
 

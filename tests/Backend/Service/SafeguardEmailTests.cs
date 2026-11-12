@@ -53,7 +53,7 @@ internal static class SafeguardEmailTests
             Reading("generic-nvidia", SensorComponent.GpuHotspot, SensorMetric.Temperature, 99, Trigger) with { Quality = ReadingQuality.Stale }
         ]);
         var (html, plain) = CreateBodies(SafeguardScripts.Notify, frame);
-        TestAssert.True(html.Contains("WireView Pro 2") && html.Contains("ROG Astral") && html.Contains("MSI PSU")
+        TestAssert.True(html.Contains("WireView Pro II") && html.Contains("ROG Astral") && html.Contains("MSI PSU")
             && html.Contains("Connector 1 pins") && html.Contains("Connector 2 pins") && html.Contains("NVIDIA GPU status"),
             "The report must show the source and connector of each reading.");
         TestAssert.True(html.Contains("8.10 A") && html.Contains("8.20 A") && html.Contains("8.30 A") && html.Contains("0.00 A"),

@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using RTXLens.Installer.Actions.Configuration;
+using RTXLens.Installer.Actions.Validation;
 
 namespace RTXLens.Installer.Tests.Configuration;
 
@@ -16,6 +17,10 @@ internal static class AfterburnerBackupCleanupTests
         var installation = Path.Combine(fixture, "Installation");
         var desktop = Path.Combine(installation, "Desktop");
         var store = Path.Combine(desktop, "AfterburnerBackups");
+        var profiles = Path.Combine(desktop, "config");
+        var activeProfile = Path.Combine(profiles, "active-profile.txt");
+        var chartProfile = Path.Combine(profiles, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.profile.json");
+        var warningProfiles = Path.Combine(profiles, "device-warnings.json");
         var programData = Path.Combine(fixture, "ProgramData");
         var legacy = Path.Combine(programData, "RTXLens.AfterburnerBackups", Key);
         var external = Path.Combine(fixture, "MSI Afterburner");
@@ -30,12 +35,25 @@ internal static class AfterburnerBackupCleanupTests
             File.WriteAllText(Path.Combine(legacy, "pending.json"), Archive);
             var results = Directory.CreateDirectory(Path.Combine(store, "OperationResults"));
             File.WriteAllText(Path.Combine(results.FullName, "cccccccccccccccccccccccccccccccc.json"), "");
-            Check.That(AfterburnerBackupCleanup.ContainsOnlyBackupLeftovers(installation),
+            Check.That(InstallationPreflight.ContainsOnlyPreservedData(installation),
                 "A reinstall accepts the backup tree left by an older uninstaller.");
 
-            var otherFile = Path.Combine(desktop, "unrelated.txt");
+            Directory.CreateDirectory(profiles);
+            File.WriteAllText(activeProfile, "auto");
+            File.WriteAllText(chartProfile, "{}");
+            File.WriteAllText(warningProfiles, "[]");
+            Check.That(InstallationPreflight.ContainsOnlyPreservedData(installation),
+                "Reinstall accepts saved profiles alongside leftover backups.");
+
+            var otherFile = Path.Combine(profiles, "unrelated.profile.json");
             File.WriteAllText(otherFile, "keep");
-            Check.That(!AfterburnerBackupCleanup.ContainsOnlyBackupLeftovers(installation),
+            Check.That(!InstallationPreflight.ContainsOnlyPreservedData(installation),
+                "Reinstall rejects unrelated files even inside the profile directory.");
+            File.Delete(otherFile);
+
+            otherFile = Path.Combine(desktop, "unrelated.txt");
+            File.WriteAllText(otherFile, "keep");
+            Check.That(!InstallationPreflight.ContainsOnlyPreservedData(installation),
                 "Reinstall still rejects unrelated files.");
             File.Delete(otherFile);
 
@@ -43,7 +61,7 @@ internal static class AfterburnerBackupCleanupTests
             var liveConfig = Path.Combine(external, "MSIAfterburner.cfg");
             File.WriteAllText(liveConfig, "live configuration");
             CreateJunction(link, external);
-            Check.That(!AfterburnerBackupCleanup.ContainsOnlyBackupLeftovers(installation),
+            Check.That(!InstallationPreflight.ContainsOnlyPreservedData(installation),
                 "Reinstall rejects a linked backup directory.");
 
             var smtp = Path.Combine(programData, "RTXLens.Safeguard", "mail", "record.json");
@@ -61,6 +79,24 @@ internal static class AfterburnerBackupCleanupTests
             Directory.Delete(link, recursive: false);
             AfterburnerBackupCleanup.Remove(installation, programData, message => throw new InvalidOperationException(message));
             Check.That(!Directory.Exists(store), "Uninstall removes the backup directory once it is empty.");
+            Check.That(File.Exists(activeProfile) && File.Exists(chartProfile) && File.Exists(warningProfiles)
+                && InstallationPreflight.ContainsOnlyPreservedData(installation),
+                "Reinstall accepts the saved profiles that remain after uninstall.");
+
+            var linkedProfiles = Path.Combine(fixture, "saved-profiles");
+            Directory.Move(profiles, linkedProfiles);
+            try
+            {
+                CreateJunction(profiles, linkedProfiles);
+                Check.That(!InstallationPreflight.ContainsOnlyPreservedData(installation), "Reinstall rejects a linked profile directory.");
+            }
+            finally
+            {
+                if (Directory.Exists(profiles))
+                {
+                    Directory.Delete(profiles, recursive: false);
+                }
+            }
         }
         finally
         {

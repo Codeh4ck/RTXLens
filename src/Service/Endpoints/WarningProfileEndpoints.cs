@@ -61,7 +61,7 @@ internal static class WarningProfileEndpoints
         }).AddEndpointFilter<ApiExceptionFilter>();
     }
 
-    private static bool IsLocalClient(HttpRequest request)
+    internal static bool IsLocalClient(HttpRequest request)
     {
         var host = request.Host.Host.Trim('[', ']');
         return !request.Headers.ContainsKey("Origin") && !request.Headers.ContainsKey("Sec-Fetch-Site")

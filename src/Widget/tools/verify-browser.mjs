@@ -82,7 +82,7 @@ await page.route('**/*', async route => {
     if (url.pathname === '/plugins') value = pluginCatalog;
     if (url.pathname === '/configuration' && configurationError) return route.fulfill({ status: 503, headers: { 'Access-Control-Allow-Origin': '*' } });
     if (url.pathname === '/configuration') value = metadata;
-    if (url.pathname === '/plugins/wireview-pro2/device/config') value = { friendlyName: 'WireView Pro 2', wireOcpFaultThresholdA: 9.2 };
+    if (url.pathname === '/plugins/wireview-pro2/device/config') value = { friendlyName: 'WireView Pro II', wireOcpFaultThresholdA: 9.2 };
     if (!value) return route.abort();
     return route.fulfill({ json: value, headers: { 'Access-Control-Allow-Origin': '*' } });
 });

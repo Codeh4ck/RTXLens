@@ -35,10 +35,9 @@ public sealed partial class PerformanceRecorder
             var values = new Dictionary<string, double?>(StringComparer.Ordinal);
             if (sessionId == _sessionId && double.IsFinite(seconds) && seconds >= 0)
             {
-                foreach (var state in _traces.Values.Where(state => state.Selected
-                    && (state.Imported || _settings.GetValueOrDefault(state.Trace.Identity.PluginId)?.Enabled == true)))
+                foreach (var state in _traces.Values.Where(IsSelectedForHover))
                 {
-                    values[state.Trace.Key] = NearestValue(state.Samples, seconds);
+                    values[state.Trace.Key] = NearestSample(state.Samples, seconds)?.Value;
                 }
             }
 
@@ -46,17 +45,43 @@ public sealed partial class PerformanceRecorder
         }
     }
 
-    private static double? NearestValue(List<PerformanceSample> samples, double seconds)
+    /// <summary>Looks up original samples for the requested traces in the same order as their keys.</summary>
+    public void ReadHover(string sessionId, double seconds, IReadOnlyList<string> keys, Span<PerformanceSample?> samples)
+    {
+        samples = samples[..keys.Count];
+        samples.Clear();
+
+        lock (_gate)
+        {
+            if (sessionId != _sessionId || !double.IsFinite(seconds) || seconds < 0)
+            {
+                return;
+            }
+
+            for (var index = 0; index < keys.Count; index++)
+            {
+                if (_traces.TryGetValue(keys[index], out var state) && IsSelectedForHover(state))
+                {
+                    samples[index] = NearestSample(state.Samples, seconds);
+                }
+            }
+        }
+    }
+
+    private bool IsSelectedForHover(TraceState state) =>
+        state.Selected && (state.Imported || _settings.GetValueOrDefault(state.Trace.Identity.PluginId)?.Enabled == true);
+
+    private static PerformanceSample? NearestSample(List<PerformanceSample> samples, double seconds)
     {
         var index = LowerBound(samples, seconds);
         if (index == samples.Count)
         {
-            return samples.Count == 0 ? null : samples[^1].Value;
+            return samples.Count == 0 ? null : samples[^1];
         }
 
         if (samples[index].Seconds == seconds)
         {
-            return samples[index].Value;
+            return samples[index];
         }
 
         if (index == 0 || samples[index - 1].Value is null || samples[index].Value is null)
@@ -65,7 +90,7 @@ public sealed partial class PerformanceRecorder
         }
 
         return seconds - samples[index - 1].Seconds <= samples[index].Seconds - seconds
-            ? samples[index - 1].Value : samples[index].Value;
+            ? samples[index - 1] : samples[index];
     }
 
     private static int LowerBound(List<PerformanceSample> samples, double seconds)
@@ -112,7 +137,7 @@ public sealed partial class PerformanceRecorder
         var last = Math.Min(samples.Count, LowerBound(samples, end) + 1);
         if (last - first <= width * 4)
         {
-            return samples.GetRange(first, last - first).ToArray();
+            return [.. samples.GetRange(first, last - first)];
         }
 
         // Keep endpoints and extrema per screen column. Gaps break connections
@@ -169,6 +194,6 @@ public sealed partial class PerformanceRecorder
             }
         }
 
-        return result.ToArray();
+        return [.. result];
     }
 }

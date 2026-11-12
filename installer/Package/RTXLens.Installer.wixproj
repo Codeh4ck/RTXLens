@@ -14,6 +14,11 @@
     </ItemGroup>
     <Target Name="RequirePublishedPayload" BeforeTargets="BeforeBuild">
         <Error Condition="!Exists('$(PayloadDirectory)/Service/RTXLens.Service.exe')" Text="Publish the installer payload with scripts/Build-Release.ps1 before building the MSI." />
-        <Error Condition="!Exists('$(PayloadDirectory)/Desktop/RTXLens.App.pri')" Text="The desktop publish payload is incomplete." />
+        <ItemGroup>
+            <RequiredDesktopFile Include="RTXLens.App.exe;RTXLens.App.dll;RTXLens.App.deps.json;RTXLens.App.runtimeconfig.json" />
+            <RequiredDesktopFile Include="Avalonia.Desktop.dll;Avalonia.Win32.dll;coreclr.dll" />
+        </ItemGroup>
+        <Error Condition="!Exists('$(PayloadDirectory)/Desktop/%(RequiredDesktopFile.Identity)')"
+               Text="The Avalonia desktop publish payload is missing %(RequiredDesktopFile.Identity). Publish the desktop app using the Portable profile." />
     </Target>
 </Project>

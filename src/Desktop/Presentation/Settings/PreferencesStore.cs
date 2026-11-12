@@ -5,6 +5,7 @@ namespace RTXLens.Presentation.Settings;
 public sealed class PreferencesStore(string path)
 {
     private readonly SemaphoreSlim _gate = new(1);
+    public string DirectoryPath { get; } = Path.GetDirectoryName(Path.GetFullPath(path))!;
     public string? LastError { get; private set; }
 
     public AppPreferences Load()

@@ -1,0 +1,99 @@
+<views:LensWindow xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="using:RTXLens.App.Views.Shell"
+        xmlns:svg="clr-namespace:Avalonia.Svg;assembly=Svg.Controls.Avalonia"
+        xmlns:shell="using:RTXLens.App.ViewModels.Shell"
+        xmlns:telemetry="using:RTXLens.Presentation.Telemetry"
+        x:Class="RTXLens.App.Views.Shell.ShellWindow"
+        x:DataType="shell:ShellViewModel"
+        Title="RTX Lens" Icon="/Assets/monitor.ico" MinWidth="720" MinHeight="550">
+    <views:LensWindow.Body>
+        <Grid Margin="24,12" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="10">
+            <Grid x:Name="Header" ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="14">
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                    <Border Width="4" Margin="2,0" Background="{DynamicResource PrimaryBrush}" CornerRadius="2" />
+                    <StackPanel>
+                        <TextBlock Text="RTX LENS" Classes="heading" FontSize="22" />
+                        <TextBlock Text="POWER · PINS · PROTECTION" Classes="caption" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel x:Name="WebsiteLinks" Grid.Column="1" Orientation="Horizontal" Spacing="4"
+                            HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <Button Click="OpenSupport" Classes="desktop-action primary-action" Foreground="{DynamicResource PrimaryBrush}">
+                        <StackPanel Classes="button-content">
+                            <Image Width="14" Height="14" Source="{svg:SvgImage /Assets/Icons/support.svg}" />
+                            <TextBlock Text="Support RTX Lens" />
+                        </StackPanel>
+                    </Button>
+                    <HyperlinkButton NavigateUri="https://rtxlens.com/" Content="Official website"
+                                     Foreground="{DynamicResource PrimaryBrush}" />
+                    <HyperlinkButton Click="OpenReleaseNotes" Content="Release notes" Foreground="{DynamicResource PrimaryBrush}" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Dashboard.Summary}" Classes="caption" VerticalAlignment="Center" />
+                    <HyperlinkButton Content="{Binding Updates.Summary}" IsVisible="{Binding Updates.HasUpdates}" Click="OpenSettings"
+                                     Foreground="{DynamicResource PrimaryBrush}" />
+                    <Button IsVisible="{Binding Dashboard.HasPluginWarning}" Click="OpenConfiguration"
+                            Background="Transparent" BorderThickness="0" Padding="6"
+                            ToolTip.Tip="{Binding Dashboard.PluginWarning}" AutomationProperties.Name="Plugin reporting warning">
+                        <PathIcon Width="17" Height="17" Foreground="{DynamicResource WarningBrush}"
+                                  Data="M12 2L24 22H0ZM11 8V15H13V8ZM11 17V19H13V17Z" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <Border x:Name="MainNavigation" Grid.Row="1" Background="{DynamicResource InsetBrush}" BorderBrush="{DynamicResource PanelBorderBrush}"
+                    BorderThickness="1" CornerRadius="8" Padding="6">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <ItemsControl ItemsSource="{Binding Dashboard.ReportingPanels}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" Spacing="8" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="telemetry:HardwarePanelViewModel">
+                                        <RadioButton Content="{Binding Name}" GroupName="MainTabs"
+                                                     IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                                     Theme="{StaticResource NavigationTabTheme}" Click="OpenHardware" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <RadioButton x:Name="PerformanceTab" Content="Performance Chart" GroupName="MainTabs"
+                                         Theme="{StaticResource NavigationTabTheme}" Click="OpenPerformance" />
+                            <RadioButton x:Name="EventLogTab" Content="Event Log" GroupName="MainTabs"
+                                         Theme="{StaticResource NavigationTabTheme}" Click="OpenEvents" />
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Button Click="OpenConfiguration" Classes="desktop-action" AutomationProperties.Name="Configuration">
+                            <StackPanel Classes="button-content">
+                                <Image Width="15" Height="15" Source="{svg:SvgImage /Assets/Icons/plugin-action.svg}" />
+                                <TextBlock Text="Configuration" />
+                            </StackPanel>
+                        </Button>
+                        <Button Click="OpenSettings" Classes="desktop-action" AutomationProperties.Name="Settings">
+                            <StackPanel Classes="button-content">
+                                <Image Width="15" Height="15" Source="{svg:SvgImage /Assets/Icons/settings-action.svg}" />
+                                <TextBlock Text="Settings" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <ContentControl x:Name="PageHost" Grid.Row="2" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
+
+            <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                <TextBlock Text="{Binding Dashboard.Connection}" Classes="caption" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="1" Text="{Binding OperationStatus}" Classes="caption" MaxWidth="450"
+                           ToolTip.Tip="{Binding OperationStatus}" TextTrimming="CharacterEllipsis" />
+            </Grid>
+        </Grid>
+    </views:LensWindow.Body>
+</views:LensWindow>

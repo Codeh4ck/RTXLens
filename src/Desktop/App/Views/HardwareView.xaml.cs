@@ -192,7 +192,7 @@ public sealed partial class HardwareView : UserControl
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = "Clear WireView faults",
+            Title = "Clear WireView Pro II faults",
             Content = stack,
             PrimaryButtonText = "Clear selected flags",
             CloseButtonText = "Cancel",

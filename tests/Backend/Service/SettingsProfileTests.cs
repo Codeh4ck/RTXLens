@@ -43,7 +43,20 @@ internal static class SettingsProfileTests
         var applied = await api.ApplySettingsProfileAsync(
             new SettingsProfileRequest(preset.Id, preset with { CurrentCeiling = 7 }, false), CancellationToken.None);
         TestAssert.Equal<double?>(7, applied.Effective?.CurrentCeiling);
+        var created = await api.ApplySettingsProfileAsync(
+            new SettingsProfileRequest(preset.Id, preset with { Name = "My chart" }, true), CancellationToken.None);
+        var custom = created.Profiles.Single(profile => profile.Id == created.SelectedId);
         await api.ApplySettingsProfileAsync(new SettingsProfileRequest("auto", null, false), CancellationToken.None);
+
+        var updated = await api.UpdateSettingsProfileAsync(custom with { CurrentCeiling = 9 }, CancellationToken.None);
+        TestAssert.Equal("auto", updated.SelectedId);
+        TestAssert.Equal(9d, updated.Profiles.Single(profile => profile.Id == custom.Id).CurrentCeiling);
+        TestAssert.Equal(created.Profiles.Length, updated.Profiles.Length);
+
+        await api.ApplySettingsProfileAsync(new SettingsProfileRequest(custom.Id, null, false), CancellationToken.None);
+        var deleted = await api.DeleteSettingsProfileAsync(custom.Id, CancellationToken.None);
+        TestAssert.Equal("auto", deleted.SelectedId);
+        TestAssert.False(deleted.Profiles.Any(profile => profile.Id == custom.Id), "Deleting a chart profile should remove it from the catalog.");
     }
 
     private static void Detects5080ForWireViewWithoutAstralTelemetry()
@@ -82,10 +95,20 @@ internal static class SettingsProfileTests
             store.Apply(new SettingsProfileRequest("rtx-5080", custom, false));
             TestAssert.False(Directory.Exists(path), "Applying session edits must not create profile files.");
             store.Apply(new SettingsProfileRequest("rtx-5080", custom, true));
-            var restored = new SettingsProfileStore(options, NullLogger<SettingsProfileStore>.Instance).Selection().Profile;
+            var id = store.Selection().Id;
+            store.Update(id, custom with { CurrentCeiling = 8 });
+
+            var reopened = new SettingsProfileStore(options, NullLogger<SettingsProfileStore>.Instance);
+            var restored = reopened.Selection().Profile;
+            TestAssert.Equal(id, restored?.Id);
             TestAssert.Equal("My Astral", restored?.Name);
-            TestAssert.Equal<double?>(7, restored?.CurrentCeiling);
+            TestAssert.Equal<double?>(8, restored?.CurrentCeiling);
             TestAssert.Equal(1, Directory.GetFiles(path, "*.profile.json").Length);
+
+            reopened.Delete(id);
+            var afterDelete = new SettingsProfileStore(options, NullLogger<SettingsProfileStore>.Instance);
+            TestAssert.Equal("auto", afterDelete.Selection().Id);
+            TestAssert.Equal(0, Directory.GetFiles(path, "*.profile.json").Length);
         }
         finally
         {

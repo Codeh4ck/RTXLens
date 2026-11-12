@@ -1,0 +1,108 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Keep Fluent's editing and input templates while supplying RTX Lens colors for their visual states. -->
+    <SolidColorBrush x:Key="HudAccentSurfaceBrush" Color="{DynamicResource HudAccentSurfaceColor}" />
+    <SolidColorBrush x:Key="HudHoverSurfaceBrush" Color="{DynamicResource HudHoverSurfaceColor}" />
+    <SolidColorBrush x:Key="HudPressedSurfaceBrush" Color="{DynamicResource HudPressedSurfaceColor}" />
+    <SolidColorBrush x:Key="HudInputStrokeBrush" Color="{DynamicResource HudInputStrokeColor}" />
+    <SolidColorBrush x:Key="HudAccentBrush" Color="{DynamicResource SystemAccentColor}" />
+    <SolidColorBrush x:Key="HudAccentHoverBrush" Color="{DynamicResource SystemAccentColorLight1}" />
+    <SolidColorBrush x:Key="HudAccentPressedBrush" Color="{DynamicResource SystemAccentColorDark1}" />
+    <SolidColorBrush x:Key="HudOnAccentBrush" Color="{DynamicResource HudOnAccentColor}" />
+
+    <SolidColorBrush x:Key="TextControlBackground" Color="{DynamicResource HudInputColor}" />
+    <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="HudHoverSurfaceBrush" />
+    <StaticResource x:Key="TextControlBackgroundFocused" ResourceKey="HudAccentSurfaceBrush" />
+    <StaticResource x:Key="TextControlBackgroundDisabled" ResourceKey="TextControlBackground" />
+    <StaticResource x:Key="TextControlBorderBrush" ResourceKey="HudInputStrokeBrush" />
+    <StaticResource x:Key="TextControlBorderBrushPointerOver" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="TextControlBorderBrushFocused" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="TextControlSelectionHighlightColor" ResourceKey="HudPressedSurfaceBrush" />
+    <Thickness x:Key="TextControlBorderThemeThickness">1,1,1,2</Thickness>
+    <Thickness x:Key="TextControlBorderThemeThicknessFocused">1,1,1,2</Thickness>
+    <Thickness x:Key="TextControlThemePadding">12,8</Thickness>
+    <x:Double x:Key="TextControlThemeMinHeight">38</x:Double>
+
+    <StaticResource x:Key="ComboBoxBackground" ResourceKey="TextControlBackground" />
+    <StaticResource x:Key="ComboBoxBackgroundPointerOver" ResourceKey="HudHoverSurfaceBrush" />
+    <StaticResource x:Key="ComboBoxBackgroundPressed" ResourceKey="HudPressedSurfaceBrush" />
+    <StaticResource x:Key="ComboBoxBackgroundDisabled" ResourceKey="TextControlBackground" />
+    <StaticResource x:Key="ComboBoxBorderBrush" ResourceKey="HudInputStrokeBrush" />
+    <StaticResource x:Key="ComboBoxBorderBrushPointerOver" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="ComboBoxBorderBrushPressed" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="ComboBoxBackgroundBorderBrushFocused" ResourceKey="HudAccentBrush" />
+    <SolidColorBrush x:Key="ComboBoxDropDownGlyphForeground" Color="{DynamicResource IconColor}" />
+    <SolidColorBrush x:Key="ComboBoxDropDownGlyphForegroundFocused" Color="{DynamicResource IconColor}" />
+    <SolidColorBrush x:Key="ComboBoxDropDownGlyphForegroundFocusedPressed" Color="{DynamicResource IconColor}" />
+    <StaticResource x:Key="ComboBoxDropDownBackground" ResourceKey="TextControlBackground" />
+    <StaticResource x:Key="ComboBoxDropDownBorderBrush" ResourceKey="HudInputStrokeBrush" />
+    <StaticResource x:Key="ComboBoxItemBackgroundPointerOver" ResourceKey="HudHoverSurfaceBrush" />
+    <StaticResource x:Key="ComboBoxItemBackgroundPressed" ResourceKey="HudPressedSurfaceBrush" />
+    <StaticResource x:Key="ComboBoxItemBackgroundSelected" ResourceKey="HudAccentSurfaceBrush" />
+    <StaticResource x:Key="ComboBoxItemBackgroundSelectedPointerOver" ResourceKey="HudHoverSurfaceBrush" />
+    <StaticResource x:Key="ComboBoxItemBackgroundSelectedPressed" ResourceKey="HudPressedSurfaceBrush" />
+    <Thickness x:Key="ComboBoxBorderThemeThickness">1,1,1,2</Thickness>
+    <Thickness x:Key="ComboBoxPadding">12,7</Thickness>
+    <x:Double x:Key="ComboBoxMinHeight">38</x:Double>
+
+    <Thickness x:Key="CheckBoxBorderThemeThickness">1.5</Thickness>
+    <StaticResource x:Key="CheckBoxCheckBackgroundFillUnchecked" ResourceKey="TextControlBackground" />
+    <StaticResource x:Key="CheckBoxCheckBackgroundStrokeUnchecked" ResourceKey="HudInputStrokeBrush" />
+    <StaticResource x:Key="CheckBoxCheckBackgroundStrokeUncheckedPointerOver" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="CheckBoxCheckBackgroundFillChecked" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="CheckBoxCheckBackgroundFillCheckedPointerOver" ResourceKey="HudAccentHoverBrush" />
+    <StaticResource x:Key="CheckBoxCheckBackgroundFillCheckedPressed" ResourceKey="HudAccentPressedBrush" />
+    <StaticResource x:Key="CheckBoxCheckBackgroundFillIndeterminate" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="CheckBoxCheckBackgroundFillIndeterminatePointerOver" ResourceKey="HudAccentHoverBrush" />
+    <StaticResource x:Key="CheckBoxCheckBackgroundFillIndeterminatePressed" ResourceKey="HudAccentPressedBrush" />
+    <StaticResource x:Key="CheckBoxCheckGlyphForegroundChecked" ResourceKey="HudOnAccentBrush" />
+    <StaticResource x:Key="CheckBoxCheckGlyphForegroundCheckedPointerOver" ResourceKey="HudOnAccentBrush" />
+    <StaticResource x:Key="CheckBoxCheckGlyphForegroundCheckedPressed" ResourceKey="HudOnAccentBrush" />
+    <StaticResource x:Key="CheckBoxCheckGlyphForegroundIndeterminate" ResourceKey="HudOnAccentBrush" />
+    <StaticResource x:Key="CheckBoxCheckGlyphForegroundIndeterminatePointerOver" ResourceKey="HudOnAccentBrush" />
+    <StaticResource x:Key="CheckBoxCheckGlyphForegroundIndeterminatePressed" ResourceKey="HudOnAccentBrush" />
+
+    <x:Double x:Key="RadioButtonBorderThemeThickness">1.5</x:Double>
+    <StaticResource x:Key="RadioButtonOuterEllipseFill" ResourceKey="TextControlBackground" />
+    <StaticResource x:Key="RadioButtonOuterEllipseStroke" ResourceKey="HudInputStrokeBrush" />
+    <StaticResource x:Key="RadioButtonOuterEllipseStrokePointerOver" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="RadioButtonOuterEllipseCheckedFill" ResourceKey="HudAccentSurfaceBrush" />
+    <StaticResource x:Key="RadioButtonOuterEllipseCheckedFillPointerOver" ResourceKey="HudHoverSurfaceBrush" />
+    <StaticResource x:Key="RadioButtonOuterEllipseCheckedFillPressed" ResourceKey="HudPressedSurfaceBrush" />
+    <StaticResource x:Key="RadioButtonOuterEllipseCheckedStroke" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="RadioButtonOuterEllipseCheckedStrokePointerOver" ResourceKey="HudAccentHoverBrush" />
+    <StaticResource x:Key="RadioButtonOuterEllipseCheckedStrokePressed" ResourceKey="HudAccentPressedBrush" />
+    <StaticResource x:Key="RadioButtonCheckGlyphFill" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="RadioButtonCheckGlyphFillPointerOver" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="RadioButtonCheckGlyphFillPressed" ResourceKey="HudAccentBrush" />
+
+    <Thickness x:Key="ToggleSwitchOnStrokeThickness">1</Thickness>
+    <StaticResource x:Key="ToggleSwitchFillOff" ResourceKey="TextControlBackground" />
+    <StaticResource x:Key="ToggleSwitchFillOffPointerOver" ResourceKey="HudHoverSurfaceBrush" />
+    <StaticResource x:Key="ToggleSwitchFillOffPressed" ResourceKey="HudPressedSurfaceBrush" />
+    <StaticResource x:Key="ToggleSwitchStrokeOffPressed" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="ToggleSwitchStrokeOff" ResourceKey="HudInputStrokeBrush" />
+    <StaticResource x:Key="ToggleSwitchStrokeOffPointerOver" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="ToggleSwitchFillOn" ResourceKey="HudAccentSurfaceBrush" />
+    <StaticResource x:Key="ToggleSwitchFillOnPointerOver" ResourceKey="HudHoverSurfaceBrush" />
+    <StaticResource x:Key="ToggleSwitchFillOnPressed" ResourceKey="HudPressedSurfaceBrush" />
+    <StaticResource x:Key="ToggleSwitchStrokeOn" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="ToggleSwitchStrokeOnPointerOver" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="ToggleSwitchStrokeOnPressed" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="ToggleSwitchKnobFillOn" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="ToggleSwitchKnobFillOnPointerOver" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="ToggleSwitchKnobFillOnPressed" ResourceKey="HudAccentBrush" />
+
+    <StaticResource x:Key="SliderTrackFill" ResourceKey="HudInputStrokeBrush" />
+    <StaticResource x:Key="SliderTrackFillPointerOver" ResourceKey="HudInputStrokeBrush" />
+    <StaticResource x:Key="SliderTrackFillPressed" ResourceKey="HudInputStrokeBrush" />
+    <StaticResource x:Key="SliderTrackValueFill" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="SliderTrackValueFillPointerOver" ResourceKey="HudAccentHoverBrush" />
+    <StaticResource x:Key="SliderTrackValueFillPressed" ResourceKey="HudAccentPressedBrush" />
+    <StaticResource x:Key="SliderThumbBackground" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="SliderThumbBackgroundPointerOver" ResourceKey="HudAccentHoverBrush" />
+    <StaticResource x:Key="SliderThumbBackgroundPressed" ResourceKey="HudAccentPressedBrush" />
+    <x:Double x:Key="SliderTrackThemeHeight">4</x:Double>
+    <CornerRadius x:Key="SliderThumbCornerRadius">3</CornerRadius>
+    <x:Double x:Key="SliderHorizontalThumbWidth">12</x:Double>
+    <x:Double x:Key="SliderHorizontalThumbHeight">20</x:Double>
+</ResourceDictionary>

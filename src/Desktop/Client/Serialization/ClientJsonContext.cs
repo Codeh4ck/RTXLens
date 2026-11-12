@@ -40,6 +40,7 @@ namespace RTXLens.Client.Serialization;
 [JsonSerializable(typeof(ErrorResponse))]
 [JsonSerializable(typeof(SettingsProfileCatalog))]
 [JsonSerializable(typeof(SettingsProfileRequest))]
+[JsonSerializable(typeof(SettingsProfile))]
 [JsonSerializable(typeof(DeviceWarningProfile))]
 [JsonSerializable(typeof(DeviceWarningProfileCatalog))]
 [JsonSerializable(typeof(WarningShutdownReason))]

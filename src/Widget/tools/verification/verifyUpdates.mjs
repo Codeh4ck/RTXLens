@@ -9,7 +9,18 @@ export async function verifyUpdates(page, base, properties, setManifest, fail, r
         window.plugins = { Linkprovider: { open: url => window.openedUpdateLinks.push(url) } };
     });
 
-    setManifest({ schemaVersion: 1, releaseTag: 'v1.1.0', desktop: '1.1.0', service: '1.1.0', widget: '1.1.0' });
+    const [major, minor, patch] = installedVersion.split('.').map(Number);
+    const nextVersion = `${major}.${minor}.${patch + 1}`;
+    const followingVersion = `${major}.${minor}.${patch + 2}`;
+    const publishFixture = version => setManifest({
+        schemaVersion: 1,
+        releaseTag: `v${version}`,
+        desktop: version,
+        service: version,
+        widget: version
+    });
+
+    publishFixture(nextVersion);
     const before = requests.filter(request => request.url.includes('rtxlens.com/updates/version.json')).length;
     await properties({ ...base, checkUpdates: false, updateFrequency: 'Monthly', showAlerts: false });
     assert.equal(requests.filter(request => request.url.includes('rtxlens.com/updates/version.json')).length, before);
@@ -19,21 +30,21 @@ export async function verifyUpdates(page, base, properties, setManifest, fail, r
     assert.equal(await page.locator('.widget-flyout').getAttribute('data-mode'), 'updates');
     const updateText = await page.locator('.flyout-body').innerText();
     assert.ok(updateText.includes(installedVersion), `Expected installed widget version ${installedVersion}`);
-    assert.match(updateText, /1.1.0/);
+    assert.ok(updateText.includes(nextVersion), `Expected available widget version ${nextVersion}`);
     await page.getByRole('button', { name: 'View release', exact: true }).click();
     assert.deepEqual(await page.evaluate(() => window.openedUpdateLinks),
-        ['https://github.com/Codeh4ck/RTXLens/releases/tag/v1.1.0']);
+        [`https://github.com/Codeh4ck/RTXLens/releases/tag/v${nextVersion}`]);
     await page.screenshot({ path: join(output, 'L-H-updates.png') });
     await page.getByRole('button', { name: 'Skip this version', exact: true }).click();
     assert.equal(await page.locator('.update-notice').count(), 0);
     assert.match(await page.evaluate(() => localStorage.getItem('rtx-monitor-updates/default')), /"skipped":true/);
     await page.locator('.flyout-close').click();
 
-    setManifest({ schemaVersion: 1, releaseTag: 'v1.2.0', desktop: '1.2.0', service: '1.2.0', widget: '1.2.0' });
+    publishFixture(followingVersion);
     await page.locator('#panel1 .panel-title').dblclick();
     await page.locator('.check-updates').click();
     await page.getByRole('button', { name: 'View release', exact: true }).waitFor();
-    assert.match(await page.locator('.flyout-body').innerText(), /1.2.0/);
+    assert.ok((await page.locator('.flyout-body').innerText()).includes(followingVersion));
     await page.setViewportSize({ width: 840, height: 344 });
     const bounds = await page.locator('.widget-flyout').boundingBox();
     assert.ok(bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= 840 && bounds.y + bounds.height <= 344);

@@ -2,13 +2,13 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:RTXLens.App.Controls"
-    Title="RTX Lens · WireView device settings">
+    Title="RTX Lens · WireView Pro II device settings">
     <Grid x:Name="Root" Background="{ThemeResource MonitorBackground}" Padding="20" RowDefinitions="Auto,*" RowSpacing="14">
         <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="14">
             <StackPanel Spacing="6">
                 <StackPanel Orientation="Horizontal" Spacing="9">
                     <controls:WidgetIcon IconName="settings" Width="32" Height="32" />
-                    <TextBlock Text="WireView device settings" Style="{StaticResource MonitorHeading}" VerticalAlignment="Center" />
+                    <TextBlock Text="WireView Pro II device settings" Style="{StaticResource MonitorHeading}" VerticalAlignment="Center" />
                 </StackPanel>
                 <TextBlock x:Name="FirmwareText" Text="Firmware: unavailable" Style="{StaticResource MonitorSectionHeading}" />
                 <TextBlock x:Name="SettingsDescription" Text="Apply saves your changes to the WireView." Style="{StaticResource MonitorCaption}" TextWrapping="Wrap" />

@@ -24,10 +24,8 @@ public static class AfterburnerBackupCleanup
 
     private enum Folder { Legacy, Store, Archive, Results }
 
-    public static bool ContainsOnlyBackupLeftovers(string installation) =>
-        IsPlainDirectory(installation) && Directory.EnumerateFileSystemEntries(installation).All(desktop =>
-            NameIs(desktop, "Desktop") && IsPlainDirectory(desktop) && Directory.EnumerateFileSystemEntries(desktop).All(store =>
-                NameIs(store, BackupFolder) && IsPlainDirectory(store) && IsKnownTree(store, Folder.Store)));
+    internal static bool IsKnownBackupDirectory(string path) =>
+        IsPlainDirectory(path) && IsKnownTree(path, Folder.Store);
 
     public static void Remove(string? installation, string programData, Action<string> log)
     {

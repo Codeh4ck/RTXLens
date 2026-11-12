@@ -91,7 +91,7 @@ public sealed partial class ConfigurationView : UserControl
                         }
                     };
                 }
-                tab.Header = plugin.IsAsus ? "ROG Astral" : plugin.IsWireView ? "WireView" : plugin.IsMsi ? "MSI PSU" : plugin.IsNvidia ? "Nvidia" : plugin.Name;
+                tab.Header = plugin.IsAsus ? "ROG Astral" : plugin.IsWireView ? "WireView Pro II" : plugin.IsMsi ? "MSI PSU" : plugin.IsNvidia ? "Nvidia" : plugin.Name;
                 var scroll = (ScrollViewer)tab.Content;
                 if (scroll.Content is not PluginSettingsView existing || !ReferenceEquals(existing.Model, plugin))
                 {

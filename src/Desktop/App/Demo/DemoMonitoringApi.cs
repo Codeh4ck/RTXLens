@@ -117,7 +117,7 @@ internal sealed class DemoMonitoringApi : IMonitoringApi
                 .. _configuration.Configuration.Plugins.Select(pair => new PluginInfo(pair.Key,
                     pair.Key switch
                     {
-                        "wireview-pro2" => "WireView Pro 2",
+                        "wireview-pro2" => "WireView Pro II",
                         "msi-psu" => "MSI MPG Ai1300TS",
                         "generic-nvidia" => "GenericNvidia",
                         _ => "ASUS ROG Astral"
@@ -162,7 +162,7 @@ internal sealed class DemoMonitoringApi : IMonitoringApi
 
     public Task<DeviceConfig> GetWireViewConfigurationAsync(CancellationToken token) => Task.FromResult(new DeviceConfig
     {
-        Version = 2, FriendlyName = "WireView Pro 2 · DEMO", WireOcpFaultThresholdA = 9.2, OcpFaultThresholdA = 55,
+        Version = 2, FriendlyName = "WireView Pro II · DEMO", WireOcpFaultThresholdA = 9.2, OcpFaultThresholdA = 55,
         OppFaultThresholdW = 600, TsFaultThresholdC = 80, FanMode = "Automatic", FanTempSource = "Onboard", FanDutyMax = 100
     });
 

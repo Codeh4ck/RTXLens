@@ -25,7 +25,7 @@ public static class DebugDeviceDefaults
             FanBitmapId = 0x64,
             Inversion = 0
         },
-        FriendlyName = "DEBUG WireView",
+        FriendlyName = "DEBUG WireView Pro II",
         WireOcpFaultThresholdA = 9.2,
         OcpFaultThresholdA = 55,
         OppFaultThresholdW = 600,

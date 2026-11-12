@@ -7,6 +7,7 @@ using RTXLens.Presentation.Msi.Afterburner;
 
 namespace RTXLens.App.Msi.Afterburner;
 
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
 internal static class AfterburnerProcessControl
 {
     internal static async Task CloseAsync(string installation)

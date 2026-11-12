@@ -33,7 +33,7 @@
                     <CheckBox Content="Show GPU status as a separate tab"
                         IsChecked="{x:Bind Preferences.ShowSeparateGpuStatusTab, Mode=TwoWay}"
                         IsEnabled="{x:Bind Preferences.CanChooseGpuStatusTab, Mode=OneWay}" />
-                    <TextBlock Text="Saved for this desktop app. The separate tab is required and cannot be hidden while neither WireView nor ROG Astral is reporting, so GPU status remains accessible."
+                    <TextBlock Text="Saved for this desktop app. The separate tab is required and cannot be hidden while neither WireView Pro II nor ROG Astral is reporting, so GPU status remains accessible."
                         Style="{StaticResource MonitorCaption}" />
                     <ComboBox Header="Selected GPU" ItemsSource="{x:Bind Model.Nvidia.Devices}" DisplayMemberPath="Name"
                         SelectedItem="{x:Bind Model.Nvidia.SelectedDevice, Mode=TwoWay}" HorizontalAlignment="Stretch" />
@@ -41,7 +41,7 @@
                     <TextBlock Text="Connector Power, Total current and Voltage use the shared profile in Source selections. Fans and core voltage are read only."
                         Style="{StaticResource MonitorCaption}" />
                 </StackPanel>
-                <TextBlock Text="Firmware thresholds and fan configuration can be inspected in the WireView device settings window. Device writes are not supported."
+                <TextBlock Text="Firmware thresholds and fan configuration can be inspected in the WireView Pro II device settings window. Device writes are not supported."
                     Style="{StaticResource MonitorCaption}" Visibility="{x:Bind Model.IsWireView, Converter={StaticResource BoolVisibility}}" />
                 <StackPanel Spacing="12" Visibility="{x:Bind Model.IsMsi, Converter={StaticResource BoolVisibility}}">
                     <ComboBox Header="Selected PSU" ItemsSource="{x:Bind Model.Msi.Devices}" DisplayMemberPath="Name"
@@ -70,8 +70,8 @@
             <StackPanel Spacing="16">
                 <TextBlock Text="These display preferences apply immediately to this app and do not change the service configuration." Style="{StaticResource MonitorCaption}" />
                 <TextBlock Text="Show MSI PSU amperage below the matching P1–P6 labels. Values appear only while the PSU is reporting. Select the connector feeding each device; pin numbers follow each source's numbering." Style="{StaticResource MonitorCaption}" TextWrapping="Wrap"/>
-                <ToggleSwitch Header="Show MSI current under WireView pins" IsOn="{x:Bind Preferences.ShowWireViewPsuCurrent, Mode=TwoWay}"/>
-                <ComboBox Header="WireView · PSU connector" SelectedIndex="{x:Bind Preferences.WireViewPsuConnectorIndex, Mode=TwoWay}" MinWidth="240"
+                <ToggleSwitch Header="Show MSI current under WireView Pro II pins" IsOn="{x:Bind Preferences.ShowWireViewPsuCurrent, Mode=TwoWay}"/>
+                <ComboBox Header="WireView Pro II · PSU connector" SelectedIndex="{x:Bind Preferences.WireViewPsuConnectorIndex, Mode=TwoWay}" MinWidth="240"
                     IsEnabled="{x:Bind Preferences.ShowWireViewPsuCurrent, Mode=OneWay}">
                     <ComboBoxItem Content="Connector 1"/><ComboBoxItem Content="Connector 2"/>
                 </ComboBox>

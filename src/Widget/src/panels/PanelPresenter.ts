@@ -33,7 +33,7 @@ export class PanelPresenter {
                   ? 'MSI MPG Ai1300TS'
                   : this.store.msiName
             : isWire
-              ? this.store.wireName || 'WireView Pro 2'
+              ? this.store.wireName || 'WireView Pro II'
               : isNvidia
                 ? this.store.snapshot?.plugins.find(plugin => plugin.pluginId === pluginId)?.message || 'NVIDIA GeForce RTX'
                 : 'ROG Astral';
@@ -186,7 +186,7 @@ export class PanelPresenter {
                 }
 
                 if ((value('MonitorBoard', 'FaultStatus') ?? 0) > 0) {
-                    data.alerts.push(`WireView: ${faultDescription(value('MonitorBoard', 'FaultStatus'))}`);
+                    data.alerts.push(`WireView Pro II: ${faultDescription(value('MonitorBoard', 'FaultStatus'))}`);
                 }
             } else if (binding.kind === 'status') {
                 data.gpuUsage = this.format.value(value('GpuCore', 'Utilization'), '%', 0);
