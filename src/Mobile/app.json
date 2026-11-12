@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "RTX Lens",
+    "slug": "rtxlens-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "ios": {
+      "bundleIdentifier": "com.rtxlens.mobile",
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "RTX Lens connects to your PC to pair and show live sensor readings."
+      }
+    },
+    "android": {
+      "package": "com.rtxlens.mobile"
+    },
+    "plugins": [
+      ["expo-camera", {
+        "cameraPermission": "Allow RTX Lens to scan a pairing QR code.",
+        "microphonePermission": false,
+        "recordAudioAndroid": false
+      }],
+      ["expo-secure-store", { "faceIDPermission": false }]
+    ]
+  }
+}

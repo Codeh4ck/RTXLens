@@ -1,0 +1,124 @@
+name: Mobile preview builds
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/mobile-app]
+    paths:
+      - 'src/Mobile/**'
+      - '.github/workflows/mobile-preview.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: '1'
+
+jobs:
+  ios:
+    name: iPhone IPA for AltStore
+    runs-on: macos-26
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: src/Mobile
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: src/Mobile/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck && npm test
+
+      - name: Generate the iOS project
+        run: |
+          npx --no-install expo prebuild --platform ios --clean --no-install
+          pod install --project-directory=ios
+
+      - name: Compile and package the unsigned IPA
+        shell: bash
+        run: |
+          workspace="$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)"
+          test -n "$workspace"
+          scheme="$(basename "$workspace" .xcworkspace)"
+          derived_data="$RUNNER_TEMP/rtxlens-derived-data"
+          xcodebuild -workspace "$workspace" -scheme "$scheme" \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$derived_data" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+
+          app="$(find "$derived_data/Build/Products/Release-iphoneos" -maxdepth 1 -name '*.app' -print -quit)"
+          test -d "$app"
+          bundle="$RUNNER_TEMP/rtxlens-ios"
+          mkdir -p "$bundle/Payload"
+          ditto "$app" "$bundle/Payload/$(basename "$app")"
+          ditto -c -k --keepParent "$bundle/Payload" "$bundle/RTX-Lens-unsigned.ipa"
+          unzip -t "$bundle/RTX-Lens-unsigned.ipa" >/dev/null
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: RTX-Lens-iOS-AltStore
+          path: ${{ runner.temp }}/rtxlens-ios/RTX-Lens-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 7
+
+  android:
+    name: Android test APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: src/Mobile
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: src/Mobile/package-lock.json
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - run: npm ci
+      - run: npm run typecheck && npm test
+
+      - name: Generate and build the Android app
+        shell: bash
+        run: |
+          sdkmanager 'platforms;android-37'
+          npx --no-install expo prebuild --platform android --clean --no-install
+          cd android
+          ./gradlew :app:assembleRelease --no-daemon
+
+      - name: Verify and stage the APK
+        shell: bash
+        run: |
+          apk="android/app/build/outputs/apk/release/app-release.apk"
+          test -f "$apk"
+          apksigner="$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)"
+          test -x "$apksigner"
+          "$apksigner" verify "$apk"
+          mkdir -p "$RUNNER_TEMP/rtxlens-android"
+          cp "$apk" "$RUNNER_TEMP/rtxlens-android/RTX-Lens-preview.apk"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: RTX-Lens-Android-Preview
+          path: ${{ runner.temp }}/rtxlens-android/RTX-Lens-preview.apk
+          if-no-files-found: error
+          retention-days: 7
