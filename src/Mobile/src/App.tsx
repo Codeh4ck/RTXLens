@@ -7,15 +7,23 @@ import { Alert, AppState, Linking, Platform, StyleSheet, Text, View } from 'reac
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { notificationPermission, onWarningNotificationOpened, showWarningNotification } from './notifications';
-import { destinations, retryDelay, sessionResult, type Destination, type Route, type StopReason } from './connection';
+import { destinations, localSwitchAddress, retryDelay, sessionResult, type Destination, type StopReason } from './connection';
 import { IncidentHistory } from './history';
+import type { IncidentRef } from './incidentProtocol';
+import { useLockScreenNotifications } from './lockScreenNotifications';
+import { allowsWarning, type NotificationPreferences } from './mobilePreferences';
+import {
+  DashboardSettings, NotificationPreferencesCard, TemperatureSettings, TemperatureUnitContext, TestRemoteAccess, useMobilePreferences,
+} from './mobileSettings';
 import { decodeFrame, decodePairingCode, decodeSavedComputer, requestPairing, type PairedComputer, type SensorFrame } from './protocol';
 import { Gpu, Home, Power, Warnings } from './screens';
 import { transport } from './transport';
-import { BottomNavigation, Button, Card, Notice, Page, Selection, colors, styles, type Tab } from './ui';
+import { BottomNavigation, Button, Card, Notice, Page, colors, styles, type Tab } from './ui';
 import { WarningEvents } from './warningEvents';
 
 const computerKey = 'rtxlens.paired-computer';
+const localConnectTimeout = 3_000;
+const localProbeInterval = 30_000;
 
 type Connection = 'idle' | 'connecting' | 'reconnecting' | 'connected' | 'offline' | 'repair';
 
@@ -37,19 +45,20 @@ function MobilePreview() {
   const [scanning, setScanning] = useState(false);
   const [pairing, setPairing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [route, setRoute] = useState<Route>('auto');
   const [destination, setDestination] = useState<Destination | null>(null);
   const network = useNetworkState();
-  const cellular = network.type === NetworkStateType.CELLULAR;
+  const wifi = network.type === NetworkStateType.WIFI;
   const noNetwork = network.type === NetworkStateType.NONE;
   const [active, setActive] = useState(AppState.currentState !== 'background');
   const [connection, setConnection] = useState<Connection>('idle');
   const [frame, setFrame] = useState<SensorFrame | null>(null);
   const [tab, setTab] = useState<Tab>('home');
+  const [notificationLink, setNotificationLink] = useState<{ index: number; incident: IncidentRef | null } | null>(null);
   const [notifications, setNotifications] = useState<'granted' | 'available' | 'blocked'>('available');
   const [notificationError, setNotificationError] = useState<string | null>(null);
   const [simulations, setSimulations] = useState<SensorFrame['simulationWarnings']>([]);
   const [retry, setRetry] = useState(0);
+  const [offerLocalConnection, setOfferLocalConnection] = useState(false);
   const scanReady = useRef(false);
   const pairingJob = useRef<AbortController | null>(null);
   const nextStream = useRef(0);
@@ -57,6 +66,12 @@ function MobilePreview() {
   const hasReadings = useRef(false);
   const warningEvents = useRef(new WarningEvents());
   const canNotify = useRef(false);
+  const live = active && !noNetwork && connection === 'connected';
+  const localAddress = live && wifi && computer ? localSwitchAddress(computer, destination) : null;
+  const preferences = useMobilePreferences();
+  const { notificationRef, loaded: preferencesLoaded } = preferences;
+  const push = useLockScreenNotifications(computer, destination?.address, live, notificationRef, preferencesLoaded && !preferences.error);
+  const pushRegistered = push.registered;
 
   useEffect(() => {
     let live = true;
@@ -104,13 +119,16 @@ function MobilePreview() {
 
   useEffect(() => {
     if (transport) {
-      const subscription = onWarningNotificationOpened(() => setTab('warnings'));
+      const subscription = onWarningNotificationOpened(incident => {
+        setNotificationLink(previous => ({ index: (previous?.index ?? 0) + 1, incident }));
+        setTab('warnings');
+      });
       return () => subscription.remove();
     }
   }, []);
 
   useEffect(() => {
-    if (!transport || !computer || !active) {
+    if (!transport || !computer || !active || !preferencesLoaded) {
       return;
     }
 
@@ -124,7 +142,7 @@ function MobilePreview() {
 
     const native = transport;
     const { publicKeyFingerprint, token } = computer;
-    const addresses = destinations(computer, route, cellular);
+    const addresses = destinations(computer);
     let disposed = false;
     let id: string | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -171,9 +189,14 @@ function MobilePreview() {
       const candidate = String(++nextStream.current);
       id = candidate;
 
+      if (target.route === 'local' && addresses.length > 1) {
+        timer = setTimeout(failed, localConnectTimeout);
+      }
+
       try {
         const reply = await native.get(target.address, publicKeyFingerprint, '/session', token);
         if (disposed || id !== candidate) return;
+        clearTimeout(timer);
         const result = sessionResult(reply);
         if (result === 'revoked') {
           stopForPairing(result);
@@ -224,9 +247,13 @@ function MobilePreview() {
           }
 
           for (const warning of warningEvents.current.receive(decoded)) {
-            if (canNotify.current) {
-              const title = warning.simulation ? `Simulation · ${warning.title}` : warning.title;
-              void showWarningNotification(title, warning.detail).catch(() => setNotificationError('Could not show a system notification.'));
+            const options = notificationRef.current;
+            if (canNotify.current && !pushRegistered.current && allowsWarning(options, warning.category)) {
+              const title = options.showTitle ? (warning.simulation ? `Simulation · ${warning.title}` : warning.title)
+                : warning.simulation ? 'RTX Lens simulation' : 'RTX Lens warning';
+              const detail = options.showTitle ? warning.detail : 'Open RTX Lens to view the alert.';
+              void showWarningNotification(title, detail, warning.incident)
+                .catch(() => setNotificationError('Could not show a system notification.'));
             }
           }
         }
@@ -242,7 +269,39 @@ function MobilePreview() {
       frames.remove();
       stopAttempt();
     };
-  }, [active, cellular, computer, noNetwork, retry, route]);
+  }, [active, computer, noNetwork, notificationRef, preferencesLoaded, pushRegistered, retry]);
+
+  useEffect(() => {
+    setOfferLocalConnection(false);
+    if (!transport || !computer || !localAddress) return;
+
+    const native = transport;
+    const address = localAddress;
+    const { publicKeyFingerprint, token } = computer;
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    async function probe() {
+      try {
+        const reply = await native.get(address, publicKeyFingerprint, '/session', token);
+        if (disposed) return;
+        if (sessionResult(reply) === 'connect') {
+          setOfferLocalConnection(true);
+          return;
+        }
+      } catch {
+        // The PC can still be reached via its current connection.
+      }
+
+      if (!disposed) timer = setTimeout(() => void probe(), localProbeInterval);
+    }
+
+    void probe();
+    return () => {
+      disposed = true;
+      clearTimeout(timer);
+    };
+  }, [computer, localAddress]);
 
   async function startScan() {
     setError(null);
@@ -285,7 +344,6 @@ function MobilePreview() {
         await SecureStore.setItemAsync(computerKey, JSON.stringify(paired), {
           keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
         });
-        setRoute('auto');
         setComputer(paired);
         setTab('home');
       }
@@ -311,12 +369,14 @@ function MobilePreview() {
 
   async function forgetComputer() {
     try {
+      const registrationRemoved = await push.forgetRegistration();
       await SecureStore.deleteItemAsync(computerKey);
       setComputer(null);
       setConnection('idle');
       setFrame(null);
       setDestination(null);
-      setError(null);
+      setError(registrationRemoved ? null : 'Revoke this phone in Mobile Access on your PC to stop its notifications.');
+      setNotificationLink(null);
       setSimulations([]);
       warningEvents.current = new WarningEvents();
       blockedPairing.current = null;
@@ -330,6 +390,7 @@ function MobilePreview() {
     if (next !== 'settings' && scanning) {
       cancelPairing();
     }
+    if (next !== 'warnings') setNotificationLink(null);
     setTab(next);
   }
 
@@ -344,7 +405,13 @@ function MobilePreview() {
     }
   }
 
-  const live = active && connection === 'connected';
+  async function saveNotificationPreferences(value: NotificationPreferences) {
+    if (push.enabled && (!live || !await push.applyPreferences(value))) {
+      throw new Error('Could not apply notification preferences on the PC.');
+    }
+    await preferences.saveNotifications(value);
+  }
+
   const warningCount = live ? frame?.warnings.filter(warning => warning.phase === 'Active').length ?? 0 : 0;
   let content: ReactNode;
 
@@ -356,20 +423,25 @@ function MobilePreview() {
     content = (
       <Page title="Settings">
         {error && <Notice>{error}</Notice>}
+        {preferences.error && <Notice>{preferences.error}</Notice>}
         {computer ? (
           <Card title="PC connection" icon="link">
             <Text style={[local.state, !live && { color: colors.muted }]}>
-              {live ? 'Connected' : connection === 'connecting' ? 'Connecting…' : connection === 'reconnecting' ? 'Reconnecting…'
+              {live ? destination?.route === 'remote' ? 'Connected remotely' : 'Connected locally'
+                : connection === 'connecting' ? 'Connecting…' : connection === 'reconnecting' ? 'Reconnecting…'
                 : connection === 'repair' ? 'Pair again' : connection === 'offline' ? 'Phone offline' : 'Disconnected'}
             </Text>
             {destination && <Text selectable style={styles.caption}>{destination.address}</Text>}
-            <Selection options={[{ id: 'auto', label: 'Automatic' }, { id: 'local', label: 'Home Wi-Fi' }, { id: 'remote', label: 'Away' }]}
-              selected={route} onSelect={setRoute} />
+            <View>
+              <Text style={styles.text}>Connection priority</Text>
+              <Text style={styles.caption}>Try the local address first, then use the remote address if needed.</Text>
+            </View>
+            <TestRemoteAccess computer={computer} wifi={wifi} />
             <View style={styles.actions}>
               {(connection === 'reconnecting' || connection === 'offline') && (
                 <Button icon="refresh" label="Reconnect" onPress={() => setRetry(value => value + 1)} />
               )}
-              <Button icon="close" label="Forget PC" variant="danger" onPress={() => Alert.alert(
+              <Button icon="close" label="Forget PC" variant="danger" disabled={push.busy} onPress={() => Alert.alert(
                 'Forget this PC?', 'To connect again, scan a new pairing code.', [
                   { text: 'Cancel', style: 'cancel' }, { text: 'Forget PC', style: 'destructive', onPress: () => void forgetComputer() },
                 ],
@@ -399,23 +471,62 @@ function MobilePreview() {
             <Button icon="settings" label="Open system settings" onPress={() => void Linking.openSettings()} />
           ) : <Button icon="warnings" label="Enable notifications" variant="primary" onPress={enableNotifications} />}
         </Card>
+        {preferencesLoaded && <NotificationPreferencesCard value={preferences.notifications} syncRequired={push.enabled}
+          canSync={live && !push.busy} retrySave={preferences.error !== null} save={saveNotificationPreferences} />}
+        {push.available && <Card title="Lock-screen notifications" icon="warnings">
+          <Text style={styles.caption}>Get warnings when RTX Lens is closed. Alerts are delivered through Expo and your phone’s push service.</Text>
+          {push.error && <Notice>{push.error}</Notice>}
+          {push.enabled && <Text style={local.state}>
+            {push.ready ? 'Enabled' : 'Waiting for registration'}
+          </Text>}
+          {push.enabled && !push.ready && live && !preferences.error &&
+            <Button icon="refresh" label="Retry registration" disabled={push.busy} onPress={() => void push.set(true)} />}
+          {push.busy && <Text style={styles.caption}>Updating…</Text>}
+          {notifications === 'blocked' &&
+            <Button icon="settings" label="Open system settings" onPress={() => void Linking.openSettings()} />}
+          <Button icon="warnings" label={push.enabled ? 'Turn off lock-screen notifications' : 'Enable lock-screen notifications'}
+            variant={push.enabled ? undefined : 'primary'}
+            disabled={!live || push.busy || (!push.enabled && (notifications === 'blocked' || !preferencesLoaded || !!preferences.error))}
+            onPress={() => void push.set(!push.enabled, !push.enabled)} />
+          {!live && <Text style={styles.caption}>Connect to your PC to change this setting.</Text>}
+        </Card>}
+        {preferencesLoaded && <TemperatureSettings unit={preferences.temperature} save={preferences.saveTemperature} />}
+        {preferencesLoaded && <DashboardSettings value={preferences.display} busy={preferences.savingDisplay}
+          sensors={frame?.sensors ?? []} save={preferences.saveDisplay} />}
       </Page>
     );
   } else if (tab === 'power') {
-    content = <Power frame={frame} live={live} />;
+    content = <Power frame={frame} live={live} hideIdleMsiConnectors={preferences.display.hideIdleMsiConnectors} />;
   } else if (tab === 'gpu') {
     content = <Gpu frame={frame} live={live} />;
   } else if (tab === 'warnings') {
-    content = <Warnings frame={frame} live={live} simulations={simulations}
-      history={<IncidentHistory computer={computer} destination={destination} live={live} />} />;
+    content = <Warnings key={notificationLink?.index} frame={frame} live={live} simulations={simulations}
+      showHistory={Boolean(notificationLink?.incident)}
+      history={<IncidentHistory computer={computer} destination={destination} live={live} target={notificationLink?.incident}
+        onNotificationClosed={() => setNotificationLink(previous => previous && { ...previous, incident: null })} />} />;
   } else {
-    content = <Home frame={frame} live={live} paired={computer !== null} away={destination?.route === 'remote'}
+    content = <Home frame={frame} live={live} paired={computer !== null} remote={destination?.route === 'remote'}
+      panels={preferences.display.homePanels}
       connecting={connection === 'connecting' || connection === 'reconnecting'} reconnecting={connection === 'reconnecting'} onNavigate={navigate} />;
   }
 
   return (
     <>
-      <View style={styles.screen} key={tab}>{content}</View>
+      {localAddress && offerLocalConnection && <View style={local.connectionPrompt}>
+        <Card title="Local connection available" icon="link">
+          <Text style={styles.caption}>RTX Lens can reach your PC over this Wi-Fi. Switch to the local connection?</Text>
+          <View style={styles.actions}>
+            <Button icon="check" label="Switch to local" variant="primary" onPress={() => {
+              setOfferLocalConnection(false);
+              setRetry(value => value + 1);
+            }} />
+            <Button icon="close" label="Stay remote" onPress={() => setOfferLocalConnection(false)} />
+          </View>
+        </Card>
+      </View>}
+      <TemperatureUnitContext.Provider value={preferences.temperature}>
+        <View style={styles.screen} key={tab}>{content}</View>
+      </TemperatureUnitContext.Provider>
       <SafeAreaView edges={['bottom']} style={styles.bottom}>
         <BottomNavigation selected={tab} warningCount={warningCount} onSelect={navigate} />
       </SafeAreaView>
@@ -426,4 +537,5 @@ function MobilePreview() {
 const local = StyleSheet.create({
   state: { color: colors.accent, fontSize: 15, fontWeight: '700' },
   camera: { height: 255, borderRadius: 14, overflow: 'hidden' },
+  connectionPrompt: { alignSelf: 'center', width: '100%', maxWidth: 680, paddingHorizontal: 20, paddingTop: 12 },
 });

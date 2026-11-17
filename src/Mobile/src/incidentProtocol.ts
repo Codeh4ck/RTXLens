@@ -21,6 +21,8 @@ export type Incident = IncidentSummary & {
   steps: { name: string; result: string; timestamp: string | null; exitCode: number | null }[];
 };
 
+export type IncidentRef = Pick<IncidentSummary, 'id' | 'kind'>;
+
 const idPattern = /^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/i;
 const cursorPattern = /^\d{1,19}\.[a-f\d]{32}\.(warning|safeguard)$/i;
 
@@ -55,7 +57,14 @@ export function decodeIncidentPage(json: string) {
   return { items: page.items.map(summary).filter(item => item !== null), next: page.next };
 }
 
-export function decodeIncident(json: string, expected: IncidentSummary): Incident {
+export function warningNotificationIncident(data: unknown): IncidentRef | null {
+  const record = asObject(data);
+  return record?.screen === 'warnings' && (record.kind === 'warning' || record.kind === 'safeguard')
+    && typeof record.incidentId === 'string' && idPattern.test(record.incidentId)
+    ? { id: record.incidentId.toLowerCase(), kind: record.kind } : null;
+}
+
+export function decodeIncident(json: string, expected: IncidentRef): Incident {
   const record = asObject(JSON.parse(json));
   const base = summary(record);
   if (!record || !base || base.id !== expected.id || base.kind !== expected.kind) {

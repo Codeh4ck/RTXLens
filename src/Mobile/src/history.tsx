@@ -1,21 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { Destination } from './connection';
-import { decodeIncident, decodeIncidentPage, type Incident, type IncidentSummary } from './incidentProtocol';
+import { decodeIncident, decodeIncidentPage, type Incident, type IncidentRef, type IncidentSummary } from './incidentProtocol';
 import { formatReading, isPin, metricLabel, sourceName } from './metrics';
+import { TemperatureUnitContext } from './mobileSettings';
 import type { PairedComputer, SensorReading } from './protocol';
 import { ReadingRow } from './screens';
 import { transport } from './transport';
 import { Button, Card, Icon, Notice, Page, colors, styles } from './ui';
 
-export function IncidentHistory({ computer, destination, live }: {
+export function IncidentHistory({ computer, destination, live, target, onNotificationClosed }: {
   computer: PairedComputer | null; destination: Destination | null; live: boolean;
+  target?: IncidentRef | null; onNotificationClosed?: () => void;
 }) {
   const [items, setItems] = useState<IncidentSummary[]>([]);
   const [next, setNext] = useState<string | null>(null);
-  const [selected, setSelected] = useState<IncidentSummary | null>(null);
+  const [selected, setSelected] = useState<IncidentRef | null>(target ?? null);
   const [detail, setDetail] = useState<Incident | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,6 +101,7 @@ export function IncidentHistory({ computer, destination, live }: {
   function closeReport() {
     setSelected(null);
     setDetail(null);
+    if (target) onNotificationClosed?.();
   }
 
   return (
@@ -135,6 +138,7 @@ export function IncidentHistory({ computer, destination, live }: {
 }
 
 function IncidentDetail({ incident }: { incident: Incident }) {
+  const temperatureUnit = useContext(TemperatureUnitContext);
   const groups = new Map<string, { name: string; readings: SensorReading[] }>();
   for (const reading of incident.readings) {
     const { pluginId, deviceId, connectorId } = reading.identity;
@@ -174,7 +178,7 @@ function IncidentDetail({ incident }: { incident: Incident }) {
       {Array.from(groups, ([key, group]) => <Card key={key} title={group.name} icon="activity">
         {group.readings.map(reading => {
           const label = metricLabel(reading);
-          return <ReadingRow key={reading.identity.key} value={formatReading(reading)}
+          return <ReadingRow key={reading.identity.key} value={formatReading(reading, temperatureUnit)}
             label={isPin(reading) ? `P${reading.identity.channel ?? '?'} ${label.toLowerCase()}` : label} />;
         })}
       </Card>)}

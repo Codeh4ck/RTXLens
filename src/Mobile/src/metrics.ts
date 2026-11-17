@@ -1,3 +1,4 @@
+import { homePanelKey, type HomePinPanel, type TemperatureUnit } from './mobilePreferences.ts';
 import type { SensorReading } from './protocol';
 
 const sourceNames: Record<string, string> = {
@@ -54,6 +55,40 @@ export function groupMetrics(sensors: SensorReading[], kind: 'power' | 'gpu'): M
 export function findMetric(sensors: SensorReading[], component: string, metric: string, channel?: number) {
   return sensors.find(sensor => sensor.identity.component === component && sensor.identity.metric === metric
     && (channel === undefined || channel === sensor.identity.channel) && sensor.quality === 'Valid' && sensor.value !== null);
+}
+
+export function powerConnectorGroups(group: MetricGroup, hideIdleMsiConnectors: boolean) {
+  const byConnector = new Map<string | null, SensorReading[]>();
+  for (const reading of group.readings) {
+    const id = reading.identity.connectorId;
+    const existing = byConnector.get(id);
+    if (existing) existing.push(reading);
+    else byConnector.set(id, [reading]);
+  }
+
+  const connectors = [...byConnector];
+  return hideIdleMsiConnectors && group.source === 'msi-psu'
+    ? connectors.filter(([id, readings]) => id === null || findMetric(readings, 'PsuConnector', 'Current')?.value !== 0)
+    : connectors;
+}
+
+export function pinPanelTitle(panel: HomePinPanel, deviceName = sourceName(panel.pluginId)) {
+  return panel.connectorId === null ? `${deviceName} pins` : `${deviceName} pins · Connector ${panel.connectorId}`;
+}
+
+export function pinPanelSources(groups: MetricGroup[]) {
+  const sources = new Map<string, { panel: HomePinPanel; title: string; pins: SensorReading[] }>();
+  for (const group of groups) {
+    for (const [connectorId, readings] of powerConnectorGroups(group, false)) {
+      const pins = readings.filter(reading => isPin(reading) && pinMetrics.some(metric => metric === reading.identity.metric));
+      if (pins.length === 0) continue;
+
+      const { pluginId, deviceId } = pins[0].identity;
+      const panel: HomePinPanel = { kind: 'pins', pluginId, deviceId, connectorId };
+      sources.set(homePanelKey(panel), { panel, title: pinPanelTitle(panel, group.name), pins });
+    }
+  }
+  return sources;
 }
 
 const labels: Record<string, string> = {
@@ -138,7 +173,7 @@ export function boostLimitRows(readings: SensorReading[]) {
   return rows;
 }
 
-export function formatReading(sensor?: SensorReading) {
+export function formatReading(sensor?: SensorReading, temperatureUnit: TemperatureUnit = 'celsius') {
   if (!sensor || sensor.value === null || sensor.quality !== 'Valid') {
     return 'Unavailable';
   }
@@ -159,6 +194,7 @@ export function formatReading(sensor?: SensorReading) {
   if (unit === 'Boolean') return value ? 'Yes' : 'No';
   if (component === 'GpuCore' && metric === 'Voltage' && unit === 'Volts') return `${number(value * 1000, 1)} mV`;
   if (unit === 'Megabytes' && value >= 1024) return `${number(value / 1024, 2)} GiB`;
+  if (unit === 'Celsius' && temperatureUnit === 'fahrenheit') return `${number(value * 9 / 5 + 32, 1)} °F`;
   if (unit === 'BytesPerSecond' && value >= 1024) {
     const exponent = Math.min(3, Math.floor(Math.log(value) / Math.log(1024)));
     return `${number(value / 1024 ** exponent, 2)} ${['B/s', 'KiB/s', 'MiB/s', 'GiB/s'][exponent]}`;

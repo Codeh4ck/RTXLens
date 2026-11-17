@@ -28,12 +28,15 @@ export type WarningState = {
   phase: string;
   episodeId: string;
   pluginId: string;
+  icon: string;
   detail: string;
   startedAt: string | null;
   notificationSequence: number;
 };
 
 export type SimulationWarning = { id: string; title: string; detail: string; startedAt: string };
+
+export type SafeguardNotice = { id: string; connector: number; startedAt: string; isSimulation: boolean };
 
 export type SensorFrame = {
   sequence: number;
@@ -43,6 +46,7 @@ export type SensorFrame = {
   warningInstance: string | null;
   notificationsEnabled: boolean;
   simulationWarnings: SimulationWarning[];
+  safeguards: SafeguardNotice[];
   reportingSources: number;
   connectorPowerKey: string | null | undefined;
   pinLimits: { pluginId: string; deviceId: string; overcurrentAmperes: number }[];
@@ -236,6 +240,7 @@ export function decodeFrame(json: string): SensorFrame | null {
           ? [{
               title: warning.title, phase: warning.phase, episodeId: warning.episodeId,
               pluginId: typeof warning.pluginId === 'string' ? warning.pluginId : '',
+              icon: typeof warning.icon === 'string' ? warning.icon : '',
               detail: typeof warning.detail === 'string' ? warning.detail : '',
               startedAt: typeof warning.startedAt === 'string' && Number.isFinite(Date.parse(warning.startedAt)) ? warning.startedAt : null,
               notificationSequence: typeof warning.notificationSequence === 'number' && Number.isSafeInteger(warning.notificationSequence)
@@ -254,6 +259,15 @@ export function decodeFrame(json: string): SensorFrame | null {
           : [];
       })
     : [];
+  const safeguards = Array.isArray(snapshot.safeguardExecutions)
+    ? snapshot.safeguardExecutions.flatMap(value => {
+        const entry = asObject(value);
+        return typeof entry?.id === 'string' && approvalIdPattern.test(entry.id) && (entry.connector === 1 || entry.connector === 2)
+          && typeof entry.startedAt === 'string' && Number.isFinite(Date.parse(entry.startedAt))
+          ? [{ id: entry.id.toLowerCase(), connector: entry.connector, startedAt: entry.startedAt, isSimulation: entry.isSimulation === true }]
+          : [];
+      })
+    : [];
   const reportingSources = Array.isArray(snapshot.plugins)
     ? snapshot.plugins.filter(plugin => asObject(plugin)?.state === 'Ready').length : new Set(sensors.filter(sensor =>
         sensor.quality === 'Valid' && sensor.value !== null).map(sensor => sensor.identity.pluginId)).size;
@@ -267,7 +281,7 @@ export function decodeFrame(json: string): SensorFrame | null {
   }) : [];
 
   return {
-    sequence: snapshot.sequence, timestamp: snapshot.timestamp, sensors, warnings, simulationWarnings, reportingSources, pinLimits,
+    sequence: snapshot.sequence, timestamp: snapshot.timestamp, sensors, warnings, simulationWarnings, safeguards, reportingSources, pinLimits,
     connectorPowerKey: connectorPower ? typeof connectorPower.sensorKey === 'string' ? connectorPower.sensorKey : null : undefined,
     warningInstance: typeof warningFeed?.instanceId === 'string' ? warningFeed.instanceId : null,
     notificationsEnabled: warningFeed?.notificationsEnabled === true,

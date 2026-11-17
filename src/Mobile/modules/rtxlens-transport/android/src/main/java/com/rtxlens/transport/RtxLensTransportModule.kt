@@ -38,6 +38,10 @@ class RtxLensTransportModule : Module() {
             request(address, pin, path, null, token, promise)
         }
 
+        AsyncFunction("registerNotifications") { address: String, pin: String, token: String, json: String, promise: Promise ->
+            request(address, pin, "/notification-registration/v2", json, token, promise)
+        }
+
         Function("openStream") { id: String, address: String, pin: String, token: String ->
             openStream(id, address, pin, token)
         }
@@ -61,22 +65,28 @@ class RtxLensTransportModule : Module() {
             val client = createClient(endpoint, pin)
             val url = endpoint.newBuilder().encodedPath(path.substringBefore('?'))
             val builder = Request.Builder()
-            val limit: Long
+            val registration = path == "/notification-registration/v2"
             if (token == null) {
-                require(path == "/pairing" || path == "/pairing/complete")
-                require(json != null && json.toByteArray(Charsets.UTF_8).size <= 1024)
-                builder.post(json.toRequestBody("application/json".toMediaType()))
-                limit = 4096
+                require((path == "/pairing" || path == "/pairing/complete") && json != null)
             } else {
-                require(tokenPattern.matches(token) && (path == "/session" || path == "/incidents"
-                    || historyPage.matches(path) || historyDetail.matches(path)))
+                require(tokenPattern.matches(token))
+                if (registration) {
+                    require(json != null)
+                } else {
+                    require(json == null && (path == "/session" || path == "/incidents"
+                        || historyPage.matches(path) || historyDetail.matches(path)))
+                }
                 if ('?' in path) {
                     url.addQueryParameter("before", path.substringAfter("?before="))
                 }
                 builder.header("Authorization", "Bearer $token")
-                limit = 512 * 1024
             }
 
+            if (json != null) {
+                require(json.toByteArray(Charsets.UTF_8).size <= 1024)
+                builder.post(json.toRequestBody("application/json".toMediaType()))
+            }
+            val limit = if (token == null || registration) 4096L else 512L * 1024
             val request = builder.url(url.build()).build()
             client.newCall(request).enqueue(object : Callback {
                 override fun onFailure(call: Call, error: IOException) {

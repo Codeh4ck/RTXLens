@@ -16,6 +16,9 @@ const paths = {
   settings: 'M10 3h4l1 3 3 1 3 3v4l-3 3-3 1-1 3h-4l-1-3-3-1-3-3v-4l3-3 3-1zm5 9a3 3 0 1 0-6 0 3 3 0 0 0 6 0',
   scan: 'M4 8V4h4m8 0h4v4m0 8v4h-4m-8 0H4v-4m1-4h14',
   close: 'm6 6 12 12M18 6 6 18',
+  add: 'M12 5v14M5 12h14',
+  up: 'm5 14 7-7 7 7',
+  down: 'm5 10 7 7 7-7',
   away: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM3 12h18m-9-9a14 14 0 0 1 0 18m0-18a14 14 0 0 0 0 18',
   refresh: 'M20 7v5h-5m5-1a8 8 0 1 0-2 7',
   link: 'M8 13a4 4 0 0 0 6 0l4-4a4 4 0 1 0-6-6l-2 2m6 6a4 4 0 0 0-6 0l-4 4a4 4 0 1 0 6 6l2-2',
@@ -88,13 +91,13 @@ export function Card({ title, icon, children }: { title?: string; icon?: IconNam
   );
 }
 
-export function Button({ icon, label, variant = 'secondary', onPress }: {
-  icon: IconName; label: string; variant?: 'secondary' | 'primary' | 'danger'; onPress: () => void;
+export function Button({ icon, label, variant = 'secondary', disabled = false, onPress }: {
+  icon: IconName; label: string; variant?: 'secondary' | 'primary' | 'danger'; disabled?: boolean; onPress: () => void;
 }) {
   const color = variant === 'primary' ? colors.background : variant === 'danger' ? colors.danger : colors.text;
   return (
-    <Pressable accessibilityRole="button" onPress={onPress}
-      style={({ pressed }) => [styles.button, variant === 'primary' && styles.primaryButton, pressed && styles.pressed]}>
+    <Pressable accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={onPress}
+      style={({ pressed }) => [styles.button, variant === 'primary' && styles.primaryButton, (pressed || disabled) && styles.pressed]}>
       <Icon name={icon} color={color} size={17} />
       <Text style={[styles.buttonLabel, { color }]}>{label}</Text>
     </Pressable>

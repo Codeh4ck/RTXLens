@@ -1,21 +1,26 @@
-import { useState, type ReactNode } from 'react';
+import { useContext, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
-  boostLimitRows, findMetric, formatReading, groupMetrics, isPin, metricLabel, number, pinMetrics, sourceName, wireViewFaults, type PinMetric,
+  boostLimitRows, findMetric, formatReading, groupMetrics, isPin, metricLabel, number, pinMetrics, pinPanelSources, pinPanelTitle, powerConnectorGroups,
+  sourceName, wireViewFaults, type PinMetric,
 } from './metrics';
+import { homeCards, homePanelKey, type HomeCardId, type HomePanel } from './mobilePreferences';
+import { TemperatureUnitContext } from './mobileSettings';
 import type { SensorFrame, SensorReading } from './protocol';
 import { Button, Card, Icon, Page, Selection, colors, styles, type IconName, type Tab } from './ui';
 
 type TelemetryProps = { frame: SensorFrame | null; live: boolean };
 
-export function Home({ frame, live, paired, connecting, reconnecting, away, onNavigate }: TelemetryProps & {
-  paired: boolean; connecting: boolean; reconnecting: boolean; away: boolean; onNavigate: (tab: Tab) => void;
+export function Home({ frame, live, paired, connecting, reconnecting, remote, panels, onNavigate }: TelemetryProps & {
+  paired: boolean; connecting: boolean; reconnecting: boolean; remote: boolean; panels: HomePanel[]; onNavigate: (tab: Tab) => void;
 }) {
+  const temperatureUnit = useContext(TemperatureUnitContext);
   const sensors = frame?.sensors ?? [];
   const gpuGroups = groupMetrics(sensors, 'gpu');
   const gpu = (gpuGroups.find(group => group.source === 'generic-nvidia') ?? gpuGroups[0])?.readings ?? [];
   const powerGroups = groupMetrics(sensors, 'power');
+  const pinSources = pinPanelSources(powerGroups);
   const connectorPower = frame?.connectorPowerKey === undefined
     ? powerGroups.map(group => findMetric(group.readings, 'GpuConnector', 'Power')).find(reading => reading !== undefined)
     : sensors.find(reading => reading.identity.key === frame.connectorPowerKey);
@@ -24,6 +29,14 @@ export function Home({ frame, live, paired, connecting, reconnecting, away, onNa
   const title = !paired ? 'Pair your PC' : !live ? reconnecting ? 'Reconnecting to your PC' : connecting ? 'Connecting to your PC' : 'PC disconnected'
     : !frame ? 'Waiting for readings' : warningCount ? `${warningCount} active ${warningCount === 1 ? 'warning' : 'warnings'}`
       : frame.reportingSources ? 'Monitoring active' : 'No devices reporting';
+  const tiles: Record<HomeCardId, { value: string; icon: IconName; tab: Tab }> = {
+    gpuUsage: { value: formatReading(findMetric(gpu, 'GpuCore', 'Utilization')), icon: 'activity', tab: 'gpu' },
+    coreTemperature: {
+      value: formatReading(findMetric(gpu, 'GpuCore', 'Temperature'), temperatureUnit), icon: 'temp', tab: 'gpu',
+    },
+    connectorPower: { value: formatReading(connectorPower), icon: 'power', tab: 'power' },
+    activeWarnings: { value: String(warningCount), icon: 'warnings', tab: 'warnings' },
+  };
 
   return (
     <Page title="RTX Lens">
@@ -35,21 +48,32 @@ export function Home({ frame, live, paired, connecting, reconnecting, away, onNa
           <Text style={[local.status, { color: tone }]}>{live ? 'Live' : connecting ? 'Connecting' : paired ? 'Offline' : 'Setup'}</Text>
         </View>
         <Text style={local.heroTitle}>{title}</Text>
-        {paired && <Text style={styles.caption}>
-          {away ? 'Away' : 'Home Wi-Fi'}{frame && ` · ${frame.reportingSources} reporting ${frame.reportingSources === 1 ? 'source' : 'sources'}`}
+        {live && <Text style={styles.caption}>
+          {remote ? 'Remote connection' : 'Local connection'}
+          {frame && ` · ${frame.reportingSources} reporting ${frame.reportingSources === 1 ? 'source' : 'sources'}`}
         </Text>}
         {!paired && <Button icon="scan" label="Pair a PC" variant="primary" onPress={() => onNavigate('settings')} />}
         {paired && !live && <Button icon="settings" label="Connection settings" onPress={() => onNavigate('settings')} />}
       </View>
 
-      {frame && (
+      {frame && panels.length > 0 && (
         <View style={local.tileGrid}>
-          <Tile title="GPU usage" value={formatReading(findMetric(gpu, 'GpuCore', 'Utilization'))} icon="activity"
-            onPress={() => onNavigate('gpu')} />
-          <Tile title="Core temperature" value={formatReading(findMetric(gpu, 'GpuCore', 'Temperature'))} icon="temp"
-            onPress={() => onNavigate('gpu')} />
-          <Tile title="Connector power" value={formatReading(connectorPower)} icon="power" onPress={() => onNavigate('power')} />
-          <Tile title="Active warnings" value={String(warningCount)} icon="warnings" onPress={() => onNavigate('warnings')} />
+          {panels.map(panel => {
+            if (panel.kind === 'metric') {
+              const { value, icon, tab } = tiles[panel.id];
+              const title = homeCards.find(card => card.id === panel.id)?.label ?? panel.id;
+              return <Tile key={panel.id} title={title} value={value} icon={icon} onPress={() => onNavigate(tab)} />;
+            }
+
+            const key = homePanelKey(panel);
+            const source = pinSources.get(key);
+            const limit = frame.pinLimits.find(limit => limit.pluginId === panel.pluginId && limit.deviceId === panel.deviceId);
+            return (
+              <View key={key} style={local.pinPanel}>
+                <HomePinChart title={source?.title ?? pinPanelTitle(panel)} pins={source?.pins} limit={limit?.overcurrentAmperes} />
+              </View>
+            );
+          })}
         </View>
       )}
       {frame && !live && <Text style={styles.caption}>Last readings at {time(frame.timestamp)}</Text>}
@@ -67,11 +91,12 @@ function Tile({ title, value, icon, onPress }: { title: string; value: string; i
   );
 }
 
-export function Power({ frame, live }: TelemetryProps) {
+export function Power({ frame, live, hideIdleMsiConnectors }: TelemetryProps & { hideIdleMsiConnectors: boolean }) {
   const [source, setSource] = useState('');
   const [pinMetric, setPinMetric] = useState<PinMetric>('Current');
   const groups = groupMetrics(frame?.sensors ?? [], 'power');
   const selected = groups.find(group => group.key === source) ?? groups[0];
+  const connectors = selected ? powerConnectorGroups(selected, hideIdleMsiConnectors) : [];
   const faults = selected?.source === 'wireview-pro2' ? wireViewFaults(selected.readings) : [];
 
   return (
@@ -80,8 +105,8 @@ export function Power({ frame, live }: TelemetryProps) {
         options={groups.map(group => ({ id: group.key, label: group.name }))} onSelect={setSource} />}
       {selected ? (
         <>
-          {[...new Set(selected.readings.map(reading => reading.identity.connectorId))].map(id => {
-            const readings = selected.readings.filter(reading => reading.identity.connectorId === id);
+          {connectors.length === 0 && <Card title="No MSI connectors drawing current" icon="power">{null}</Card>}
+          {connectors.map(([id, readings]) => {
             const pins = readings.filter(isPin);
             const totalOrder = ['PowerCapability', 'Power', 'Current', 'Voltage'];
             const totals = readings.filter(reading => ['GpuConnector', 'PsuConnector'].includes(reading.identity.component))
@@ -110,8 +135,17 @@ export function Power({ frame, live }: TelemetryProps) {
   );
 }
 
-function PinChart({ pins, metric, limit, onSelect }: {
-  pins: SensorReading[]; metric: PinMetric; limit?: number; onSelect: (metric: PinMetric) => void;
+function HomePinChart({ title, pins, limit }: { title: string; pins?: SensorReading[]; limit?: number }) {
+  const [metric, setMetric] = useState<PinMetric>('Current');
+  return pins ? <PinChart title={title} pins={pins} metric={metric} limit={limit} onSelect={setMetric} /> : (
+    <Card title={title} icon="activity">
+      <Text style={styles.caption}>No readings from this pin source.</Text>
+    </Card>
+  );
+}
+
+function PinChart({ title = 'Pin distribution', pins, metric, limit, onSelect }: {
+  title?: string; pins: SensorReading[]; metric: PinMetric; limit?: number; onSelect: (metric: PinMetric) => void;
 }) {
   const options = pinMetrics.filter(name => pins.some(pin => pin.identity.metric === name));
   const selected = options.includes(metric) ? metric : options[0];
@@ -125,7 +159,7 @@ function PinChart({ pins, metric, limit, onSelect }: {
   const ceiling = Math.max(selected === 'Voltage' ? 13 : selected === 'Current' ? 10 : 100, currentLimit ?? 0, ...valid);
 
   return (
-    <Card title="Pin distribution" icon="activity">
+    <Card title={title} icon="activity">
       {options.length > 1 && <Selection options={options.map(id => ({ id, label: id }))} selected={selected} onSelect={onSelect} />}
       {selected === 'Current' && valid.length > 1 && (
         <Text style={styles.caption}>Current spread · {number(Math.max(...valid) - Math.min(...valid), 2)} A</Text>
@@ -221,10 +255,10 @@ function linkSpeed(readings: SensorReading[], genMetric: string, widthMetric: st
     .filter(Boolean).join(' ') || 'Unavailable';
 }
 
-export function Warnings({ frame, live, simulations, history }: TelemetryProps & {
-  simulations: SensorFrame['simulationWarnings']; history: ReactNode;
+export function Warnings({ frame, live, simulations, history, showHistory }: TelemetryProps & {
+  simulations: SensorFrame['simulationWarnings']; history: ReactNode; showHistory?: boolean;
 }) {
-  const [view, setView] = useState<'active' | 'history'>('active');
+  const [view, setView] = useState<'active' | 'history'>(showHistory ? 'history' : 'active');
   const warnings = [...frame?.warnings ?? []].sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? ''));
 
   return (
@@ -268,9 +302,10 @@ function Empty({ icon, title, live }: { icon: IconName; title: string; live: boo
 }
 
 function Reading({ reading, value }: { reading: SensorReading; value?: string }) {
+  const temperatureUnit = useContext(TemperatureUnitContext);
   const fault = (reading.identity.metric === 'FaultLog' || reading.identity.metric === 'FaultStatus')
     && reading.quality === 'Valid' && reading.value !== null && reading.value !== 0;
-  return <ReadingRow label={metricLabel(reading)} value={value ?? formatReading(reading)} fault={fault} />;
+  return <ReadingRow label={metricLabel(reading)} value={value ?? formatReading(reading, temperatureUnit)} fault={fault} />;
 }
 
 export function ReadingRow({ label, value, fault = false }: { label: string; value: string; fault?: boolean }) {
@@ -296,6 +331,7 @@ const local = StyleSheet.create({
   status: { fontSize: 14, fontWeight: '700' },
   heroTitle: { fontSize: 25, fontWeight: '700', color: colors.text, letterSpacing: -0.4 },
   tileGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  pinPanel: { flexBasis: '100%' },
   tile: { flexBasis: '45%', flexGrow: 1, padding: 14, borderRadius: 18, borderWidth: 1, borderColor: colors.line,
     backgroundColor: colors.surface, gap: 7 },
   tileIcons: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },

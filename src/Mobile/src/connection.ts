@@ -1,21 +1,17 @@
 import type { PairedComputer } from './protocol';
 
-export type AddressRoute = 'local' | 'remote';
-export type Route = 'auto' | AddressRoute;
 export type StopReason = 'revoked' | 'changed-key';
 
-export type Destination = { route: AddressRoute; address: string };
+export type Destination = { route: 'local' | 'remote'; address: string };
 
-export function destinations(computer: PairedComputer, route: Route, cellular: boolean): Destination[] {
+export function destinations(computer: PairedComputer): Destination[] {
   const local: Destination = { route: 'local', address: computer.localAddress };
   const remote: Destination = { route: 'remote', address: computer.remoteAddress };
-  if (route !== 'auto') {
-    return [route === 'local' ? local : remote];
-  }
-  if (local.address === remote.address) {
-    return [cellular ? remote : local];
-  }
-  return cellular ? [remote, local] : [local, remote];
+  return local.address === remote.address ? [local] : [local, remote];
+}
+
+export function localSwitchAddress(computer: PairedComputer, destination: Destination | null): string | null {
+  return destination?.route === 'remote' && destination.address !== computer.localAddress ? computer.localAddress : null;
 }
 
 export function retryDelay(failures: number) {

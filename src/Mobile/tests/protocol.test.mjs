@@ -2,12 +2,24 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { decodeFrame, decodePairingCode, decodeSavedComputer, requestPairing } from '../src/protocol.ts';
-import { boostLimitRows, groupMetrics, metricLabel, formatReading, wireViewFaults } from '../src/metrics.ts';
-import { destinations, retryDelay, sessionResult } from '../src/connection.ts';
-import { decodeIncident, decodeIncidentPage } from '../src/incidentProtocol.ts';
+import { boostLimitRows, groupMetrics, metricLabel, formatReading, pinPanelSources, powerConnectorGroups, wireViewFaults } from '../src/metrics.ts';
+import { destinations, localSwitchAddress, retryDelay, sessionResult } from '../src/connection.ts';
+import { decodeIncident, decodeIncidentPage, warningNotificationIncident } from '../src/incidentProtocol.ts';
+import {
+  allowsWarning, decodeDisplayPreferences, decodeNotificationPreferences, defaultDisplayPreferences, homePanelKey, moveHomePanel,
+  warningCategories, warningCategory,
+} from '../src/mobilePreferences.ts';
 import { WarningEvents } from '../src/warningEvents.ts';
 
 const now = Date.now();
+
+test('opens only a valid warning or Safeguard+ incident carried by a notification', () => {
+  const data = { screen: 'warnings', kind: 'warning', incidentId: '08B8CD72-E449-43DD-A959-8418DC239F51' };
+  assert.deepEqual(warningNotificationIncident(data), { id: data.incidentId.toLowerCase(), kind: 'warning' });
+  assert.equal(warningNotificationIncident({ ...data, incidentId: '/session' }), null);
+  assert.deepEqual(warningNotificationIncident({ ...data, kind: 'safeguard' }), { id: data.incidentId.toLowerCase(), kind: 'safeguard' });
+  assert.equal(warningNotificationIncident({ screen: 'warnings' }), null);
+});
 const invite = {
   schemaVersion: 1,
   localAddress: 'https://192.168.1.30:59275/',
@@ -65,7 +77,7 @@ test('decodes a versioned frame and ignores malformed readings', () => {
     quality: 'Valid',
   };
   const warnings = [{
-    title: 'Current imbalance', phase: 'Active', episodeId: 'episode', pluginId: 'wireview-pro2',
+    title: 'Current imbalance', phase: 'Active', episodeId: 'episode', pluginId: 'wireview-pro2', icon: 'imbalance',
     detail: 'Pin 2 exceeded the current limit', startedAt: new Date().toISOString(), notificationSequence: 1,
   }];
   const frame = {
@@ -106,20 +118,125 @@ test('uses the service notification sequence and deduplicates simulation warning
 
   assert.deepEqual(events.receive(frame(1, false, 1)), [{ title: 'Test warning', detail: 'detail', simulation: true }]);
   assert.deepEqual(events.receive(frame(2, true, 1)), []);
-  assert.deepEqual(events.receive(frame(3, true, 2)), [{ title: 'Real warning', detail: 'detail', simulation: false }]);
+  assert.deepEqual(events.receive(frame(3, true, 2)), [{ title: 'Real warning', detail: 'detail', simulation: false, category: warningCategories.other }]);
   assert.deepEqual(events.receive(frame(4, true, 2)), []);
+});
+
+test('keeps default Home cards and restores custom selections including an empty dashboard', () => {
+  assert.deepEqual(decodeDisplayPreferences('{}'), defaultDisplayPreferences);
+  assert.deepEqual(decodeDisplayPreferences('{"visibleHomeCards":[],"hideIdleMsiConnectors":true}'), {
+    homePanels: [], hideIdleMsiConnectors: true,
+  });
+  assert.deepEqual(decodeDisplayPreferences('{"visibleHomeCards":["activeWarnings","coreTemperature","missing","activeWarnings"]}'), {
+    homePanels: [{ kind: 'metric', id: 'coreTemperature' }, { kind: 'metric', id: 'activeWarnings' }], hideIdleMsiConnectors: false,
+  });
+});
+
+test('restores reordered metric and pin panels even when the pin source is unavailable', () => {
+  const pin = { kind: 'pins', pluginId: 'msi-psu', deviceId: 'psu1', connectorId: '2' };
+  const panels = [
+    { kind: 'metric', id: 'gpuUsage' }, pin, { kind: 'metric', id: 'activeWarnings' },
+  ];
+  const reordered = moveHomePanel(panels, 1, -1);
+  assert.deepEqual(reordered, [pin, panels[0], panels[2]]);
+  assert.deepEqual(moveHomePanel(reordered, 1, 1), [pin, panels[2], panels[0]]);
+  assert.deepEqual(moveHomePanel(reordered, 0, -1), reordered);
+  assert.deepEqual(moveHomePanel(reordered, 2, 1), reordered);
+  assert.deepEqual(decodeDisplayPreferences(JSON.stringify({ homePanels: [...reordered, pin, { kind: 'metric', id: 'unknown' }] })).homePanels, reordered);
+});
+
+test('builds independent pin panels for each reporting plugin, device, and connector', () => {
+  const reading = (pluginId, deviceId, connectorId, component = 'GpuPin', metric = 'Current') => ({
+    identity: { pluginId, deviceId, connectorId, component, metric }, value: 1, quality: 'Valid',
+  });
+  const asus = reading('asus-astral', 'gpu1', null);
+  const wireView = reading('wireview-pro2', 'wv1', null);
+  const msi1 = reading('msi-psu', 'psu1', '1', 'PsuPin');
+  const msi2 = reading('msi-psu', 'psu1', '2', 'PsuPin');
+  const otherPsu = reading('msi-psu', 'psu2', '1', 'PsuPin');
+  const board = reading('wireview-pro2', 'wv1', null, 'MonitorBoard', 'Temperature');
+  const sources = pinPanelSources(groupMetrics([asus, wireView, msi1, msi2, otherPsu, board], 'power'));
+  assert.equal(sources.size, 5);
+  for (const pin of [asus, wireView, msi1, msi2, otherPsu]) {
+    const { pluginId, deviceId, connectorId } = pin.identity;
+    const key = homePanelKey({ kind: 'pins', pluginId, deviceId, connectorId });
+    assert.deepEqual(sources.get(key)?.pins, [pin]);
+  }
+});
+
+test('hides only MSI connectors with a valid zero total current', () => {
+  const reading = (connectorId, value, quality = 'Valid', component = 'PsuConnector') => ({
+    identity: { connectorId, component, metric: 'Current' }, value, quality,
+  });
+  const zero = reading('1', 0);
+  const draw = reading('2', 0.01);
+  const device = reading(null, 25, 'Valid', 'Psu');
+  const group = { source: 'msi-psu', readings: [zero, reading('1', 0, 'Valid', 'PsuPin'), draw, device] };
+  const ids = (group, hide) => powerConnectorGroups(group, hide).map(([id]) => id);
+
+  assert.deepEqual(ids(group, true), ['2', null]);
+  assert.deepEqual(ids(group, false), ['1', '2', null]);
+  assert.deepEqual(ids({ ...group, source: 'wireview-pro2' }, true), ['1', '2', null]);
+  assert.deepEqual(ids({ ...group, readings: [reading('1', 0, 'Stale'), reading('2', null), device] }, true), ['1', '2', null]);
+  assert.deepEqual(ids({ ...group, readings: [reading('1', 0.01), draw, device] }, true), ['1', '2', null]);
+});
+
+test('filters temperature separately from connector faults and rejects invalid stored flags', () => {
+  const preferences = decodeNotificationPreferences('{"categories":2,"showTitle":false}');
+  assert.equal(preferences.showTitle, false);
+  assert.equal(allowsWarning(preferences, warningCategory('wireview-pro2', 'temperature')), true);
+  assert.equal(allowsWarning(preferences, warningCategory('wireview-pro2', 'current')), false);
+  assert.equal(allowsWarning(preferences, warningCategories.safeguard), false);
+  assert.throws(() => decodeNotificationPreferences('{"categories":16,"showTitle":false}'));
+});
+
+test('recognizes new Safeguard+ events without replaying history or simulations', () => {
+  const events = new WarningEvents();
+  const timestamp = new Date(now).toISOString();
+  const historical = { id: '08b8cd72-e449-43dd-a959-8418dc239f51', connector: 1, startedAt: new Date(now - 10_000).toISOString() };
+  const triggered = { id: '08b8cd72-e449-43dd-a959-8418dc239f52', connector: 2, startedAt: timestamp };
+  const simulated = { ...triggered, id: '08b8cd72-e449-43dd-a959-8418dc239f53', isSimulation: true };
+  const frame = (sequence, safeguardExecutions) => decodeFrame(JSON.stringify({
+    schemaVersion: 1, sequence, timestamp, sensors: [], safeguardExecutions,
+  }));
+  assert.deepEqual(events.receive(frame(1, [historical])), []);
+  const notices = events.receive(frame(2, [historical, triggered, simulated]));
+  assert.equal(notices.length, 1);
+  assert.equal(notices[0].category, warningCategories.safeguard);
+  assert.deepEqual(notices[0].incident, { id: triggered.id, kind: 'safeguard' });
+  assert.deepEqual(events.receive(frame(3, [historical, triggered, simulated])), []);
+});
+
+test('formats all Celsius readings using the selected temperature unit', () => {
+  const reading = { identity: { component: 'MonitorBoard', metric: 'Temperature' }, quality: 'Valid', unit: 'Celsius', value: 30 };
+  assert.equal(formatReading(reading), '30 °C');
+  assert.equal(formatReading(reading, 'fahrenheit'), '86 °F');
+  assert.equal(formatReading({ ...reading, value: 0 }, 'fahrenheit'), '32 °F');
+  assert.equal(formatReading({ ...reading, value: null }, 'fahrenheit'), 'Unavailable');
 });
 
 test('prioritizes paired routes and bounds reconnect delays', () => {
   const computer = decodePairingCode(JSON.stringify(invite), now);
-  assert.deepEqual(destinations(computer, 'auto', false).map(target => target.route), ['local', 'remote']);
-  assert.deepEqual(destinations(computer, 'auto', true).map(target => target.route), ['remote', 'local']);
-  assert.deepEqual(destinations(computer, 'remote', false).map(target => target.route), ['remote']);
+  assert.deepEqual(destinations(computer), [
+    { route: 'local', address: computer.localAddress }, { route: 'remote', address: computer.remoteAddress },
+  ]);
+  assert.deepEqual(destinations({ ...computer, remoteAddress: computer.localAddress }), [
+    { route: 'local', address: computer.localAddress },
+  ]);
   assert.equal(retryDelay(100), 30_000);
   assert.equal(retryDelay(1), 1_000);
   assert.equal(sessionResult({ status: 401 }), 'revoked');
   assert.equal(sessionResult({ status: 0, keyMismatch: true }), 'changed-key');
   assert.equal(sessionResult({ status: 204 }), 'connect');
+});
+
+test('only offers a switch from a distinct remote connection', () => {
+  const computer = decodePairingCode(JSON.stringify(invite), now);
+  const [local, remote] = destinations(computer);
+  assert.equal(localSwitchAddress(computer, remote), computer.localAddress);
+  assert.equal(localSwitchAddress(computer, local), null);
+  assert.equal(localSwitchAddress(computer, null), null);
+  assert.equal(localSwitchAddress(computer, { ...remote, address: computer.localAddress }), null);
 });
 
 test('matches WireView fault flags and keeps zero boost durations distinguishable', () => {

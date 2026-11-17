@@ -14,20 +14,22 @@ final class PinnedHttpRequest {
 
     init(endpoint: PinnedEndpoint, path: String, json: String? = nil, token: String? = nil, queue: DispatchQueue) throws {
         let body = Data((json ?? "").utf8)
+        let registration = path == "/notification-registration/v2"
         if let token {
             let validPath = path == "/session" || path == "/incidents"
                 || path.range(of: #"^/incidents\?before=[0-9]{1,19}\.[a-fA-F0-9]{32}\.(warning|safeguard)$"#, options: .regularExpression) != nil
                 || path.range(of: #"^/incidents/(warning|safeguard)/[a-fA-F0-9-]{36}$"#, options: .regularExpression) != nil
-            guard validPath, path.utf8.allSatisfy({ (33...126).contains($0) }), isMobileToken(token) else {
+            guard (registration ? json != nil && body.count <= 1024 : validPath && json == nil),
+                  path.utf8.allSatisfy({ (33...126).contains($0) }), isMobileToken(token) else {
                 throw TransportError.invalidEndpoint
             }
-        } else if !["/pairing", "/pairing/complete"].contains(path) || body.count > 1024 {
+        } else if !["/pairing", "/pairing/complete"].contains(path) || json == nil || body.count > 1024 {
             throw TransportError.invalidEndpoint
         }
 
         self.queue = queue
-        limit = token == nil ? 4096 : 512 * 1024
-        let method = token == nil ? "POST" : "GET"
+        limit = token == nil || registration ? 4096 : 512 * 1024
+        let method = json == nil ? "GET" : "POST"
         var headers = [
             "\(method) \(path) HTTP/1.1",
             "Host: \(endpoint.host):\(endpoint.port.rawValue)",
@@ -35,7 +37,8 @@ final class PinnedHttpRequest {
         ]
         if let token {
             headers.append("Authorization: Bearer \(token)")
-        } else {
+        }
+        if json != nil {
             headers.append("Content-Type: application/json")
             headers.append("Content-Length: \(body.count)")
         }
