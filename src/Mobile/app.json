@@ -19,7 +19,8 @@
         "microphonePermission": false,
         "recordAudioAndroid": false
       }],
-      ["expo-secure-store", { "faceIDPermission": false }]
+      ["expo-secure-store", { "faceIDPermission": false }],
+      ["expo-notifications", { "enableRemoteNotifications": false }]
     ]
   }
 }

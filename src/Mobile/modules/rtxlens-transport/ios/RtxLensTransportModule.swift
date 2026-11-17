@@ -14,7 +14,7 @@ public final class RtxLensTransportModule: Module {
             self.queue.async {
                 do {
                     let endpoint = try PinnedEndpoint(address, fingerprint: pin)
-                    let request = try PairingRequest(endpoint: endpoint, path: path, json: json, queue: self.queue)
+                    let request = try PinnedHttpRequest(endpoint: endpoint, path: path, json: json, queue: self.queue)
                     request.start { result in
                         switch result {
                         case .success(let reply): promise.resolve(reply)
@@ -23,6 +23,28 @@ public final class RtxLensTransportModule: Module {
                     }
                 } catch {
                     promise.reject("PAIRING_FAILED", error.localizedDescription)
+                }
+            }
+        }
+
+        AsyncFunction("get") { (address: String, pin: String, path: String, token: String, promise: Promise) in
+            self.queue.async {
+                do {
+                    let endpoint = try PinnedEndpoint(address, fingerprint: pin)
+                    let request = try PinnedHttpRequest(endpoint: endpoint, path: path, token: token, queue: self.queue)
+                    request.start { result in
+                        switch result {
+                        case .success(let reply): promise.resolve(reply)
+                        case .failure(let error):
+                            if (error as? TransportError) == .keyMismatch {
+                                promise.resolve(["status": 0, "body": "", "keyMismatch": true])
+                            } else {
+                                promise.reject("REQUEST_FAILED", error.localizedDescription)
+                            }
+                        }
+                    }
+                } catch {
+                    promise.reject("REQUEST_FAILED", error.localizedDescription)
                 }
             }
         }
@@ -48,7 +70,7 @@ public final class RtxLensTransportModule: Module {
         cancelStream()
 
         do {
-            guard token.count == 76, token.range(of: "^[a-fA-F0-9]{32}\\.[A-Za-z0-9_-]{43}$", options: .regularExpression) != nil else {
+            guard isMobileToken(token) else {
                 throw TransportError.invalidEndpoint
             }
             let endpoint = try PinnedEndpoint(address, fingerprint: pin)

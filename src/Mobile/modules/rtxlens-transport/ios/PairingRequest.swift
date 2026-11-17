@@ -1,32 +1,50 @@
 import Foundation
 import Network
 
-final class PairingRequest {
+final class PinnedHttpRequest {
     private static let separator = Data("\r\n".utf8)
     private static let headerEnd = Data("\r\n\r\n".utf8)
     private let queue: DispatchQueue
     private let connection: NWConnection
     private let request: Data
+    private let limit: Int
+    private let verification: Verification
     private var response = Data()
     private var completion: ((Result<[String: Any], Error>) -> Void)?
 
-    init(endpoint: PinnedEndpoint, path: String, json: String, queue: DispatchQueue) throws {
-        let body = Data(json.utf8)
-        guard ["/pairing", "/pairing/complete"].contains(path), body.count <= 1024 else {
+    init(endpoint: PinnedEndpoint, path: String, json: String? = nil, token: String? = nil, queue: DispatchQueue) throws {
+        let body = Data((json ?? "").utf8)
+        if let token {
+            let validPath = path == "/session" || path == "/incidents"
+                || path.range(of: #"^/incidents\?before=[0-9]{1,19}\.[a-fA-F0-9]{32}\.(warning|safeguard)$"#, options: .regularExpression) != nil
+                || path.range(of: #"^/incidents/(warning|safeguard)/[a-fA-F0-9-]{36}$"#, options: .regularExpression) != nil
+            guard validPath, path.utf8.allSatisfy({ (33...126).contains($0) }), isMobileToken(token) else {
+                throw TransportError.invalidEndpoint
+            }
+        } else if !["/pairing", "/pairing/complete"].contains(path) || body.count > 1024 {
             throw TransportError.invalidEndpoint
         }
 
         self.queue = queue
-        connection = NWConnection(host: NWEndpoint.Host(endpoint.host), port: endpoint.port, using: endpoint.parameters(queue: queue))
-
-        let headers = [
-            "POST \(path) HTTP/1.1",
+        limit = token == nil ? 4096 : 512 * 1024
+        let method = token == nil ? "POST" : "GET"
+        var headers = [
+            "\(method) \(path) HTTP/1.1",
             "Host: \(endpoint.host):\(endpoint.port.rawValue)",
-            "Content-Type: application/json",
-            "Content-Length: \(body.count)",
-            "Connection: close", "", ""
+            "Connection: close"
         ]
+        if let token {
+            headers.append("Authorization: Bearer \(token)")
+        } else {
+            headers.append("Content-Type: application/json")
+            headers.append("Content-Length: \(body.count)")
+        }
+        headers += ["", ""]
         request = Data(headers.joined(separator: "\r\n").utf8) + body
+        let verification = Verification()
+        self.verification = verification
+        let parameters = endpoint.parameters(queue: queue) { verification.keyMismatch = true }
+        connection = NWConnection(host: NWEndpoint.Host(endpoint.host), port: endpoint.port, using: parameters)
     }
 
     func start(completion: @escaping (Result<[String: Any], Error>) -> Void) {
@@ -36,7 +54,7 @@ final class PairingRequest {
             case .ready:
                 self.send()
             case .failed:
-                self.finish(.failure(TransportError.connectionFailed))
+                self.finish(.failure(self.verification.keyMismatch ? TransportError.keyMismatch : TransportError.connectionFailed))
             case .cancelled:
                 self.finish(.failure(TransportError.connectionFailed))
             default:
@@ -69,7 +87,7 @@ final class PairingRequest {
             }
 
             do {
-                guard self.response.count <= 16384 else { throw TransportError.invalidResponse }
+                guard self.response.count <= self.limit + 12288 else { throw TransportError.invalidResponse }
                 if let reply = try self.parseResponse(complete: done) {
                     self.finish(.success(reply))
                 } else if done || error != nil {
@@ -99,12 +117,14 @@ final class PairingRequest {
         let headers = lines.dropFirst()
         let bodyBytes: Data
 
-        if headers.contains(where: { $0.lowercased() == "transfer-encoding: chunked" }) {
+        if status == 204 || status == 304 {
+            bodyBytes = Data()
+        } else if headers.contains(where: { $0.lowercased() == "transfer-encoding: chunked" }) {
             guard let decoded = try decodeChunks(body) else { return nil }
             bodyBytes = decoded
         } else if let lengthHeader = headers.first(where: { $0.lowercased().hasPrefix("content-length:") }) {
             guard let length = Int(lengthHeader.dropFirst(15).trimmingCharacters(in: .whitespaces)),
-                  (0...4096).contains(length) else {
+                  (0...limit).contains(length) else {
                 throw TransportError.invalidResponse
             }
             guard body.count >= length else { return nil }
@@ -114,7 +134,7 @@ final class PairingRequest {
             bodyBytes = body
         }
 
-        guard bodyBytes.count <= 4096, let result = String(data: bodyBytes, encoding: .utf8) else {
+        guard bodyBytes.count <= limit, let result = String(data: bodyBytes, encoding: .utf8) else {
             throw TransportError.invalidResponse
         }
         return ["status": status, "body": result]
@@ -126,7 +146,7 @@ final class PairingRequest {
 
         while let line = encoded.range(of: Self.separator, in: cursor..<encoded.endIndex) {
             guard let sizeText = String(data: encoded[cursor..<line.lowerBound], encoding: .ascii),
-                  let size = Int(sizeText, radix: 16), (0...4096 - result.count).contains(size) else {
+                  let size = Int(sizeText, radix: 16), (0...limit - result.count).contains(size) else {
                 throw TransportError.invalidResponse
             }
             if size == 0 {
@@ -149,5 +169,9 @@ final class PairingRequest {
         connection.stateUpdateHandler = nil
         connection.cancel()
         completion(result)
+    }
+
+    private final class Verification {
+        var keyMismatch = false
     }
 }

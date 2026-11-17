@@ -1,36 +1,29 @@
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
+import { useNetworkState, NetworkStateType } from 'expo-network';
 import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { AppState, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, AppState, Linking, Platform, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Path } from 'react-native-svg';
 
+import { notificationPermission, onWarningNotificationOpened, showWarningNotification } from './notifications';
+import { destinations, retryDelay, sessionResult, type Destination, type Route, type StopReason } from './connection';
+import { IncidentHistory } from './history';
 import { decodeFrame, decodePairingCode, decodeSavedComputer, requestPairing, type PairedComputer, type SensorFrame } from './protocol';
-import { transport, type StreamUpdate } from './transport';
+import { Gpu, Home, Power, Warnings } from './screens';
+import { transport } from './transport';
+import { BottomNavigation, Button, Card, Notice, Page, Selection, colors, styles, type Tab } from './ui';
+import { WarningEvents } from './warningEvents';
 
 const computerKey = 'rtxlens.paired-computer';
-const colors = {
-  background: '#0b111b', surface: '#121d2c', border: '#293b51', text: '#eaf2fc',
-  secondary: '#abbcd0', accent: '#50e3c2', warning: '#ffc36e', warningSurface: '#342719',
-};
 
-const paths = {
-  scan: 'M4 8V4h4m8 0h4v4m0 8v4h-4m-8 0H4v-4m1-4h14',
-  close: 'm6 6 12 12M18 6 6 18',
-  home: 'm3 10 9-7 9 7v10H3zm6 10v-6h6v6',
-  away: 'M3 20h18M7 17l5-14 5 14M9 12h6',
-  refresh: 'M20 7v5h-5m5-1a8 8 0 1 0-2 7',
-};
-
-type Route = 'local' | 'remote';
-type Connection = 'idle' | 'connecting' | StreamUpdate['state'];
+type Connection = 'idle' | 'connecting' | 'reconnecting' | 'connected' | 'offline' | 'repair';
 
 export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
-      <SafeAreaView style={styles.screen}>
+      <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
         <MobilePreview />
       </SafeAreaView>
     </SafeAreaProvider>
@@ -44,14 +37,26 @@ function MobilePreview() {
   const [scanning, setScanning] = useState(false);
   const [pairing, setPairing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [route, setRoute] = useState<Route>('local');
+  const [route, setRoute] = useState<Route>('auto');
+  const [destination, setDestination] = useState<Destination | null>(null);
+  const network = useNetworkState();
+  const cellular = network.type === NetworkStateType.CELLULAR;
+  const noNetwork = network.type === NetworkStateType.NONE;
   const [active, setActive] = useState(AppState.currentState !== 'background');
   const [connection, setConnection] = useState<Connection>('idle');
   const [frame, setFrame] = useState<SensorFrame | null>(null);
+  const [tab, setTab] = useState<Tab>('home');
+  const [notifications, setNotifications] = useState<'granted' | 'available' | 'blocked'>('available');
+  const [notificationError, setNotificationError] = useState<string | null>(null);
+  const [simulations, setSimulations] = useState<SensorFrame['simulationWarnings']>([]);
   const [retry, setRetry] = useState(0);
   const scanReady = useRef(false);
   const pairingJob = useRef<AbortController | null>(null);
   const nextStream = useRef(0);
+  const blockedPairing = useRef<StopReason | null>(null);
+  const hasReadings = useRef(false);
+  const warningEvents = useRef(new WarningEvents());
+  const canNotify = useRef(false);
 
   useEffect(() => {
     let live = true;
@@ -82,39 +87,162 @@ function MobilePreview() {
   }, []);
 
   useEffect(() => {
+    if (!active || !transport) {
+      canNotify.current = false;
+      return;
+    }
+
+    let live = true;
+    void notificationPermission().then(value => {
+      if (live) {
+        canNotify.current = value === 'granted';
+        setNotifications(value);
+      }
+    }).catch(() => {});
+    return () => { live = false; };
+  }, [active]);
+
+  useEffect(() => {
+    if (transport) {
+      const subscription = onWarningNotificationOpened(() => setTab('warnings'));
+      return () => subscription.remove();
+    }
+  }, []);
+
+  useEffect(() => {
     if (!transport || !computer || !active) {
       return;
     }
 
+    if (blockedPairing.current) {
+      return;
+    }
+    if (noNetwork) {
+      setConnection('offline');
+      return;
+    }
+
     const native = transport;
-    const id = String(++nextStream.current);
-    const address = route === 'local' ? computer.localAddress : computer.remoteAddress;
-    setConnection('connecting');
-    setFrame(null);
-    setError(null);
+    const { publicKeyFingerprint, token } = computer;
+    const addresses = destinations(computer, route, cellular);
+    let disposed = false;
+    let id: string | null = null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let connected = false;
+    let index = 0;
+    let failures = 0;
+    let keyMismatch = false;
+    let lastSequence = -1;
+
+    function stopAttempt() {
+      clearTimeout(timer);
+      if (id !== null) {
+        const old = id;
+        id = null;
+        native.closeStream(old);
+      }
+      connected = false;
+    }
+
+    function stopForPairing(reason: StopReason) {
+      stopAttempt();
+      blockedPairing.current = reason;
+      setConnection('repair');
+      setError(reason === 'revoked' ? 'The PC no longer authorizes this phone. Pair again in Mobile Access.'
+        : 'The PC’s key no longer matches. Verify the PC and pair again in Mobile Access.');
+    }
+
+    function failed(mismatch = false) {
+      stopAttempt();
+      keyMismatch ||= mismatch;
+      setConnection('reconnecting');
+      if (index < addresses.length) {
+        void attempt();
+      } else if (keyMismatch) {
+        stopForPairing('changed-key');
+      } else {
+        index = 0;
+        timer = setTimeout(() => void attempt(), retryDelay(++failures));
+      }
+    }
+
+    async function attempt() {
+      const target = addresses[index++];
+      const candidate = String(++nextStream.current);
+      id = candidate;
+
+      try {
+        const reply = await native.get(target.address, publicKeyFingerprint, '/session', token);
+        if (disposed || id !== candidate) return;
+        const result = sessionResult(reply);
+        if (result === 'revoked') {
+          stopForPairing(result);
+          return;
+        }
+        if (result !== 'connect') {
+          failed(result === 'changed-key');
+          return;
+        }
+
+        lastSequence = -1;
+        timer = setTimeout(failed, 15_000);
+        setDestination(target);
+        native.openStream(candidate, target.address, publicKeyFingerprint, token);
+      } catch {
+        if (!disposed && id === candidate) failed();
+      }
+    }
 
     const states = native.addListener('onStreamState', event => {
-      if (event.id === id) {
-        setConnection(event.state);
-        setError(event.message ?? null);
+      if (event.id !== id) return;
+      if (event.reason === 'revoked') stopForPairing('revoked');
+      else if (event.state !== 'connected') failed();
+      else {
+        clearTimeout(timer);
+        timer = setTimeout(failed, 45_000);
+        connected = true;
+        failures = 0;
+        keyMismatch = false;
+        setConnection('connected');
+        setError(null);
       }
     });
     const frames = native.addListener('onFrame', event => {
-      if (event.id === id) {
+      if (event.id === id && connected) {
         const decoded = decodeFrame(event.json);
-        if (decoded) {
-          setFrame(previous => previous && previous.sequence >= decoded.sequence ? previous : decoded);
+        if (decoded && decoded.sequence > lastSequence) {
+          clearTimeout(timer);
+          timer = setTimeout(failed, 45_000);
+          lastSequence = decoded.sequence;
+          hasReadings.current = true;
+          setFrame(decoded);
+          if (decoded.simulationWarnings.length > 0) {
+            setSimulations(previous => {
+              const byId = new Map([...previous, ...decoded.simulationWarnings].map(warning => [warning.id, warning]));
+              return Array.from(byId.values()).sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt)).slice(0, 12);
+            });
+          }
+
+          for (const warning of warningEvents.current.receive(decoded)) {
+            if (canNotify.current) {
+              const title = warning.simulation ? `Simulation · ${warning.title}` : warning.title;
+              void showWarningNotification(title, warning.detail).catch(() => setNotificationError('Could not show a system notification.'));
+            }
+          }
         }
       }
     });
 
-    native.openStream(id, address, computer.publicKeyFingerprint, computer.token);
+    setConnection(hasReadings.current ? 'reconnecting' : 'connecting');
+    setError(null);
+    void attempt();
     return () => {
+      disposed = true;
       states.remove();
       frames.remove();
-      native.closeStream(id);
+      stopAttempt();
     };
-  }, [active, computer, retry, route]);
+  }, [active, cellular, computer, noNetwork, retry, route]);
 
   async function startScan() {
     setError(null);
@@ -157,8 +285,9 @@ function MobilePreview() {
         await SecureStore.setItemAsync(computerKey, JSON.stringify(paired), {
           keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
         });
-        setRoute('local');
+        setRoute('auto');
         setComputer(paired);
+        setTab('home');
       }
     } catch (failure) {
       if (!job.signal.aborted) {
@@ -186,148 +315,115 @@ function MobilePreview() {
       setComputer(null);
       setConnection('idle');
       setFrame(null);
+      setDestination(null);
       setError(null);
+      setSimulations([]);
+      warningEvents.current = new WarningEvents();
+      blockedPairing.current = null;
+      hasReadings.current = false;
     } catch {
       setError('The pairing could not be removed from this phone.');
     }
   }
 
-  return (
-    <ScrollView contentContainerStyle={styles.page}>
-      <View style={styles.brand}>
-        <View style={styles.brandBar} />
-        <View>
-          <Text style={styles.title}>RTX Lens</Text>
-          <Text style={styles.caption}>Live monitoring preview</Text>
-        </View>
-      </View>
+  function navigate(next: Tab) {
+    if (next !== 'settings' && scanning) {
+      cancelPairing();
+    }
+    setTab(next);
+  }
 
-      {error && <Text accessibilityRole="alert" style={styles.warning}>{error}</Text>}
+  async function enableNotifications() {
+    setNotificationError(null);
+    try {
+      const value = await notificationPermission(true);
+      canNotify.current = value === 'granted';
+      setNotifications(value);
+    } catch {
+      setNotificationError('Could not enable system notifications.');
+    }
+  }
 
-      {!loaded ? <Text style={styles.caption}>Loading…</Text> : !transport ? (
-        <Card title="Native build required">
-          <Text style={styles.caption}>Install the RTX Lens IPA or APK to pair with your PC.</Text>
-        </Card>
-      ) : computer ? (
-        <>
-          <Card title="Connection">
-            <Text style={styles.state}>{connectionLabel(connection)}</Text>
-            <Text style={styles.caption}>{route === 'local' ? computer.localAddress : computer.remoteAddress}</Text>
+  const live = active && connection === 'connected';
+  const warningCount = live ? frame?.warnings.filter(warning => warning.phase === 'Active').length ?? 0 : 0;
+  let content: ReactNode;
+
+  if (!loaded || !transport) {
+    content = <Page title="RTX Lens"><Card title={!loaded ? 'Loading…' : 'Native build required'}>
+      {!loaded ? null : <Text style={styles.caption}>Install the RTX Lens IPA or APK to pair with your PC.</Text>}
+    </Card></Page>;
+  } else if (tab === 'settings') {
+    content = (
+      <Page title="Settings">
+        {error && <Notice>{error}</Notice>}
+        {computer ? (
+          <Card title="PC connection" icon="link">
+            <Text style={[local.state, !live && { color: colors.muted }]}>
+              {live ? 'Connected' : connection === 'connecting' ? 'Connecting…' : connection === 'reconnecting' ? 'Reconnecting…'
+                : connection === 'repair' ? 'Pair again' : connection === 'offline' ? 'Phone offline' : 'Disconnected'}
+            </Text>
+            {destination && <Text selectable style={styles.caption}>{destination.address}</Text>}
+            <Selection options={[{ id: 'auto', label: 'Automatic' }, { id: 'local', label: 'Home Wi-Fi' }, { id: 'remote', label: 'Away' }]}
+              selected={route} onSelect={setRoute} />
             <View style={styles.actions}>
-              <Button icon="home" label="Home Wi-Fi" active={route === 'local'} onPress={() => setRoute('local')} />
-              <Button icon="away" label="Away" active={route === 'remote'} onPress={() => setRoute('remote')} />
-            </View>
-            <View style={styles.actions}>
-              {(connection === 'closed' || connection === 'error') && (
+              {(connection === 'reconnecting' || connection === 'offline') && (
                 <Button icon="refresh" label="Reconnect" onPress={() => setRetry(value => value + 1)} />
               )}
-              <Button icon="close" label="Forget PC" onPress={forgetComputer} />
+              <Button icon="close" label="Forget PC" variant="danger" onPress={() => Alert.alert(
+                'Forget this PC?', 'To connect again, scan a new pairing code.', [
+                  { text: 'Cancel', style: 'cancel' }, { text: 'Forget PC', style: 'destructive', onPress: () => void forgetComputer() },
+                ],
+              )} />
             </View>
           </Card>
-          {frame && <Readings frame={frame} live={connection === 'connected'} />}
-        </>
-      ) : (
-        <Card title="Pair a PC">
-          <Text style={styles.caption}>
-            On your PC, open Configuration → Mobile Access and create a pairing code. Keep both devices on the same Wi-Fi.
-          </Text>
-          {scanning && (
-            <View style={styles.camera}>
-              <CameraView
-                style={StyleSheet.absoluteFill}
-                barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-                onBarcodeScanned={onScan}
-              />
-            </View>
-          )}
-          {pairing && <Text style={styles.state}>{pairing}</Text>}
-          <View style={styles.actions}>
-            {(scanning || (pairing && pairing !== 'Saving the pairing…')) && (
-              <Button icon="close" label="Cancel" onPress={cancelPairing} />
+        ) : (
+          <Card title="Pair a PC" icon="scan">
+            <Text style={styles.caption}>
+              On your PC, open Configuration → Mobile Access and create a pairing code. Keep both devices on the same network.
+            </Text>
+            {scanning && (
+              <View style={local.camera}>
+                <CameraView style={StyleSheet.absoluteFill} barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onBarcodeScanned={onScan} />
+              </View>
             )}
-            {!scanning && !pairing && <Button icon="scan" label="Scan pairing code" active onPress={startScan} />}
-          </View>
+            {pairing && <Text style={local.state}>{pairing}</Text>}
+            {scanning || pairing ? (
+              pairing !== 'Saving the pairing…' && <Button icon="close" label="Cancel" onPress={cancelPairing} />
+            ) : <Button icon="scan" label="Scan pairing code" variant="primary" onPress={startScan} />}
+          </Card>
+        )}
+        <Card title="Warning notifications" icon="warnings">
+          <Text style={styles.caption}>Show system notifications for warnings received while RTX Lens is open and connected.</Text>
+          {notificationError && <Notice>{notificationError}</Notice>}
+          {notifications === 'granted' ? <Text style={local.state}>Enabled</Text> : notifications === 'blocked' ? (
+            <Button icon="settings" label="Open system settings" onPress={() => void Linking.openSettings()} />
+          ) : <Button icon="warnings" label="Enable notifications" variant="primary" onPress={enableNotifications} />}
         </Card>
-      )}
-    </ScrollView>
-  );
-}
-
-function connectionLabel(connection: Connection) {
-  switch (connection) {
-    case 'connected': return 'Connected';
-    case 'connecting': return 'Connecting…';
-    case 'error':
-    case 'closed': return 'Disconnected';
-    default: return 'Ready';
+      </Page>
+    );
+  } else if (tab === 'power') {
+    content = <Power frame={frame} live={live} />;
+  } else if (tab === 'gpu') {
+    content = <Gpu frame={frame} live={live} />;
+  } else if (tab === 'warnings') {
+    content = <Warnings frame={frame} live={live} simulations={simulations}
+      history={<IncidentHistory computer={computer} destination={destination} live={live} />} />;
+  } else {
+    content = <Home frame={frame} live={live} paired={computer !== null} away={destination?.route === 'remote'}
+      connecting={connection === 'connecting' || connection === 'reconnecting'} reconnecting={connection === 'reconnecting'} onNavigate={navigate} />;
   }
-}
 
-function Readings({ frame, live }: { frame: SensorFrame; live: boolean }) {
-  const activeWarnings = frame.warnings.filter(warning => warning.phase === 'Active');
-  const available = frame.sensors.filter(sensor => sensor.value !== null && sensor.quality === 'Valid');
   return (
-    <Card title={live ? 'Live readings' : 'Last readings'}>
-      <Text style={styles.caption}>
-        {new Date(frame.timestamp).toLocaleTimeString()} · Frame {frame.sequence} · {available.length} readings
-      </Text>
-      {activeWarnings.map(warning => <Text key={warning.episodeId} style={styles.warning}>{warning.title}</Text>)}
-      {available.slice(0, 12).map(sensor => (
-        <View key={sensor.identity.key} style={styles.reading}>
-          <View style={styles.readingLabel}>
-            <Text style={styles.text}>{sensor.identity.metric.replace(/([a-z])([A-Z])/g, '$1 $2')}</Text>
-            <Text style={styles.caption}>{sensor.identity.pluginId} · {sensor.identity.component}</Text>
-          </View>
-          <Text style={styles.value}>{sensor.value?.toFixed(2)} {sensor.unit}</Text>
-        </View>
-      ))}
-    </Card>
+    <>
+      <View style={styles.screen} key={tab}>{content}</View>
+      <SafeAreaView edges={['bottom']} style={styles.bottom}>
+        <BottomNavigation selected={tab} warningCount={warningCount} onSelect={navigate} />
+      </SafeAreaView>
+    </>
   );
 }
 
-function Card({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <View style={styles.card}>
-      <Text style={styles.heading}>{title}</Text>
-      {children}
-    </View>
-  );
-}
-
-function Button({ icon, label, active = false, onPress }: {
-  icon: keyof typeof paths; label: string; active?: boolean; onPress: () => void;
-}) {
-  const color = active ? colors.accent : colors.text;
-  return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={[styles.button, active && styles.activeButton]}>
-      <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-        <Path d={paths[icon]} stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-      </Svg>
-      <Text style={[styles.buttonLabel, { color }]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
-  page: { padding: 18, gap: 14 },
-  brand: { flexDirection: 'row', gap: 12, alignItems: 'stretch', paddingVertical: 6 },
-  brandBar: { backgroundColor: colors.accent, width: 4, borderRadius: 3 },
-  title: { color: colors.text, fontSize: 29, fontWeight: '700' },
-  caption: { color: colors.secondary, fontSize: 14, lineHeight: 20 },
-  card: { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 12, padding: 15, gap: 10 },
-  heading: { color: colors.text, fontSize: 18, fontWeight: '600' },
-  state: { color: colors.accent, fontSize: 15, fontWeight: '600' },
-  warning: { color: colors.warning, backgroundColor: colors.warningSurface, borderRadius: 8, padding: 10, lineHeight: 20 },
-  camera: { height: 240, borderRadius: 8, overflow: 'hidden' },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  button: { flexDirection: 'row', gap: 7, alignItems: 'center', minHeight: 44, paddingHorizontal: 12,
-    borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background },
-  activeButton: { borderColor: colors.accent },
-  buttonLabel: { fontSize: 14, fontWeight: '600' },
-  text: { color: colors.text, fontSize: 15 },
-  reading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12,
-    borderTopColor: colors.border, borderTopWidth: 1, paddingTop: 8 },
-  readingLabel: { flex: 1 },
-  value: { color: colors.text, fontWeight: '600', maxWidth: '45%', textAlign: 'right' },
+const local = StyleSheet.create({
+  state: { color: colors.accent, fontSize: 15, fontWeight: '700' },
+  camera: { height: 255, borderRadius: 14, overflow: 'hidden' },
 });

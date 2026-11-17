@@ -6,6 +6,7 @@ export type StreamUpdate = {
   id: string;
   state: 'connected' | 'closed' | 'error';
   message?: string;
+  reason?: 'revoked';
 };
 
 declare class RtxLensTransport extends NativeModule<{
@@ -13,6 +14,7 @@ declare class RtxLensTransport extends NativeModule<{
   onFrame: (event: { id: string; json: string }) => void;
 }> {
   post(address: string, pin: string, path: string, json: string): Promise<PairingReply>;
+  get(address: string, pin: string, path: string, token: string): Promise<PairingReply & { keyMismatch?: boolean }>;
   openStream(id: string, address: string, pin: string, token: string): void;
   closeStream(id: string): void;
 }

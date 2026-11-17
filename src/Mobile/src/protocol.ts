@@ -13,20 +13,39 @@ export type PairingCode = Omit<PairedComputer, 'token'> & {
 export type PairingReply = { status: number; body: string };
 export type PairingRequest = (path: '/pairing' | '/pairing/complete', body: string) => Promise<PairingReply>;
 
-type SensorReading = {
-  identity: { key: string; pluginId: string; component: string; metric: string; channel: number | null };
+export type SensorReading = {
+  identity: {
+    key: string; pluginId: string; deviceId: string; connectorId: string | null;
+    component: string; metric: string; channel: number | null;
+  };
   unit: string;
   value: number | null;
   quality: string;
 };
 
-type WarningState = { title: string; phase: string; episodeId: string };
+export type WarningState = {
+  title: string;
+  phase: string;
+  episodeId: string;
+  pluginId: string;
+  detail: string;
+  startedAt: string | null;
+  notificationSequence: number;
+};
+
+export type SimulationWarning = { id: string; title: string; detail: string; startedAt: string };
 
 export type SensorFrame = {
   sequence: number;
   timestamp: string;
   sensors: SensorReading[];
   warnings: WarningState[];
+  warningInstance: string | null;
+  notificationsEnabled: boolean;
+  simulationWarnings: SimulationWarning[];
+  reportingSources: number;
+  connectorPowerKey: string | null | undefined;
+  pinLimits: { pluginId: string; deviceId: string; overcurrentAmperes: number }[];
 };
 
 const secretPattern = /^[A-Za-z0-9_-]{43}$/;
@@ -42,7 +61,7 @@ function parseObject(json: string): Record<string, unknown> | null {
   }
 }
 
-function asObject(value: unknown): Record<string, unknown> | null {
+export function asObject(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
@@ -171,7 +190,7 @@ export async function requestPairing(
   throw new Error('The pairing request expired.');
 }
 
-function readSensor(value: unknown): SensorReading | null {
+export function readSensor(value: unknown): SensorReading | null {
   const sensor = asObject(value);
   const identity = asObject(sensor?.identity);
   if (!sensor || !identity || typeof identity.key !== 'string' || typeof identity.pluginId !== 'string'
@@ -186,6 +205,8 @@ function readSensor(value: unknown): SensorReading | null {
     identity: {
       key: identity.key,
       pluginId: identity.pluginId,
+      deviceId: typeof identity.deviceId === 'string' ? identity.deviceId : '',
+      connectorId: typeof identity.connectorId === 'string' ? identity.connectorId : null,
       component: identity.component,
       metric: identity.metric,
       channel: typeof identity.channel === 'number' ? identity.channel : null,
@@ -206,15 +227,49 @@ export function decodeFrame(json: string): SensorFrame | null {
   }
 
   const sensors = snapshot.sensors.map(readSensor).filter(sensor => sensor !== null);
-  const warningStates = asObject(snapshot.warnings)?.states;
+  const warningFeed = asObject(snapshot.warnings);
+  const warningStates = warningFeed?.states;
   const warnings = Array.isArray(warningStates)
     ? warningStates.flatMap(item => {
         const warning = asObject(item);
         return typeof warning?.title === 'string' && typeof warning.phase === 'string' && typeof warning.episodeId === 'string'
-          ? [{ title: warning.title, phase: warning.phase, episodeId: warning.episodeId }]
+          ? [{
+              title: warning.title, phase: warning.phase, episodeId: warning.episodeId,
+              pluginId: typeof warning.pluginId === 'string' ? warning.pluginId : '',
+              detail: typeof warning.detail === 'string' ? warning.detail : '',
+              startedAt: typeof warning.startedAt === 'string' && Number.isFinite(Date.parse(warning.startedAt)) ? warning.startedAt : null,
+              notificationSequence: typeof warning.notificationSequence === 'number' && Number.isSafeInteger(warning.notificationSequence)
+                ? warning.notificationSequence : 0,
+            }]
           : [];
       })
     : [];
 
-  return { sequence: snapshot.sequence, timestamp: snapshot.timestamp, sensors, warnings };
+  const simulationWarnings = Array.isArray(snapshot.simulationWarnings)
+    ? snapshot.simulationWarnings.flatMap(value => {
+        const warning = asObject(value);
+        return typeof warning?.id === 'string' && typeof warning.title === 'string' && typeof warning.detail === 'string'
+          && typeof warning.startedAt === 'string' && Number.isFinite(Date.parse(warning.startedAt))
+          ? [{ id: warning.id, title: warning.title, detail: warning.detail, startedAt: warning.startedAt }]
+          : [];
+      })
+    : [];
+  const reportingSources = Array.isArray(snapshot.plugins)
+    ? snapshot.plugins.filter(plugin => asObject(plugin)?.state === 'Ready').length : new Set(sensors.filter(sensor =>
+        sensor.quality === 'Valid' && sensor.value !== null).map(sensor => sensor.identity.pluginId)).size;
+  const connectorPower = Array.isArray(snapshot.selections)
+    ? snapshot.selections.map(asObject).find(selection => selection?.name === 'gpu-status/power') : undefined;
+  const pinLimits = Array.isArray(snapshot.pinWarningLimits) ? snapshot.pinWarningLimits.flatMap(value => {
+    const limit = asObject(value);
+    return typeof limit?.pluginId === 'string' && typeof limit.deviceId === 'string'
+      && typeof limit.overcurrentAmperes === 'number' && Number.isFinite(limit.overcurrentAmperes) && limit.overcurrentAmperes > 0
+      ? [{ pluginId: limit.pluginId, deviceId: limit.deviceId, overcurrentAmperes: limit.overcurrentAmperes }] : [];
+  }) : [];
+
+  return {
+    sequence: snapshot.sequence, timestamp: snapshot.timestamp, sensors, warnings, simulationWarnings, reportingSources, pinLimits,
+    connectorPowerKey: connectorPower ? typeof connectorPower.sensorKey === 'string' ? connectorPower.sensorKey : null : undefined,
+    warningInstance: typeof warningFeed?.instanceId === 'string' ? warningFeed.instanceId : null,
+    notificationsEnabled: warningFeed?.notificationsEnabled === true,
+  };
 }

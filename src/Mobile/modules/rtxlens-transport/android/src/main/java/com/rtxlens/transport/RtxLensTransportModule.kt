@@ -31,7 +31,11 @@ class RtxLensTransportModule : Module() {
         Events("onStreamState", "onFrame")
 
         AsyncFunction("post") { address: String, pin: String, path: String, json: String, promise: Promise ->
-            post(address, pin, path, json, promise)
+            request(address, pin, path, json, null, promise)
+        }
+
+        AsyncFunction("get") { address: String, pin: String, path: String, token: String, promise: Promise ->
+            request(address, pin, path, null, token, promise)
         }
 
         Function("openStream") { id: String, address: String, pin: String, token: String ->
@@ -50,40 +54,56 @@ class RtxLensTransportModule : Module() {
         }
     }
 
-    private fun post(address: String, pin: String, path: String, json: String, promise: Promise) {
+    private fun request(address: String, pin: String, path: String, json: String?, token: String?, promise: Promise) {
+        val errorCode = if (token == null) "PAIRING_FAILED" else "REQUEST_FAILED"
         try {
-            require(path == "/pairing" || path == "/pairing/complete")
-            require(json.toByteArray(Charsets.UTF_8).size <= 1024)
-
             val endpoint = readEndpoint(address)
             val client = createClient(endpoint, pin)
-            val request = Request.Builder()
-                .url(endpoint.newBuilder().encodedPath(path).build())
-                .post(json.toRequestBody("application/json".toMediaType()))
-                .build()
+            val url = endpoint.newBuilder().encodedPath(path.substringBefore('?'))
+            val builder = Request.Builder()
+            val limit: Long
+            if (token == null) {
+                require(path == "/pairing" || path == "/pairing/complete")
+                require(json != null && json.toByteArray(Charsets.UTF_8).size <= 1024)
+                builder.post(json.toRequestBody("application/json".toMediaType()))
+                limit = 4096
+            } else {
+                require(tokenPattern.matches(token) && (path == "/session" || path == "/incidents"
+                    || historyPage.matches(path) || historyDetail.matches(path)))
+                if ('?' in path) {
+                    url.addQueryParameter("before", path.substringAfter("?before="))
+                }
+                builder.header("Authorization", "Bearer $token")
+                limit = 512 * 1024
+            }
 
+            val request = builder.url(url.build()).build()
             client.newCall(request).enqueue(object : Callback {
                 override fun onFailure(call: Call, error: IOException) {
-                    promise.reject("PAIRING_FAILED", connectionError, error)
+                    if (token != null && generateSequence<Throwable>(error) { it.cause }.any { it is KeyMismatch }) {
+                        promise.resolve(mapOf("status" to 0, "body" to "", "keyMismatch" to true))
+                    } else {
+                        promise.reject(errorCode, connectionError, error)
+                    }
                 }
 
                 override fun onResponse(call: Call, response: Response) {
                     response.use {
                         try {
                             val source = response.body?.source()
-                            if (source?.request(4097) == true) {
-                                throw IOException("Pairing response is too large.")
+                            if (source?.request(limit + 1) == true) {
+                                throw IOException("The response is too large.")
                             }
 
                             promise.resolve(mapOf("status" to response.code, "body" to (source?.readUtf8() ?: "")))
                         } catch (error: IOException) {
-                            promise.reject("PAIRING_FAILED", "The PC sent an invalid pairing response.", error)
+                            promise.reject(errorCode, "The PC sent an invalid response.", error)
                         }
                     }
                 }
             })
         } catch (error: Exception) {
-            promise.reject("PAIRING_FAILED", "The paired PC address or public key is invalid.", error)
+            promise.reject(errorCode, "The paired PC address or public key is invalid.", error)
         }
     }
 
@@ -91,7 +111,7 @@ class RtxLensTransportModule : Module() {
         stream.getAndSet(null)?.socket?.cancel()
 
         try {
-            require(token.matches(Regex("[a-fA-F0-9]{32}\\.[A-Za-z0-9_-]{43}")))
+            require(tokenPattern.matches(token))
 
             val endpoint = readEndpoint(address)
             val client = createClient(endpoint, pin)
@@ -131,7 +151,7 @@ class RtxLensTransportModule : Module() {
                     response?.close()
 
                     if (stream.compareAndSet(current, null)) {
-                        emitState(id, "error", message)
+                        emitState(id, "error", message, if (response?.code == 401) "revoked" else null)
                     }
                 }
             })
@@ -146,10 +166,13 @@ class RtxLensTransportModule : Module() {
         }
     }
 
-    private fun emitState(id: String, state: String, message: String? = null) {
+    private fun emitState(id: String, state: String, message: String? = null, reason: String? = null) {
         val event = mutableMapOf("id" to id, "state" to state)
         if (message != null) {
             event["message"] = message
+        }
+        if (reason != null) {
+            event["reason"] = reason
         }
         sendEvent("onStreamState", event)
     }
@@ -170,7 +193,7 @@ class RtxLensTransportModule : Module() {
                 leaf.checkValidity()
                 val actual = MessageDigest.getInstance("SHA-256").digest(leaf.publicKey.encoded)
                 if (!MessageDigest.isEqual(expected, actual)) {
-                    throw CertificateException("The PC key does not match the pairing code.")
+                    throw KeyMismatch()
                 }
             }
 
@@ -198,7 +221,12 @@ class RtxLensTransportModule : Module() {
         @Volatile var socket: WebSocket? = null
     }
 
+    private class KeyMismatch : CertificateException("The PC key does not match the pairing code.")
+
     companion object {
+        private val tokenPattern = Regex("[a-fA-F0-9]{32}\\.[A-Za-z0-9_-]{43}")
+        private val historyPage = Regex("/incidents\\?before=[0-9]{1,19}\\.[a-fA-F0-9]{32}\\.(warning|safeguard)")
+        private val historyDetail = Regex("/incidents/(warning|safeguard)/[a-fA-F0-9-]{36}")
         private const val connectionError = "Could not connect securely to the PC. Check its address and pairing key."
     }
 }

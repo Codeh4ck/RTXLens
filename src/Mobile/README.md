@@ -13,11 +13,15 @@ Push the mobile files on the feature/mobile-app branch to run the Mobile preview
 
 1. Run the RTX Lens service and desktop build with Mobile Access support. Enable it and create a pairing code under **Configuration → Mobile Access**.
 2. On the phone, join the same Wi-Fi as the PC, scan the code, and approve the phone in the desktop app.
-3. Confirm the frame number advances and readings match the PC.
-4. For the external connection check, switch the phone to cellular and select **Away**. Verify the desktop reports a successful external connection.
+3. Compare the Power and GPU tabs with the desktop readings. In Power, switch between connected sources and pin current, wattage, and voltage where supported.
+4. With **Automatic** connection mode selected, switch the phone to cellular and back to Wi-Fi. Check that the stream recovers and that the desktop reports a successful external connection. **Home Wi-Fi** and **Away** can force a route for troubleshooting.
 5. Revoke the phone from the desktop and confirm that the stream disconnects and cannot reconnect.
 
-The preview shows current sensor readings and active warnings. Route selection is manual for testing Wi-Fi and cellular.
+The preview shows current sensor readings and active warnings. Enable **Warning notifications** in mobile Settings to get system banners while the app is open and connected.
+
+To test a notification without creating a real fault, pair with the Debug service first. Then run a simulation in the Debug desktop app and trigger a warning in its debug console. The phone shows the notification and the Warnings entry under **Simulation**. The release service never accepts simulated warnings.
+
+In **Warnings → History**, open a saved service warning or Safeguard+ execution to view its details and captured readings. The desktop **Mobile Access** settings control warning retention. Safeguard+ executions use Safeguard+ History retention. Desktop Debug Console messages are session-only.
 
 ## Checks on Windows
 

@@ -3,20 +3,26 @@ import Foundation
 import Network
 import Security
 
-enum TransportError: LocalizedError {
+enum TransportError: LocalizedError, Equatable {
     case invalidEndpoint
     case invalidResponse
     case connectionFailed
     case timeout
+    case keyMismatch
 
     var errorDescription: String? {
         switch self {
         case .invalidEndpoint: return "The paired PC address or public key is invalid."
-        case .invalidResponse: return "The PC sent an invalid pairing response."
+        case .invalidResponse: return "The PC sent an invalid response."
         case .connectionFailed: return "Could not connect securely to the PC. Check its address and pairing key."
         case .timeout: return "The PC did not respond in time."
+        case .keyMismatch: return "The PC’s key no longer matches this pairing."
         }
     }
+}
+
+func isMobileToken(_ token: String) -> Bool {
+    token.count == 76 && token.range(of: #"^[a-fA-F0-9]{32}\.[A-Za-z0-9_-]{43}$"#, options: .regularExpression) != nil
 }
 
 struct PinnedEndpoint {
@@ -52,17 +58,17 @@ struct PinnedEndpoint {
         return .url(address)
     }
 
-    func parameters(queue: DispatchQueue) -> NWParameters {
+    func parameters(queue: DispatchQueue, onKeyMismatch: (() -> Void)? = nil) -> NWParameters {
         let tls = NWProtocolTLS.Options()
         sec_protocol_options_set_min_tls_protocol_version(tls.securityProtocolOptions, .TLSv12)
         sec_protocol_options_set_verify_block(tls.securityProtocolOptions, { _, trust, complete in
-            complete(Self.matchesPin(sec_trust_copy_ref(trust).takeRetainedValue(), fingerprint: fingerprint))
+            complete(Self.matchesPin(sec_trust_copy_ref(trust).takeRetainedValue(), fingerprint: fingerprint, onKeyMismatch: onKeyMismatch))
         }, queue)
 
         return NWParameters(tls: tls, tcp: NWProtocolTCP.Options())
     }
 
-    private static func matchesPin(_ trust: SecTrust, fingerprint: String) -> Bool {
+    private static func matchesPin(_ trust: SecTrust, fingerprint: String, onKeyMismatch: (() -> Void)?) -> Bool {
         guard SecTrustSetNetworkFetchAllowed(trust, false) == errSecSuccess,
               let chain = SecTrustCopyCertificateChain(trust) as? [SecCertificate],
               let leaf = chain.first, let key = SecCertificateCopyKey(leaf),
@@ -80,7 +86,10 @@ struct PinnedEndpoint {
             0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00
         ]
         let digest = SHA256.hash(data: Data(p256Header) + point).map { String(format: "%02x", $0) }.joined()
-        guard digest == fingerprint else { return false }
+        guard digest == fingerprint else {
+            onKeyMismatch?()
+            return false
+        }
 
         // An invite identifies the PC by key, independently of its changing IP address or hostname.
         return SecTrustSetPolicies(trust, SecPolicyCreateBasicX509()) == errSecSuccess
