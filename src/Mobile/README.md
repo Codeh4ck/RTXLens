@@ -25,9 +25,9 @@ In **Warnings → History**, open a saved service warning or Safeguard+ executio
 
 The desktop pairing QR code supplies the initial local and remote addresses. Edit either under **Settings → PC connection** if it changes. The phone keeps verifying the paired PC’s key. Under mobile **Settings**, **Test remote access** checks the saved remote address without switching the live connection. To verify access from outside your home network, run the test using mobile data. **Temperature units** applies to live readings and captured incident readings.
 
-On Home, touch and hold or tap **Edit**. Open **+ Panels** to add or remove panels. Drag a panel by its handle to preview its new position, then tap **Done** to save or **Cancel** to discard your changes. A pin panel follows the selected device and connector. Add panels from multiple reporting plugins to view them together. Under **MSI PSU**, enable **Hide connectors with zero current** to hide those connectors in Power until they start drawing current.
+Under **Settings → Appearance**, tap **Edit home page**. You can also touch and hold on Home. Open **+ Panels** to add or remove panels. Drag a panel by its handle to preview its new position, then tap **OK** to save and stay on Home or **Cancel** to discard your changes. A pin panel follows the selected device and connector. Add panels from multiple reporting plugins to view them together. Under **MSI PSU**, enable **Hide connectors with zero current** to hide those connectors in Power until they start drawing current.
 
-**Warning filters** and **Lock-screen privacy** apply to phone notifications, while warnings and incident history remain visible in the app. Changes save automatically on the phone. Offline changes sync to the PC when it reconnects. Under **Appearance**, choose a desktop color scheme, switch between dark and light, or select custom colors with the color picker.
+**Warning filters** and **Lock-screen privacy** apply to phone notifications, while warnings and incident history remain visible in the app. Changes save automatically on the phone. Offline changes sync to the PC when it reconnects. Under **Appearance**, tap **Color scheme** to preview and select a palette. Switch between dark and light above it, or choose **Custom** to use the color picker.
 
 ## Lock-screen notifications
 

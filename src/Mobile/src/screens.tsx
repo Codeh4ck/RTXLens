@@ -14,9 +14,11 @@ import { Button, Card, Icon, Page, Selection, useHomeLongPress, useStyles, type 
 
 type TelemetryProps = { frame: SensorFrame | null; live: boolean };
 
-export function Home({ frame, live, paired, connecting, reconnecting, remote, panels, saveLayout, layoutEnabled, onEditingChange, onNavigate }: TelemetryProps & {
+export function Home({
+  frame, live, paired, connecting, reconnecting, remote, panels, saveLayout, layoutEnabled, initiallyEditing, onEditingChange, onNavigate,
+}: TelemetryProps & {
   paired: boolean; connecting: boolean; reconnecting: boolean; remote: boolean; panels: HomePanel[];
-  saveLayout: (panels: HomePanel[]) => Promise<void>; layoutEnabled: boolean; onEditingChange: (editing: boolean) => void;
+  saveLayout: (panels: HomePanel[]) => Promise<void>; layoutEnabled: boolean; initiallyEditing: boolean; onEditingChange: (editing: boolean) => void;
   onNavigate: (tab: Tab) => void;
 }) {
   const styles = useStyles();
@@ -79,7 +81,7 @@ export function Home({ frame, live, paired, connecting, reconnecting, remote, pa
   ];
 
   return <HomeLayout panels={panels} options={options} titleFor={titleFor} save={saveLayout}
-    enabled={layoutEnabled} onEditingChange={onEditingChange}
+    enabled={layoutEnabled} initiallyEditing={initiallyEditing} onEditingChange={onEditingChange}
     footer={frame && !live && <Text style={styles.caption}>Last readings at {time(frame.timestamp)}</Text>}
     renderPanel={panel => {
       const panelTitle = titleFor(panel);

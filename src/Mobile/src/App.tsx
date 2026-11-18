@@ -515,7 +515,10 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
             onPress={() => void push.set(!push.enabled, !push.enabled)} />
           {!live && <Text style={styles.caption}>Connect to your PC to change this setting.</Text>}
         </Card>}
-        <AppearanceSettings value={appearance} save={saveAppearance} />
+        <AppearanceSettings value={appearance} save={saveAppearance} canEditHome={preferencesLoaded && !preferences.savingDisplay} editHome={() => {
+          setEditingHome(true);
+          navigate('home');
+        }} />
         {preferencesLoaded && <TemperatureSettings unit={preferences.temperature} save={preferences.saveTemperature} />}
         {preferencesLoaded && <MsiDisplaySettings value={preferences.display} busy={preferences.savingDisplay} save={preferences.saveDisplay} />}
       </Page>
@@ -531,7 +534,8 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
         onNotificationClosed={() => setNotificationLink(previous => previous && { ...previous, incident: null })} />} />;
   } else {
     content = <Home frame={frame} live={live} paired={computer !== null} remote={destination?.route === 'remote'}
-      panels={preferences.display.homePanels} layoutEnabled={preferencesLoaded} onEditingChange={setEditingHome}
+      panels={preferences.display.homePanels} layoutEnabled={preferencesLoaded} initiallyEditing={editingHome}
+      onEditingChange={setEditingHome}
       saveLayout={homePanels => preferences.saveDisplay({ ...preferences.display, homePanels })}
       connecting={connection === 'connecting' || connection === 'reconnecting'} reconnecting={connection === 'reconnecting'} onNavigate={navigate} />;
   }

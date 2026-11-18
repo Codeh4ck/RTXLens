@@ -15,19 +15,20 @@ type Preview = { key: string; target: number; x: number; y: number; slot: PanelB
 const gap = 10;
 const edge = 56;
 
-export function HomeLayout({ panels, options, titleFor, renderPanel, save, enabled, onEditingChange, footer }: {
+export function HomeLayout({ panels, options, titleFor, renderPanel, save, enabled, initiallyEditing, onEditingChange, footer }: {
   panels: HomePanel[];
   options: PanelOption[];
   titleFor: (panel: HomePanel) => string;
   renderPanel: (panel: HomePanel) => ReactNode;
   save: (panels: HomePanel[]) => Promise<void>;
   enabled: boolean;
+  initiallyEditing: boolean;
   onEditingChange: (editing: boolean) => void;
   footer: ReactNode;
 }) {
   const styles = useStyles();
   const colors = useColors();
-  const [draft, setDraft] = useState<HomePanel[] | null>(null);
+  const [draft, setDraft] = useState<HomePanel[] | null>(() => initiallyEditing ? panels : null);
   const [picker, setPicker] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [saving, setSaving] = useState(false);
@@ -151,7 +152,7 @@ export function HomeLayout({ panels, options, titleFor, renderPanel, save, enabl
     setDraft(null);
   }
 
-  async function done() {
+  async function saveLayout() {
     if (!draft || saving) return;
 
     setSaving(true);
@@ -160,7 +161,7 @@ export function HomeLayout({ panels, options, titleFor, renderPanel, save, enabl
       if (draft !== panels) await save(draft);
       setDraft(null);
     } catch {
-      setError('Could not save your Home layout. Try Done again.');
+      setError('Could not save your Home layout. Try OK again.');
     } finally {
       setSaving(false);
     }
@@ -180,11 +181,8 @@ export function HomeLayout({ panels, options, titleFor, renderPanel, save, enabl
             <Button icon="close" label="Cancel" disabled={saving || !!preview} onPress={cancel} />
             <View style={{ flex: 1 }} />
             <Button icon="add" label="Panels" accessibilityLabel="Add or remove Home panels" disabled={saving || !!preview} onPress={openPicker} />
-            <Button icon="check" label="Done" variant="primary" disabled={saving || !!preview} onPress={() => void done()} />
-          </> : <>
-            <Text accessibilityRole="header" style={[styles.title, { flex: 1 }]}>RTX Lens</Text>
-            <Button icon="edit" label="Edit" accessibilityLabel="Edit Home layout" disabled={!enabled} onPress={startEditing} />
-          </>}
+            <Button icon="check" label="OK" variant="primary" disabled={saving || !!preview} onPress={() => void saveLayout()} />
+          </> : <Text accessibilityRole="header" style={styles.title}>RTX Lens</Text>}
         </View>
         {error && <View style={{ paddingHorizontal: 20, paddingBottom: 8 }}><Notice>{error}</Notice></View>}
       </View>
