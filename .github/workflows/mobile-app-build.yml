@@ -111,6 +111,8 @@ jobs:
     concurrency:
       group: mobile-preview-android-${{ github.ref }}
       cancel-in-progress: true
+    env:
+      RTXLENS_EXPO_PROJECT_ID: ${{ vars.RTXLENS_EXPO_PROJECT_ID }}
     defaults:
       run:
         working-directory: src/Mobile
@@ -136,6 +138,24 @@ jobs:
       - uses: android-actions/setup-android@v4
         with:
           packages: ''
+
+      - name: Configure Firebase for the APK
+        shell: bash
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [[ -z "$GOOGLE_SERVICES_JSON" ]]; then
+            echo "Android APK supports foreground warning banners. Firebase push is disabled." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          : "${RTXLENS_EXPO_PROJECT_ID:?Set the RTXLENS_EXPO_PROJECT_ID repository variable to enable Android push}"
+          umask 077
+          google_services="$RUNNER_TEMP/rtxlens-google-services.json"
+          printf '%s' "$GOOGLE_SERVICES_JSON" > "$google_services"
+
+          # Gradle also reads the Expo config when it embeds the app manifest.
+          printf 'RTXLENS_GOOGLE_SERVICES_FILE=%s\n' "$google_services" >> "$GITHUB_ENV"
 
       - name: Generate the Android project
         run: npx --no-install expo prebuild --platform android --clean --no-install
@@ -170,6 +190,9 @@ jobs:
           "$apksigner" verify "$apk"
           mkdir -p "$RUNNER_TEMP/rtxlens-android"
           cp "$apk" "$RUNNER_TEMP/rtxlens-android/RTX-Lens-preview.apk"
+          if [[ -n "${RTXLENS_GOOGLE_SERVICES_FILE:-}" ]]; then
+            echo "Android APK was built with Firebase push enabled." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - uses: actions/upload-artifact@v7
         with:

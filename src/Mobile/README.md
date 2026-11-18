@@ -86,6 +86,15 @@ Create an Expo project and configure push credentials for the native application
 - `RTXLENS_IOS_PUSH=1` enables the iOS push entitlement. Sign with an Apple Developer Program provisioning profile that supports APNs. Set `RTXLENS_IOS_PUSH_ENVIRONMENT=production` when signing with a distribution profile. The free AltStore preview continues to use foreground notifications.
 - `RTXLENS_GOOGLE_SERVICES_FILE` is the path to the Android app’s Firebase configuration file. Configure the matching FCM V1 credential in Expo.
 
+### Android APK from GitHub Actions
+
+1. Register an Android app with package name `com.rtxlens.mobile` in Firebase and download its `google-services.json`.
+2. Add an [FCM V1 service account key](https://docs.expo.dev/push-notifications/fcm-credentials/) to the matching app in Expo. Keep that private key in Expo.
+3. In GitHub under **Settings → Secrets and variables → Actions**, add the Firebase app configuration as the `GOOGLE_SERVICES_JSON` repository secret and the Expo project UUID as the `RTXLENS_EXPO_PROJECT_ID` repository variable.
+4. Run **Mobile App - Build** and download the Android APK. The Actions summary reports whether the APK was built with Firebase push. The Play Store checkbox is optional.
+
+### Verify delivery
+
 In a push-enabled build, pair the phone and enable **Lock-screen notifications** in mobile Settings. Under **Configuration → Mobile Access** on the PC, select **Send test** next to the paired phone. Lock the phone and check that the alert arrives. Use a Debug simulation to verify the warning path. Tapping a real warning opens its incident report once the phone reconnects to the PC.
 
 The Windows service sends Expo the push token, alert title, and incident ID when available. With **Hide warning title** selected, the title is generic. Sensor streams and incident reports still travel directly between the phone and the PC.
