@@ -3,21 +3,14 @@ name: Mobile App - Build
 on:
   workflow_dispatch:
     inputs:
-      distribution:
-        description: Mobile build destination
-        type: choice
-        default: preview
-        options:
-          - preview
-          - play-bundle
-          - play-internal
-          - testflight
-          - both-stores
-  push:
-    branches: [feature/mobile-app]
-    paths:
-      - 'src/Mobile/**'
-      - '.github/workflows/mobile-app-build.yml'
+      publish_app_store:
+        description: Publish to App Store (TestFlight)
+        type: boolean
+        default: false
+      publish_play_store:
+        description: Publish to Play Store (Internal testing)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -28,7 +21,6 @@ env:
 jobs:
   ios:
     name: iPhone IPA for AltStore
-    if: github.event_name == 'push' || inputs.distribution == 'preview'
     runs-on: macos-26
     timeout-minutes: 40
     concurrency:
@@ -114,7 +106,6 @@ jobs:
 
   android:
     name: Android test APK
-    if: github.event_name == 'push' || inputs.distribution == 'preview'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     concurrency:
@@ -189,9 +180,7 @@ jobs:
 
   google-play:
     name: Signed Android App Bundle
-    if: >-
-      github.event_name == 'workflow_dispatch' &&
-      (inputs.distribution == 'play-bundle' || inputs.distribution == 'play-internal' || inputs.distribution == 'both-stores')
+    if: inputs.publish_play_store
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     environment: google-play
@@ -268,8 +257,26 @@ jobs:
 
           cp "$bundle" "$RUNNER_TEMP/RTX-Lens-Google-Play.aab"
 
+      - name: Save the signed bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: RTX-Lens-Google-Play
+          path: ${{ runner.temp }}/RTX-Lens-Google-Play.aab
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Check Google Play upload credentials
+        shell: bash
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [[ -z "$PLAY_SERVICE_ACCOUNT_JSON" ]]; then
+            echo "::error::Configure PLAY_SERVICE_ACCOUNT_JSON to upload automatically." \
+              "For the first upload, download the signed AAB from this run and upload it in Play Console."
+            exit 1
+          fi
+
       - name: Upload to Google Play Internal testing
-        if: inputs.distribution == 'play-internal' || inputs.distribution == 'both-stores'
         uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
@@ -278,18 +285,9 @@ jobs:
           tracks: internal
           status: completed
 
-      - name: Save the signed bundle for manual upload
-        if: inputs.distribution == 'play-bundle'
-        uses: actions/upload-artifact@v7
-        with:
-          name: RTX-Lens-Google-Play
-          path: ${{ runner.temp }}/RTX-Lens-Google-Play.aab
-          if-no-files-found: error
-          retention-days: 7
-
   app-store-connect:
     name: Signed iOS archive for TestFlight
-    if: github.event_name == 'workflow_dispatch' && (inputs.distribution == 'testflight' || inputs.distribution == 'both-stores')
+    if: inputs.publish_app_store
     runs-on: macos-26
     timeout-minutes: 40
     environment: app-store-connect

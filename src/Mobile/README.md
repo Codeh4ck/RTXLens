@@ -4,22 +4,19 @@ The iOS and Android builds use the same Expo app in this directory. Each platfor
 
 ## Build artifacts
 
-Push the mobile files on the feature/mobile-app branch to run the **Mobile App - Build** workflow. Once the workflow is on the default branch, it can also be run manually from the Actions tab. Download the platform artifact from the completed run and extract it.
+Once the workflow is on the default branch, open **Actions → Mobile App - Build → Run workflow** and select a branch containing the mobile app. Every run builds the iOS IPA and Android APK. Download the platform artifact from the completed run and extract it.
 
 - **iPhone**. Open RTX-Lens-unsigned.ipa with [AltStore Classic](https://faq.altstore.io/altstore-classic/how-to-install-altstore-windows) to sign and install it with your Apple Account. Enable Developer Mode when prompted. With free signing, refresh the installation every seven days.
 - **Android**. Open RTX-Lens-preview.apk on the phone and allow installation from the app that opened the file if Android asks. This APK uses test signing.
 
 ## Store builds
 
-Once this workflow is on the default branch, open **Actions → Mobile App - Build → Run workflow** and select the branch and destination. A push to the mobile branch continues to produce preview packages.
+Both publishing checkboxes are off by default. You can select either or both when starting a build.
 
-| Destination | Result |
+| Checkbox | Additional result |
 | --- | --- |
-| `preview` | Unsigned AltStore IPA and test-signed Android APK |
-| `play-bundle` | Signed Android App Bundle for the first manual Play Console upload |
-| `play-internal` | Uploads a signed bundle to Google Play Internal testing |
-| `testflight` | Uploads a signed iOS build to App Store Connect for TestFlight |
-| `both-stores` | Runs the two store uploads in parallel |
+| **Publish to App Store (TestFlight)** | Uploads a signed iOS build to App Store Connect for TestFlight |
+| **Publish to Play Store (Internal testing)** | Saves a signed AAB and uploads it to the Google Play Internal testing track |
 
 Store builds use the GitHub workflow run number for the iOS build number and Android version code. Dispatch a fresh run if a build number already exists in a store. Manage tester access, public review, and production releases in each store console.
 
@@ -31,8 +28,8 @@ Both stores use `com.rtxlens.mobile` as the app identifier. Create the named Git
 
 1. [Register for Play Console](https://support.google.com/googleplay/android-developer/answer/6112435) and complete its verification. A new personal account also requires Android device verification. For public production access, new personal accounts must complete a closed test with at least 12 testers opted in continuously for 14 days.
 2. Create **RTX Lens** as an Android app, set up [Play App Signing](https://developer.android.com/studio/publish/app-signing), and create a dedicated upload keystore. Back up the keystore and passwords securely.
-3. Add the upload key settings to the `google-play` environment. Run `play-bundle`, download the AAB from the artifact ZIP, and upload it to the app's **Internal testing** track in Play Console.
-4. [Enable the Google Play Developer API](https://developers.google.com/android-publisher/getting_started) in a Google Cloud project. Create a service account, invite it in Play Console, and give it app-level access to release to testing tracks for RTX Lens. Add its JSON key to the `google-play` environment before running `play-internal`.
+3. Add the upload key settings to the `google-play` environment and run the workflow with **Publish to Play Store (Internal testing)** checked. Download the AAB artifact and upload it to **Internal testing** in Play Console. The automated upload step requires the service account in the next step.
+4. [Enable the Google Play Developer API](https://developers.google.com/android-publisher/getting_started) in a Google Cloud project. Create a service account, invite it in Play Console, and give it app-level access to release to testing tracks for RTX Lens. Add its JSON key to the `google-play` environment for subsequent uploads.
 
 | Environment secret | Value |
 | --- | --- |
@@ -48,7 +45,7 @@ For push-enabled Android store builds, also add the raw Firebase `google-service
 
 1. Enroll in the [Apple Developer Program](https://developer.apple.com/programs/enroll/). Register the explicit bundle ID and create the app record in App Store Connect.
 2. Create an Apple Distribution certificate with its private key and a matching [App Store Connect provisioning profile](https://developer.apple.com/help/account/provisioning-profiles/create-an-app-store-provisioning-profile). Export the certificate and private key as a password-protected `.p12`.
-3. Create a [team API key](https://developer.apple.com/documentation/appstoreconnectapi/creating-api-keys-for-app-store-connect-api) with upload permission. Store its credentials and the signing files in the `app-store-connect` environment. Run `testflight` and wait for the build to process in App Store Connect.
+3. Create a [team API key](https://developer.apple.com/documentation/appstoreconnectapi/creating-api-keys-for-app-store-connect-api) with upload permission. Store its credentials and the signing files in the `app-store-connect` environment. Run the workflow with **Publish to App Store (TestFlight)** checked and wait for the build to process in App Store Connect.
 
 | Environment secret | Value |
 | --- | --- |
