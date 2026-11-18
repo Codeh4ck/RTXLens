@@ -52,7 +52,7 @@ internal sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagn
         var activeReasons = api.Get<NvmlApi.GetULong>("nvmlDeviceGetCurrentClocksEventReasons")
             ?? api.Get<NvmlApi.GetULong>("nvmlDeviceGetCurrentClocksThrottleReasons");
         var state = Query("nvmlDeviceGetPerformanceState");
-        int? currentState = state < PStateCount ? (int?)state : null;
+        var currentState = state < PStateCount ? (int?)state : null;
         var clockCapabilities = ReadClockCapabilities(api, handle, deviceId);
 
         NvmlApi.FieldValue[] fields =

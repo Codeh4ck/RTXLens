@@ -9,10 +9,12 @@ using RTXLens.Contracts.Sensors;
 using RTXLens.Core.Diagnostics;
 using RTXLens.Plugins.Msi.Contracts.Safeguard;
 using RTXLens.SafeguardReporting;
+using RTXLens.Service.Mobile;
 
 namespace RTXLens.Service.Services;
 
-internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<SafeguardJournalService> logger) : BackgroundService
+internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<SafeguardJournalService> logger,
+    MobilePushDelivery? mobilePush = null) : BackgroundService
 {
     private readonly SafeguardTelemetryBuffer _telemetry = new();
     private readonly Lock _telemetryFiles = new();
@@ -23,6 +25,43 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
     public SafeguardExecutionNotice[]? Notices => Volatile.Read(ref _notices);
 
     public void Observe(SensorSnapshot snapshot) => _telemetry.Observe(snapshot);
+
+    internal MobileIncident? ReadMobileIncident(Guid id)
+    {
+        if (!OperatingSystem.IsWindows() || Notices?.Any(notice => notice.Id == id) != true)
+        {
+            return null;
+        }
+
+        try
+        {
+            var storage = new SafeguardStorage();
+            if (storage.Read<SafeguardExecution>("history", id) is not { } execution || execution.Id != id)
+            {
+                return null;
+            }
+
+            var now = clock.GetUtcNow();
+            if (execution.StartedAt < now.AddDays(-storage.RetentionDays) && !SafeguardStorage.IsRunning(execution, now))
+            {
+                return null;
+            }
+
+            var telemetry = storage.Read<SafeguardTelemetry>("telemetry", id);
+            var delivery = storage.Read<SafeguardDelivery>("delivery", id);
+            return new MobileIncident(id, "safeguard", execution.Name, "Safeguard+", execution.StartedAt, execution.FinishedAt,
+                SafeguardStorage.DisplayStatus(execution, now))
+            {
+                Connector = execution.Connector, DelayMs = execution.DelayMs, Steps = execution.Steps ?? [], DeliveryStatus = delivery?.Status,
+                CapturedAt = telemetry?.CapturedAt, Readings = telemetry?.Readings ?? []
+            };
+        }
+        catch (Exception error) when (IsRecordError(error))
+        {
+            logger.LogWarning("Could not read Safeguard+ mobile report {ExecutionId} ({Type})", id, error.GetType().Name);
+            return null;
+        }
+    }
 
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
@@ -94,6 +133,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
         var now = clock.GetUtcNow();
         var cutoff = now.AddDays(-storage.RetentionDays);
         var notices = new List<SafeguardExecutionNotice>();
+        var newExecutions = new List<SafeguardExecutionNotice>();
 
         foreach (var id in storage.Ids("history"))
         {
@@ -119,7 +159,13 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
                 }
 
                 var status = SafeguardStorage.DisplayStatus(execution, now);
-                notices.Add(new(id, execution.Name, execution.Connector, execution.StartedAt, status));
+                var notice = new SafeguardExecutionNotice(id, execution.Name, execution.Connector, execution.StartedAt, status,
+                    execution.ScriptId == SafeguardScripts.Simulation);
+                notices.Add(notice);
+                if (mobilePush is not null && !notice.IsSimulation && notice.StartedAt >= _startedAt && !_loggedStatus.ContainsKey(id))
+                {
+                    newExecutions.Add(notice);
+                }
 
                 ObserveExecution(execution, status);
             }
@@ -139,6 +185,10 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
         }
 
         Volatile.Write(ref _notices, [.. notices.OrderBy(notice => notice.StartedAt).ThenBy(notice => notice.Id)]);
+        foreach (var notice in newExecutions)
+        {
+            mobilePush?.SendSafeguard(notice.Id, notice.Connector, notice.StartedAt);
+        }
         return Task.CompletedTask;
     }
 

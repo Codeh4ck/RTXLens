@@ -39,6 +39,7 @@
         <PackageReference Include="Svg.Controls.Avalonia" />
         <PackageReference Include="CommunityToolkit.Mvvm" />
         <PackageReference Include="Markdig" />
+        <PackageReference Include="QRCoder" />
         <PackageReference Include="System.Security.Cryptography.ProtectedData" />
         <Compile Include="../../Common/SafeguardReporting/*.cs" Link="SafeguardReporting/%(Filename)%(Extension)" />
     </ItemGroup>

@@ -6,7 +6,8 @@ namespace RTXLens.Core.Streaming;
 
 public static class SensorWebSocket
 {
-    public static async Task StreamAsync(HttpContext context, SensorStreamHub hub, IHostApplicationLifetime lifetime)
+    public static async Task StreamAsync(HttpContext context, SensorStreamHub hub, IHostApplicationLifetime lifetime,
+        Func<byte[], byte[]>? formatFrame = null)
     {
         if (!context.WebSockets.IsWebSocketRequest)
         {
@@ -18,7 +19,7 @@ public static class SensorWebSocket
         using var subscription = hub.Subscribe();
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, lifetime.ApplicationStopping);
 
-        var send = SendAsync(socket, subscription, stop.Token);
+        var send = SendAsync(socket, subscription, formatFrame, stop.Token);
         var receive = ReceiveAsync(socket, stop.Token);
 
         await Task.WhenAny(send, receive);
@@ -72,14 +73,16 @@ public static class SensorWebSocket
         }
     }
 
-    private static async Task SendAsync(WebSocket socket, Subscription subscription, CancellationToken cancellationToken)
+    private static async Task SendAsync(WebSocket socket, Subscription subscription, Func<byte[], byte[]>? formatFrame,
+        CancellationToken cancellationToken)
     {
         await foreach (var frame in subscription.Reader.ReadAllAsync(cancellationToken))
         {
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             deadline.CancelAfter(TimeSpan.FromSeconds(5));
 
-            await socket.SendAsync(frame.AsMemory(), WebSocketMessageType.Text, true, deadline.Token);
+            var payload = formatFrame is null ? frame : formatFrame(frame);
+            await socket.SendAsync(payload.AsMemory(), WebSocketMessageType.Text, true, deadline.Token);
         }
     }
 

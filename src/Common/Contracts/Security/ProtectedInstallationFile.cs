@@ -31,7 +31,7 @@ public static class ProtectedInstallationFile
             throw new UnauthorizedAccessException("An administrator-protected folder on a local drive is required.");
         }
 
-        for (string? current = path; current is not null && current != drive; current = Path.GetDirectoryName(current))
+        for (var current = path; current is not null && current != drive; current = Path.GetDirectoryName(current))
         {
             if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
             {

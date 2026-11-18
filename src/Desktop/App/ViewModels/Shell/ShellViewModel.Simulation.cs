@@ -5,6 +5,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using RTXLens.App.Platform;
 using RTXLens.App.Views.Simulation;
 using RTXLens.Client.Http;
+using RTXLens.Client.Mobile;
+using RTXLens.Contracts.Mobile;
+using RTXLens.Contracts.Monitoring;
 using RTXLens.Contracts.Sensors;
 using RTXLens.Debugging;
 using RTXLens.Debugging.Api;
@@ -182,11 +185,38 @@ internal sealed partial class ShellViewModel
             {
                 Simulation.ReportNotification(warning.Title, warning.Message);
                 WarningRaised?.Invoke(warning with { Title = "DEBUG · " + warning.Title });
+                if (DesktopBuild.IsDebug && OperatingSystem.IsWindows()
+                    && Uri.TryCreate(Preferences.ServiceAddress, UriKind.Absolute, out var address)
+                    && address.IsLoopback && address.Port == ServiceEndpoint.DebugPort)
+                {
+                    _ = PublishMobileSimulationWarningAsync(warning);
+                }
             }
         }
         finally
         {
             _publishingSimulation = false;
+        }
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private async Task PublishMobileSimulationWarningAsync(WarningNotification warning)
+    {
+        var message = new MobileSimulationWarning(warning.Title[..Math.Min(warning.Title.Length, 160)],
+            warning.Message[..Math.Min(warning.Message.Length, 480)]);
+        try
+        {
+            var response = await new MobileAccessClient(debug: true).SendAsync(
+                new MobileAccessRequest(MobileAccessOperation.PublishSimulationWarning, SimulationWarning: message), StopToken);
+            if (!response.Success)
+            {
+                System.Diagnostics.Debug.WriteLine($"Mobile simulation warning could not be sent: {response.Error}");
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or OperationCanceledException
+            or System.Security.SecurityException or System.Text.Json.JsonException)
+        {
+            System.Diagnostics.Debug.WriteLine($"Mobile simulation warning could not be sent: {error.Message}");
         }
     }
 

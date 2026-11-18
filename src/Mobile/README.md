@@ -4,7 +4,7 @@ The iOS and Android builds use the same Expo app in this directory. Each platfor
 
 ## Build artifacts
 
-Push the mobile files on the feature/mobile-app branch to run the Mobile preview builds workflow. Once the workflow is on the default branch, it can also be run manually from the Actions tab. Download the platform artifact from the completed run and extract it.
+Push the mobile files on the feature/mobile-app branch to run the **Mobile App - Build** workflow. Once the workflow is on the default branch, it can also be run manually from the Actions tab. Download the platform artifact from the completed run and extract it.
 
 - **iPhone**. Open RTX-Lens-unsigned.ipa with [AltStore Classic](https://faq.altstore.io/altstore-classic/how-to-install-altstore-windows) to sign and install it with your Apple Account. Enable Developer Mode when prompted. With free signing, refresh the installation every seven days.
 - **Android**. Open RTX-Lens-preview.apk on the phone and allow installation from the app that opened the file if Android asks. This APK uses test signing.

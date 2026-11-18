@@ -1,4 +1,4 @@
-name: Mobile preview builds
+name: Mobile App - Build
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
     branches: [feature/mobile-app]
     paths:
       - 'src/Mobile/**'
-      - '.github/workflows/mobile-preview.yml'
+      - '.github/workflows/mobile-app-build.yml'
 
 permissions:
   contents: read
@@ -40,9 +40,38 @@ jobs:
       - run: npm run typecheck && npm test
 
       - name: Generate the iOS project
+        run: npx --no-install expo prebuild --platform ios --clean --no-install
+
+      - name: Cache CocoaPods downloads
+        uses: actions/cache@v5
+        with:
+          path: ~/Library/Caches/CocoaPods
+          key: >-
+            cocoapods-v1-${{ runner.os }}-${{ runner.arch }}-${{
+              hashFiles('src/Mobile/package-lock.json', 'src/Mobile/ios/Podfile',
+              'src/Mobile/ios/Podfile.properties.json', 'src/Mobile/modules/**/*.podspec') }}
+
+      - name: Install iOS dependencies
+        run: pod install --project-directory=ios
+
+      - name: Identify Xcode build version
+        id: xcode
+        shell: bash
         run: |
-          npx --no-install expo prebuild --platform ios --clean --no-install
-          pod install --project-directory=ios
+          xcode_build="$(xcodebuild -version | awk '/^Build version / { print $3 }')"
+          test -n "$xcode_build"
+          echo "build=$xcode_build" >> "$GITHUB_OUTPUT"
+
+      # Xcode validates compiler inputs before reusing individual results. Build products stay fresh.
+      - name: Cache Xcode compilation results
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/rtxlens-xcode-cache
+          key: >-
+            xcode-compile-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.build }}-${{
+              hashFiles('src/Mobile/package-lock.json', 'src/Mobile/ios/Podfile.lock',
+              'src/Mobile/ios/Podfile.properties.json', 'src/Mobile/app.json', 'src/Mobile/app.config.ts',
+              'src/Mobile/modules/**/ios/**', 'src/Mobile/modules/**/expo-module.config.json') }}
 
       - name: Compile and package the unsigned IPA
         shell: bash
@@ -53,7 +82,8 @@ jobs:
           derived_data="$RUNNER_TEMP/rtxlens-derived-data"
           xcodebuild -workspace "$workspace" -scheme "$scheme" \
             -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
-            -derivedDataPath "$derived_data" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+            -derivedDataPath "$derived_data" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            COMPILATION_CACHE_ENABLE_CACHING=YES COMPILATION_CACHE_CAS_PATH="$RUNNER_TEMP/rtxlens-xcode-cache" build
 
           app="$(find "$derived_data/Build/Products/Release-iphoneos" -maxdepth 1 -name '*.app' -print -quit)"
           test -d "$app"
@@ -103,12 +133,28 @@ jobs:
         with:
           packages: ''
 
-      - name: Generate and build the Android app
+      - name: Generate the Android project
+        run: npx --no-install expo prebuild --platform android --clean --no-install
+
+      # Cache downloads and dependency metadata. Gradle evaluates and builds the generated project each run.
+      - name: Cache Gradle dependencies and wrapper
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.gradle/caches/modules-2/files-2.1
+            ~/.gradle/caches/modules-2/metadata-*
+            ~/.gradle/wrapper/dists
+          key: >-
+            gradle-downloads-v1-${{ runner.os }}-${{ runner.arch }}-${{
+              hashFiles('src/Mobile/package-lock.json', 'src/Mobile/android/**/*.gradle*',
+              'src/Mobile/android/gradle.properties', 'src/Mobile/android/gradle/**',
+              'src/Mobile/modules/**/android/**/*.gradle*', 'src/Mobile/modules/**/expo-module.config.json') }}
+
+      - name: Build the Android app
         shell: bash
         run: |
-          npx --no-install expo prebuild --platform android --clean --no-install
           cd android
-          ./gradlew :app:assembleRelease --no-daemon
+          ./gradlew :app:assembleRelease --no-daemon --no-build-cache --no-configuration-cache
 
       - name: Verify and stage the APK
         shell: bash
