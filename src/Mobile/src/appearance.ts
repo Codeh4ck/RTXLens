@@ -2,7 +2,7 @@ import { createContext, useContext, useMemo } from 'react';
 
 export type Palette = { primary: string; secondary: string; tertiary: string; background: string };
 export const schemes = [
-  ['Default', '#39EED1 #7DDCC7 #C29BFF #090E17', '#007F76 #0C665B #713EB5 #F3F6FA'],
+  ['Default', '#39EED1 #7DDCC7 #79D5DE #090E17', '#007F76 #0C665B #236872 #F3F6FA'],
   ['Ultraviolet', '#BF9AFF #DAB9FF #F3ACED #110D1D', '#6743A9 #8056B7 #9C387D #F6F1FC'],
   ['Emerald Circuit', '#61E995 #9ADDB6 #C1E77E #0B1611', '#12713C #2E7955 #4B7317 #EFF8F2'],
   ['Crimson Pulse', '#FF7888 #F4A5AE #FFBCA1 #1B0E15', '#A92D46 #963A5E #973F2F #FCF0F3'],

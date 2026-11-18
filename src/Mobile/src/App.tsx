@@ -14,9 +14,9 @@ import { destinations, localSwitchAddress, retryDelay, sessionResult, type Desti
 import { IncidentHistory } from './history';
 import type { IncidentRef } from './incidentProtocol';
 import { useLockScreenNotifications } from './lockScreenNotifications';
-import { allowsWarning, moveHomePanel, type NotificationPreferences } from './mobilePreferences';
+import { allowsWarning, type NotificationPreferences } from './mobilePreferences';
 import {
-  ConnectionAddresses, DashboardSettings, NotificationPreferencesCard, TemperatureSettings, TemperatureUnitContext, TestRemoteAccess, useMobilePreferences,
+  ConnectionAddresses, MsiDisplaySettings, NotificationPreferencesCard, TemperatureSettings, TemperatureUnitContext, TestRemoteAccess, useMobilePreferences,
 } from './mobileSettings';
 import { decodeFrame, decodePairingCode, decodeSavedComputer, requestPairing, type PairedComputer, type SensorFrame } from './protocol';
 import { Gpu, Home, Power, Warnings } from './screens';
@@ -73,6 +73,7 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
   const [connection, setConnection] = useState<Connection>('idle');
   const [frame, setFrame] = useState<SensorFrame | null>(null);
   const [tab, setTab] = useState<Tab>('home');
+  const [editingHome, setEditingHome] = useState(false);
   const [notificationLink, setNotificationLink] = useState<{ index: number; incident: IncidentRef | null } | null>(null);
   const [notifications, setNotifications] = useState<'granted' | 'available' | 'blocked'>('available');
   const [notificationError, setNotificationError] = useState<string | null>(null);
@@ -516,8 +517,7 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
         </Card>}
         <AppearanceSettings value={appearance} save={saveAppearance} />
         {preferencesLoaded && <TemperatureSettings unit={preferences.temperature} save={preferences.saveTemperature} />}
-        {preferencesLoaded && <DashboardSettings value={preferences.display} busy={preferences.savingDisplay}
-          sensors={frame?.sensors ?? []} save={preferences.saveDisplay} />}
+        {preferencesLoaded && <MsiDisplaySettings value={preferences.display} busy={preferences.savingDisplay} save={preferences.saveDisplay} />}
       </Page>
     );
   } else if (tab === 'power') {
@@ -531,16 +531,14 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
         onNotificationClosed={() => setNotificationLink(previous => previous && { ...previous, incident: null })} />} />;
   } else {
     content = <Home frame={frame} live={live} paired={computer !== null} remote={destination?.route === 'remote'}
-      panels={preferences.display.homePanels} onMove={async (from, to) => {
-        const homePanels = moveHomePanel(preferences.display.homePanels, from, to);
-        await preferences.saveDisplay({ ...preferences.display, homePanels });
-      }}
+      panels={preferences.display.homePanels} layoutEnabled={preferencesLoaded} onEditingChange={setEditingHome}
+      saveLayout={homePanels => preferences.saveDisplay({ ...preferences.display, homePanels })}
       connecting={connection === 'connecting' || connection === 'reconnecting'} reconnecting={connection === 'reconnecting'} onNavigate={navigate} />;
   }
 
   return (
     <>
-      {localAddress && offerLocalConnection && <View style={local.connectionPrompt}>
+      {localAddress && offerLocalConnection && !editingHome && <View style={local.connectionPrompt}>
         <Card title="Local connection available" icon="link">
           <Text style={styles.caption}>RTX Lens can reach your PC over this Wi-Fi. Switch to the local connection?</Text>
           <View style={styles.actions}>
@@ -556,7 +554,7 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
         <View style={styles.screen} key={tab}>{content}</View>
       </TemperatureUnitContext.Provider>
       <SafeAreaView edges={['bottom']} style={styles.bottom}>
-        <BottomNavigation selected={tab} warningCount={warningCount} onSelect={navigate} />
+        {(tab !== 'home' || !editingHome) && <BottomNavigation selected={tab} warningCount={warningCount} onSelect={navigate} />}
       </SafeAreaView>
     </>
   );

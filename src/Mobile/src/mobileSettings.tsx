@@ -4,12 +4,11 @@ import { createContext, useEffect, useRef, useState } from 'react';
 import { Switch, Text, TextInput, View } from 'react-native';
 
 import { sessionResult } from './connection';
-import { groupMetrics, pinPanelSources, pinPanelTitle } from './metrics';
 import {
   allowsWarning, decodeDisplayPreferences, decodeNotificationPreferences, defaultDisplayPreferences, defaultNotificationPreferences,
-  homeCards, homePanelKey, warningCategories, type DisplayPreferences, type HomePanel, type NotificationPreferences, type TemperatureUnit,
+  warningCategories, type DisplayPreferences, type NotificationPreferences, type TemperatureUnit,
 } from './mobilePreferences';
-import { readAddress, type PairedComputer, type SensorReading } from './protocol';
+import { readAddress, type PairedComputer } from './protocol';
 import { transport } from './transport';
 import { Button, Card, Notice, Selection, useStyles } from './ui';
 
@@ -261,30 +260,12 @@ export function TemperatureSettings({ unit, save }: { unit: TemperatureUnit; sav
   );
 }
 
-export function DashboardSettings({ value, busy, sensors, save }: {
-  value: DisplayPreferences; busy: boolean; sensors: SensorReading[]; save: (value: DisplayPreferences) => Promise<void>;
+export function MsiDisplaySettings({ value, busy, save }: {
+  value: DisplayPreferences; busy: boolean; save: (value: DisplayPreferences) => Promise<void>;
 }) {
   const styles = useStyles();
   const colors = useColors();
   const [error, setError] = useState<string | null>(null);
-  const active = new Set(value.homePanels.map(homePanelKey));
-  const pinSources = pinPanelSources(groupMetrics(sensors, 'power'));
-  const reportingPins = [...pinSources.values()].filter(source => source.pins.some(reading => reading.quality === 'Valid' && reading.value !== null));
-  const options: { panel: HomePanel; title: string }[] = [
-    ...homeCards.map(card => ({ panel: { kind: 'metric' as const, id: card.id }, title: card.label })),
-    ...reportingPins,
-  ];
-
-
-  function titleFor(panel: HomePanel) {
-    if (panel.kind === 'metric') return homeCards.find(card => card.id === panel.id)?.label ?? panel.id;
-    return pinSources.get(homePanelKey(panel))?.title ?? pinPanelTitle(panel);
-  }
-
-  for (const panel of value.homePanels) {
-    if (!options.some(option => homePanelKey(option.panel) === homePanelKey(panel))) options.push({ panel, title: titleFor(panel) });
-  }
-
   async function change(next: DisplayPreferences) {
     setError(null);
     try {
@@ -296,19 +277,6 @@ export function DashboardSettings({ value, busy, sensors, save }: {
 
   return (
     <>
-      <Card title="Home screen" icon="home">
-        {options.map(({ panel, title }) => {
-          const key = homePanelKey(panel);
-          return <View key={key} style={styles.row}>
-            <Text style={[styles.text, { flex: 1 }]}>{title}</Text>
-            <Switch accessibilityLabel={title} value={active.has(key)} disabled={busy}
-              trackColor={{ true: colors.accentSurface, false: colors.line }}
-              onValueChange={on => void change({ ...value, homePanels: on ? [...value.homePanels, panel]
-                : value.homePanels.filter(item => homePanelKey(item) !== key) })} />
-          </View>;
-        })}
-        {reportingPins.length === 0 && <Text style={styles.caption}>Pin panels can be added when a device is reporting pin readings.</Text>}
-      </Card>
       <Card title="MSI PSU" icon="power">
         <View style={styles.row}>
           <Text style={[styles.text, { flex: 1 }]}>Hide connectors with zero current</Text>

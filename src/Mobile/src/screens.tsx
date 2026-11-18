@@ -14,9 +14,10 @@ import { Button, Card, Icon, Page, Selection, useHomeLongPress, useStyles, type 
 
 type TelemetryProps = { frame: SensorFrame | null; live: boolean };
 
-export function Home({ frame, live, paired, connecting, reconnecting, remote, panels, onMove, onNavigate }: TelemetryProps & {
+export function Home({ frame, live, paired, connecting, reconnecting, remote, panels, saveLayout, layoutEnabled, onEditingChange, onNavigate }: TelemetryProps & {
   paired: boolean; connecting: boolean; reconnecting: boolean; remote: boolean; panels: HomePanel[];
-  onMove: (from: number, to: number) => Promise<void>; onNavigate: (tab: Tab) => void;
+  saveLayout: (panels: HomePanel[]) => Promise<void>; layoutEnabled: boolean; onEditingChange: (editing: boolean) => void;
+  onNavigate: (tab: Tab) => void;
 }) {
   const styles = useStyles();
   const colors = useColors();
@@ -62,22 +63,35 @@ export function Home({ frame, live, paired, connecting, reconnecting, remote, pa
       </View>
 
   );
-  return <HomeLayout move={onMove} configure={() => onNavigate('settings')}
+  function titleFor(panel: HomePanel) {
+    if (panel.kind === 'metric') return homeCards.find(card => card.id === panel.id)?.label ?? panel.id;
+    return pinSources.get(homePanelKey(panel))?.title ?? pinPanelTitle(panel);
+  }
+
+  const savedPins = panels.filter(panel => panel.kind === 'pins');
+  const reportedPins = [...pinSources.values()]
+    .filter(source => source.pins.some(pin => pin.quality === 'Valid' && pin.value !== null))
+    .map(source => source.panel);
+  const pinOptions = new Map([...savedPins, ...reportedPins].map(panel => [homePanelKey(panel), panel]));
+  const options = [
+    ...homeCards.map(card => ({ panel: { kind: 'metric' as const, id: card.id }, title: card.label })),
+    ...[...pinOptions.values()].map(panel => ({ panel, title: titleFor(panel) })),
+  ];
+
+  return <HomeLayout panels={panels} options={options} titleFor={titleFor} save={saveLayout}
+    enabled={layoutEnabled} onEditingChange={onEditingChange}
     footer={frame && !live && <Text style={styles.caption}>Last readings at {time(frame.timestamp)}</Text>}
-    panels={panels.map(panel => {
-      const key = homePanelKey(panel);
+    renderPanel={panel => {
+      const panelTitle = titleFor(panel);
       if (panel.kind === 'metric') {
-        const title = homeCards.find(card => card.id === panel.id)!.label;
-        if (panel.id === 'status') return { key, title, wide: true, content: status };
+        if (panel.id === 'status') return status;
         const { value, icon, tab } = tiles[panel.id];
-        return { key, title, wide: false, content: <Tile title={title} value={frame ? value : 'Unavailable'}
-          icon={icon} onPress={() => onNavigate(tab)} /> };
+        return <Tile title={panelTitle} value={frame ? value : 'Unavailable'} icon={icon} onPress={() => onNavigate(tab)} />;
       }
-      const source = pinSources.get(key);
-      const title = source?.title ?? pinPanelTitle(panel);
+      const source = pinSources.get(homePanelKey(panel));
       const limit = frame?.pinLimits.find(limit => limit.pluginId === panel.pluginId && limit.deviceId === panel.deviceId);
-      return { key, title, wide: true, content: <HomePinChart title={title} pins={source?.pins} limit={limit?.overcurrentAmperes} /> };
-    })} />;
+      return <HomePinChart title={panelTitle} pins={source?.pins} limit={limit?.overcurrentAmperes} />;
+    }} />;
 }
 
 function Tile({ title, value, icon, onPress }: { title: string; value: string; icon: IconName; onPress: () => void }) {
@@ -182,7 +196,7 @@ function PinChart({ title = 'Pin distribution', pins, metric, limit, onSelect }:
             <View key={reading.identity.key} accessible accessibilityLabel={`${pin}, ${formatted}`} style={local.pin}>
               <Text style={local.pinValue} adjustsFontSizeToFit numberOfLines={1}>{value === null ? '–' : formatted}</Text>
               <View style={local.track}>
-                {value !== null && <View style={[local.fill, overLimit && local.overLimit,
+                {value !== null && <View style={[local.fill, selected === 'Voltage' && local.voltageFill, overLimit && local.overLimit,
                   { height: `${Math.max(0, value / ceiling) * 100}%` }]} />}
               </View>
               <Text style={styles.caption}>{pin}</Text>
@@ -362,6 +376,7 @@ const createLocalStyles = (colors: Colors) => StyleSheet.create({
   pinValue: { color: colors.text, fontSize: 12, fontWeight: '700', width: '100%', textAlign: 'center', fontVariant: ['tabular-nums'] },
   track: { backgroundColor: colors.raised, width: '66%', height: 104, borderRadius: 6, overflow: 'hidden', justifyContent: 'flex-end' },
   fill: { backgroundColor: colors.secondary, borderRadius: 4 },
+  voltageFill: { backgroundColor: colors.tertiary },
   overLimit: { backgroundColor: colors.danger },
   warningStatus: { color: colors.warning, fontSize: 13, fontWeight: '700' },
   limitRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingBottom: 8,

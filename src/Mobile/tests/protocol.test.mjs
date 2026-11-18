@@ -10,6 +10,8 @@ import {
   warningCategories, warningCategory,
 } from '../src/mobilePreferences.ts';
 import { decodeAppearance, defaultAppearance, schemes, selectedPalette, themeColors } from '../src/appearance.ts';
+import { hexToHsv, hsvToHex } from '../src/colorValues.ts';
+import { homeDropIndex } from '../src/homeDropTarget.ts';
 import { WarningEvents } from '../src/warningEvents.ts';
 
 const now = Date.now();
@@ -284,4 +286,25 @@ test('restores desktop schemes in both modes and validates custom colors', () =>
   const value = { ...defaultAppearance, scheme: 'Custom', custom };
   assert.notEqual(themeColors(value).accent, custom.background);
   assert.deepEqual(decodeAppearance(JSON.stringify({ ...value, custom: { ...custom, primary: 'invalid' } })), defaultAppearance);
+});
+
+test('targets the original slots for drops between tiles and around full-width panels', () => {
+  const slots = [
+    { x: 0, y: 0, width: 300, height: 150 },
+    { x: 0, y: 160, width: 145, height: 80 },
+    { x: 155, y: 160, width: 145, height: 80 },
+    { x: 0, y: 250, width: 300, height: 200 },
+  ];
+  assert.equal(homeDropIndex(slots, 200, 205, 0), 2);
+  assert.equal(homeDropIndex(slots, 150, 205, 2), 2);
+  assert.equal(homeDropIndex(slots, 50, 248, 1), 3);
+  assert.equal(homeDropIndex(slots, -20, -20, 2), 0);
+});
+
+test('round-trips custom colors through the picker including grayscale and red at both ends of the hue strip', () => {
+  for (const hex of ['#39EED1', '#236872', '#7C57CE', '#000000', '#777777', '#FFFFFF', '#FF0100', '#FF0001']) {
+    assert.equal(hsvToHex(hexToHsv(hex)), hex);
+  }
+  assert.equal(hsvToHex({ hue: 0, saturation: 1, brightness: 1 }), '#FF0000');
+  assert.equal(hsvToHex({ hue: 360, saturation: 1, brightness: 1 }), '#FF0000');
 });

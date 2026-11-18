@@ -14,6 +14,8 @@ export function useStyles() { return useThemeStyles(createStyles); }
 
 const paths = {
   palette: 'M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-4c-1-1 0-3 2-3h2c5 0 3-11-6-11ZM7 10h1m3-3h1m4 2h1',
+  edit: 'm13 6 5 5M4 20l5-1L20 8a2 2 0 0 0 0-3l-1-1a2 2 0 0 0-3 0L5 15z',
+  grip: 'M9 5h.1m5.9 0h.1M9 12h.1m5.9 0h.1M9 19h.1m5.9 0h.1',
   home: 'm3 10 9-7 9 7v10H3zm6 10v-6h6v6',
   power: 'm13 2-9 12h7l-1 8 10-12h-7l1-8Z',
   gpu: 'M7 7h10v10H7zM9 1v3m6-3v3M9 20v3m6-3v3M1 9h3m-3 6h3m16-6h3m-3 6h3M4 4h16v16H4z',
@@ -101,15 +103,15 @@ export function Card({ title, icon, children }: { title?: string; icon?: IconNam
   );
 }
 
-export function Button({ icon, label, variant = 'secondary', disabled = false, onPress }: {
-  icon: IconName; label: string; variant?: 'secondary' | 'primary' | 'danger'; disabled?: boolean; onPress: () => void;
+export function Button({ icon, label, accessibilityLabel, variant = 'secondary', disabled = false, onPress }: {
+  icon: IconName; label: string; accessibilityLabel?: string; variant?: 'secondary' | 'primary' | 'danger'; disabled?: boolean; onPress: () => void;
 }) {
   const styles = useStyles();
   const colors = useColors();
   const onLongPress = useHomeLongPress();
   const color = variant === 'primary' ? colors.onAccent : variant === 'danger' ? colors.danger : colors.text;
   return (
-    <Pressable accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onLongPress={onLongPress} delayLongPress={420} onPress={onPress}
+    <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled }} disabled={disabled} onLongPress={onLongPress} delayLongPress={420} onPress={onPress}
       style={({ pressed }) => [styles.button, variant === 'primary' && styles.primaryButton, (pressed || disabled) && styles.pressed]}>
       <Icon name={icon} color={color} size={17} />
       <Text style={[styles.buttonLabel, { color }]}>{label}</Text>
@@ -161,7 +163,7 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   tabIcon: { alignItems: 'center', justifyContent: 'center', width: 40, height: 30, borderRadius: 11 },
   activeTabIcon: { backgroundColor: colors.accentSurface },
   tabLabel: { color: colors.muted, fontSize: 11, fontWeight: '600' },
-  activeTabLabel: { color: colors.tertiary },
+  activeTabLabel: { color: colors.accent },
   dot: { position: 'absolute', top: 4, right: 7, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.warning },
   selection: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, borderRadius: 13, backgroundColor: colors.background, padding: 4 },
   option: { flexGrow: 1, minHeight: 42, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 9, borderRadius: 9 },
