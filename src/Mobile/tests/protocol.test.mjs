@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { decodeFrame, decodePairingCode, decodeSavedComputer, requestPairing } from '../src/protocol.ts';
-import { boostLimitRows, groupMetrics, metricLabel, formatReading, pinPanelSources, powerConnectorGroups, wireViewFaults } from '../src/metrics.ts';
+import { boostLimitRows, groupMetrics, metricLabel, formatReading, pinCurrentSummary, pinPanelSources, powerConnectorGroups, wireViewFaults } from '../src/metrics.ts';
 import { destinations, localSwitchAddress, retryDelay, sessionResult } from '../src/connection.ts';
 import { decodeIncident, decodeIncidentPage, warningNotificationIncident } from '../src/incidentProtocol.ts';
 import {
@@ -307,4 +307,20 @@ test('round-trips custom colors through the picker including grayscale and red a
   }
   assert.equal(hsvToHex({ hue: 0, saturation: 1, brightness: 1 }), '#FF0000');
   assert.equal(hsvToHex({ hue: 360, saturation: 1, brightness: 1 }), '#FF0000');
+});
+
+test('uses valid pin currents for the spread and reports their channels', () => {
+  const pin = (channel, value, quality = 'Valid', metric = 'Current') => ({ identity: { channel, metric }, value, quality });
+  assert.deepEqual(pinCurrentSummary([pin(1, 0.25), pin(2, 2, 'Missing'), pin(3, 0.5), pin(4, 12, 'Valid', 'Voltage')]), {
+    delta: 0.25, high: { channel: 3, value: 0.5 }, low: { channel: 1, value: 0.25 },
+  });
+  assert.equal(pinCurrentSummary([pin(1, 1), pin(2, null)]), null);
+});
+
+test('restores existing palettes and persists the panel glow preference', () => {
+  const { panelGlow, ...previous } = { ...defaultAppearance, scheme: 'Ultraviolet' };
+  assert.deepEqual(decodeAppearance(JSON.stringify(previous)), { ...previous, panelGlow: false });
+  const enabled = decodeAppearance(JSON.stringify({ ...previous, panelGlow: true }));
+  assert.equal(themeColors(enabled).panelGlow, true);
+  assert.equal(themeColors(enabled).accent, themeColors({ ...enabled, panelGlow: false }).accent);
 });

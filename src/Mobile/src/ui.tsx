@@ -1,5 +1,5 @@
 import { useColors, useThemeStyles, type Colors } from './appearance';
-import { createContext, useContext, type ReactNode } from 'react';
+import { Children, createContext, isValidElement, useContext, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
@@ -36,6 +36,16 @@ const paths = {
   activity: 'M2 12h5l3-8 4 16 3-8h5',
   current: 'M4 16c4 0 4-8 8-8s4 8 8 8M4 8h2m12 0h2',
   monitor: 'M3 4h18v13H3zm5 17h8m-4-4v4',
+  fan: 'M12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm0 0c-2-3-1-6 2-6 2 0 3 2 2 4l-2 3m0 1c3-2 6-1 6 2 0 2-2 3-4 2l-3-2m-1 0c2 3 1 6-2 6-2 0-3-2-2-4l2-3m0-1c-3 2-6 1-6-2 0-2 2-3 4-2l3 2',
+  memory: 'M3 7h18v10H3zM6 10v4m4-4v4m4-4v4m4-4v4M6 17v2m4-2v2m4-2v2m4-2v2',
+  usage: 'M4 4v15h16M7 15l4-4 3 2 5-6',
+  clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 4v5l3 2',
+  voltage: 'M4 6h16M4 9h3m3 0h4m3 0h3m-12 4 4 7 4-7',
+  pcie: 'M5 6h14a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Zm2 5h5m3 0h2M7 16v3m4-3v3m4-3v3m4-3v3',
+  receive: 'M12 3v12m-4-4 4 4 4-4M4 16v4h16v-4',
+  transmit: 'M12 15V3m-4 4 4-4 4 4M4 16v4h16v-4',
+  shield: 'M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6l-7-3Zm-3 9 2 2 4-4',
+  delta: 'M12 4 3 20h18L12 4Z',
 };
 
 export type IconName = keyof typeof paths;
@@ -93,12 +103,40 @@ export function Page({ title, description, children }: { title: string; descript
   );
 }
 
-export function Card({ title, icon, children }: { title?: string; icon?: IconName; children: ReactNode }) {
+export function Card({ title, icon, compact = false, onPress, children }: {
+  title: string; icon?: IconName; compact?: boolean; onPress?: () => void; children: ReactNode;
+}) {
+  const styles = useStyles();
+  const colors = useColors();
+  const onLongPress = useHomeLongPress();
+  const content = <>
+    <View style={[styles.cardHeader, compact && styles.compactHeader, children == null && styles.emptyCardHeader]}>
+      {icon && <View style={[styles.cardIcon, compact && styles.compactIcon]}><Icon name={icon} size={compact ? 14 : 18} /></View>}
+      <Text accessibilityRole={onPress ? undefined : 'header'} numberOfLines={compact ? 1 : undefined}
+        adjustsFontSizeToFit={compact} minimumFontScale={compact ? 0.8 : undefined}
+        style={[styles.heading, styles.cardTitle, compact && styles.compactTitle]}>
+        {title}
+      </Text>
+      {onPress && !compact && <Icon name="next" color={colors.muted} size={14} />}
+    </View>
+    {children != null && <View style={[styles.cardBody, compact && styles.compactBody]}>{children}</View>}
+  </>;
+
+  return onPress ? (
+    <Pressable accessibilityRole="button" onPress={onPress} onLongPress={onLongPress} delayLongPress={420}
+      style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
+      {content}
+    </Pressable>
+  ) : <View style={styles.card}>{content}</View>;
+}
+
+export function PanelList({ children }: { children: ReactNode }) {
   const styles = useStyles();
   return (
-    <View style={styles.card}>
-      {title && <View style={styles.row}>{icon && <Icon name={icon} />}<Text accessibilityRole="header" style={styles.heading}>{title}</Text></View>}
-      {children}
+    <View>
+      {Children.toArray(children).map((row, index) => (
+        <View key={isValidElement(row) ? row.key : index} style={index > 0 && styles.listDivider}>{row}</View>
+      ))}
     </View>
   );
 }
@@ -150,7 +188,20 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   heading: { color: colors.text, fontSize: 17, fontWeight: '700', flexShrink: 1 },
   text: { color: colors.text, fontSize: 15 },
   caption: { color: colors.muted, fontSize: 14, lineHeight: 20 },
-  card: { borderRadius: 21, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, padding: 16, gap: 12 },
+  card: { borderRadius: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.panelGlow ? colors.accent : colors.line,
+    boxShadow: colors.panelGlow ? `0 0 12px ${colors.accent}40` : undefined },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 11,
+    borderTopLeftRadius: 19, borderTopRightRadius: 19, borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.line, backgroundColor: colors.panelHeader },
+  emptyCardHeader: { borderBottomWidth: 0, borderBottomLeftRadius: 19, borderBottomRightRadius: 19 },
+  cardIcon: { width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface },
+  cardTitle: { flex: 1 },
+  cardBody: { padding: 14, gap: 12 },
+  compactHeader: { minHeight: 33, paddingHorizontal: 9, paddingVertical: 6, gap: 5 },
+  compactIcon: { width: 20, height: 20, borderRadius: 6 },
+  compactTitle: { fontSize: 13, lineHeight: 16 },
+  compactBody: { paddingHorizontal: 12, paddingVertical: 9 },
+  listDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
   row: { flexDirection: 'row', alignItems: 'center', gap: 9 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   button: { flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', minHeight: 46, paddingHorizontal: 14,

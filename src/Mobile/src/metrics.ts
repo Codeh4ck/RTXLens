@@ -72,6 +72,23 @@ export function powerConnectorGroups(group: MetricGroup, hideIdleMsiConnectors: 
     : connectors;
 }
 
+export function pinCurrentSummary(readings: SensorReading[]) {
+  let high: { channel: number | null; value: number } | undefined;
+  let low: typeof high;
+  let count = 0;
+
+  for (const { identity, value, quality } of readings) {
+    if (identity.metric !== 'Current' || quality !== 'Valid' || value === null || !Number.isFinite(value)) continue;
+
+    const pin = { channel: identity.channel, value };
+    if (!high || value > high.value) high = pin;
+    if (!low || value < low.value) low = pin;
+    count++;
+  }
+
+  return count > 1 && high && low ? { delta: high.value - low.value, high, low } : null;
+}
+
 export function pinPanelTitle(panel: HomePinPanel, deviceName = sourceName(panel.pluginId)) {
   return panel.connectorId === null ? `${deviceName} pins` : `${deviceName} pins · Connector ${panel.connectorId}`;
 }

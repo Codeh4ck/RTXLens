@@ -1,4 +1,3 @@
-import { useThemeStyles, type Colors } from './appearance';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,16 +7,15 @@ import { decodeIncident, decodeIncidentPage, type Incident, type IncidentRef, ty
 import { formatReading, isPin, metricLabel, sourceName } from './metrics';
 import { TemperatureUnitContext } from './mobileSettings';
 import type { PairedComputer, SensorReading } from './protocol';
-import { ReadingRow } from './screens';
+import { readingIcon, ReadingRow } from './screens';
 import { transport } from './transport';
-import { Button, Card, Icon, Notice, Page, useStyles } from './ui';
+import { Button, Card, Icon, Notice, Page, PanelList, useStyles } from './ui';
 
 export function IncidentHistory({ computer, destination, live, target, onNotificationClosed }: {
   computer: PairedComputer | null; destination: Destination | null; live: boolean;
   target?: IncidentRef | null; onNotificationClosed?: () => void;
 }) {
   const styles = useStyles();
-  const local = useThemeStyles(createLocalStyles);
   const [items, setItems] = useState<IncidentSummary[]>([]);
   const [next, setNext] = useState<string | null>(null);
   const [selected, setSelected] = useState<IncidentRef | null>(target ?? null);
@@ -112,15 +110,15 @@ export function IncidentHistory({ computer, destination, live, target, onNotific
       <Button icon="refresh" label="Refresh history" onPress={() => setReload(value => value + 1)} />
       {error && <Notice>{error}</Notice>}
       {items.length > 0 && <Card title="Recent incidents" icon="warnings">
-        {items.map(item => <Pressable key={entryKey(item)} accessibilityRole="button" disabled={busy}
-          onPress={() => setSelected(item)} style={local.entry}>
-          <View style={local.entryText}>
+        <PanelList>{items.map(item => <Pressable key={entryKey(item)} accessibilityRole="button" disabled={busy}
+          onPress={() => setSelected(item)} style={localStyles.entry}>
+          <View style={localStyles.entryText}>
             <Text style={styles.text}>{item.title}</Text>
             <Text style={styles.caption}>{sourceName(item.source)} · {time(item.startedAt)}</Text>
             <Text style={styles.caption}>{item.status}</Text>
           </View>
           <Icon name="next" size={17} />
-        </Pressable>)}
+        </Pressable>)}</PanelList>
       </Card>}
       {busy && <Text style={styles.caption}>Loading history…</Text>}
       {!busy && !error && items.length === 0 && <Text style={styles.caption}>No incidents in the configured retention period.</Text>}
@@ -142,7 +140,7 @@ export function IncidentHistory({ computer, destination, live, target, onNotific
 
 function IncidentDetail({ incident }: { incident: Incident }) {
   const styles = useStyles();
-  const local = useThemeStyles(createLocalStyles);
+  const local = localStyles;
   const temperatureUnit = useContext(TemperatureUnitContext);
   const groups = new Map<string, { name: string; readings: SensorReading[] }>();
   for (const reading of incident.readings) {
@@ -160,32 +158,34 @@ function IncidentDetail({ incident }: { incident: Incident }) {
       <Card title={incident.title} icon="warnings">
         <Text style={styles.caption}>{sourceName(incident.source)}</Text>
         {incident.detail && <Text style={styles.text}>{incident.detail}</Text>}
-        <ReadingRow label="Status" value={incident.status} />
-        <ReadingRow label="Triggered" value={time(incident.startedAt)} />
-        {incident.endedAt && <ReadingRow label="Ended" value={time(incident.endedAt)} />}
-        {incident.deviceId && <ReadingRow label="Device" value={incident.deviceId} />}
-        {incident.connector !== null && <ReadingRow label="Connector" value={String(incident.connector)} />}
-        {incident.delayMs !== null && <ReadingRow label="Shutdown delay" value={`${incident.delayMs.toLocaleString()} ms`} />}
-        {incident.deliveryStatus && <ReadingRow label="Email status" value={incident.deliveryStatus} />}
+        <PanelList>
+          <ReadingRow icon="activity" label="Status" value={incident.status} />
+          <ReadingRow icon="clock" label="Triggered" value={time(incident.startedAt)} />
+          {incident.endedAt && <ReadingRow icon="clock" label="Ended" value={time(incident.endedAt)} />}
+          {incident.deviceId && <ReadingRow icon="monitor" label="Device" value={incident.deviceId} />}
+          {incident.connector !== null && <ReadingRow icon="power" label="Connector" value={String(incident.connector)} />}
+          {incident.delayMs !== null && <ReadingRow icon="clock" label="Shutdown delay" value={`${incident.delayMs.toLocaleString()} ms`} />}
+          {incident.deliveryStatus && <ReadingRow icon="activity" label="Email status" value={incident.deliveryStatus} />}
+        </PanelList>
       </Card>
       {incident.steps.length > 0 && <Card title="Action steps" icon="activity">
-        {incident.steps.map((step, index) => <View key={index} style={local.entry}>
-          <View style={local.entryText}>
+        <PanelList>{incident.steps.map((step, index) => <View key={index} style={localStyles.entry}>
+          <View style={localStyles.entryText}>
             <Text style={styles.text}>{step.name}</Text>
             <Text style={styles.caption}>{[step.timestamp && time(step.timestamp), step.result,
               step.exitCode !== null && `Exit code ${step.exitCode}`].filter(Boolean).join(' · ')}</Text>
           </View>
-        </View>)}
+        </View>)}</PanelList>
       </Card>}
       <Text accessibilityRole="header" style={styles.heading}>Sensor snapshot</Text>
       {groups.size === 0 && <Text style={styles.caption}>No readings were captured for this incident.</Text>}
       {groups.size > 0 && incident.capturedAt && <Text style={styles.caption}>{time(incident.capturedAt)}</Text>}
       {Array.from(groups, ([key, group]) => <Card key={key} title={group.name} icon="activity">
-        {group.readings.map(reading => {
+        <PanelList>{group.readings.map(reading => {
           const label = metricLabel(reading);
-          return <ReadingRow key={reading.identity.key} value={formatReading(reading, temperatureUnit)}
+          return <ReadingRow key={reading.identity.key} value={formatReading(reading, temperatureUnit)} icon={readingIcon(reading)}
             label={isPin(reading) ? `P${reading.identity.channel ?? '?'} ${label.toLowerCase()}` : label} />;
-        })}
+        })}</PanelList>
       </Card>)}
     </>
   );
@@ -203,8 +203,7 @@ function message(error: unknown) {
   return error instanceof Error ? error.message : 'Could not load the PC’s warning history.';
 }
 
-const createLocalStyles = (colors: Colors) => StyleSheet.create({
-  entry: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line },
+const localStyles = StyleSheet.create({
+  entry: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
   entryText: { flex: 1, gap: 3 },
 });

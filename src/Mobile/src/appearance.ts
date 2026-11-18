@@ -10,12 +10,12 @@ export const schemes = [
   ['Cobalt Surge', '#78B2FF #9BCDFF #A8B6FF #0A1220', '#235DAA #246A91 #4B50A8 #EEF4FC'],
 ] as const;
 
-export type Appearance = { scheme: string; light: boolean; custom: Palette };
+export type Appearance = { scheme: string; light: boolean; custom: Palette; panelGlow: boolean };
 function unpack(hex: string): Palette {
   const [primary, secondary, tertiary, background] = hex.split(' ');
   return { primary, secondary, tertiary, background };
 }
-export const defaultAppearance: Appearance = { scheme: 'Default', light: false, custom: unpack(schemes[0][1]) };
+export const defaultAppearance: Appearance = { scheme: 'Default', light: false, custom: unpack(schemes[0][1]), panelGlow: false };
 export function validColor(value: unknown): value is string {
   return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
 }
@@ -23,7 +23,7 @@ export function decodeAppearance(raw: string): Appearance {
   const value = JSON.parse(raw);
   if (typeof value?.light !== 'boolean' || !(value.scheme === 'Custom' || schemes.some(([name]) => name === value.scheme))
     || !Object.keys(defaultAppearance.custom).every(key => validColor(value.custom?.[key]))) return defaultAppearance;
-  return value;
+  return { scheme: value.scheme, light: value.light, custom: value.custom, panelGlow: value.panelGlow === true };
 }
 export function selectedPalette(value: Appearance) {
   const preset = schemes.find(([name]) => name === value.scheme);
@@ -61,7 +61,7 @@ export function themeColors(value: Appearance) {
     return text;
   }
   const accent = readable(primary);
-  return { background, surface, text, accent, secondary: readable(secondary), tertiary: readable(tertiary),
+  return { background, surface, text, accent, panelGlow: value.panelGlow, panelHeader: mix(surface, accent, 0.075), secondary: readable(secondary), tertiary: readable(tertiary),
     onAccent: isLight(accent) ? '#000000' : '#FFFFFF', raised: mix(background, text, 0.09), line: mix(background, text, 0.24),
     muted: mix(surface, text, 0.7), accentSurface: mix(background, accent, 0.14),
     warning: light ? '#794500' : '#FFD08B', warningSurface: light ? '#FFF0D6' : '#392C20',

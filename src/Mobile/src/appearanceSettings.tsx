@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Switch, Text, View } from 'react-native';
 import { schemes, selectedPalette, useColors, type Appearance, type Palette } from './appearance';
 import { ColorPicker } from './colorPicker';
 import { Sheet } from './sheet';
@@ -18,7 +18,7 @@ export function AppearanceSettings({ value, save, editHome, canEditHome }: {
   const [picking, setPicking] = useState<keyof Palette | null>(null);
   async function change(next: Appearance) {
     try { await save(next); setError(''); }
-    catch { setError('Could not save the color scheme.'); }
+    catch { setError('Could not save appearance settings.'); }
   }
 
   return <Card title="Appearance" icon="palette">
@@ -70,6 +70,12 @@ export function AppearanceSettings({ value, save, editHome, canEditHome }: {
         setPicking(null);
       }} />}
     </>}
+    <View style={styles.row}>
+      <Text style={[styles.text, { flex: 1 }]}>Panel glow</Text>
+      <Switch accessibilityLabel="Panel glow" value={value.panelGlow} trackColor={{ false: colors.line, true: colors.accentSurface }}
+        thumbColor={value.panelGlow ? colors.accent : colors.muted}
+        onValueChange={panelGlow => void change({ ...value, panelGlow })} />
+    </View>
     {error && <Notice>{error}</Notice>}
     <Button icon="edit" label="Edit home page" disabled={!canEditHome} onPress={editHome} />
   </Card>;
