@@ -16,8 +16,8 @@ internal static class ElevatedStartupTask
     {
         ProtectedInstallationFile.Require(executable);
         dynamic scheduler = Connect();
-        dynamic folder = scheduler.GetFolder(@"\");
-        dynamic task = scheduler.NewTask(0);
+        var folder = scheduler.GetFolder(@"\");
+        var task = scheduler.NewTask(0);
         task.RegistrationInfo.Description = "Start RTX Lens at sign-in with administrator privileges.";
         task.Principal.UserId = sid;
         task.Principal.LogonType = 3; // Interactive token.
@@ -26,9 +26,9 @@ internal static class ElevatedStartupTask
         task.Settings.StopIfGoingOnBatteries = false;
         task.Settings.ExecutionTimeLimit = "PT0S";
         task.Settings.MultipleInstances = 2; // Keep the running instance.
-        dynamic trigger = task.Triggers.Create(9); // Logon.
+        var trigger = task.Triggers.Create(9); // Logon.
         trigger.UserId = sid;
-        dynamic action = task.Actions.Create(0); // Executable.
+        var action = task.Actions.Create(0); // Executable.
         action.Path = executable;
         action.Arguments = "--startup";
         action.WorkingDirectory = Path.GetDirectoryName(executable);
@@ -38,14 +38,14 @@ internal static class ElevatedStartupTask
     public static void Remove(string sid, string executable)
     {
         dynamic scheduler = Connect();
-        dynamic folder = scheduler.GetFolder(@"\");
+        var folder = scheduler.GetFolder(@"\");
         try
         {
-            dynamic task = folder.GetTask(Name(sid));
-            dynamic actions = task.Definition.Actions;
+            var task = folder.GetTask(Name(sid));
+            var actions = task.Definition.Actions;
             if ((int)actions.Count == 1)
             {
-                dynamic action = actions.Item(1);
+                var action = actions.Item(1);
                 if (string.Equals((string)action.Path, executable, StringComparison.OrdinalIgnoreCase)
                     && string.Equals((string)action.Arguments, "--startup", StringComparison.Ordinal))
                 {
@@ -62,18 +62,18 @@ internal static class ElevatedStartupTask
     public static void Migrate(string sid, string previousExecutable, string executable)
     {
         dynamic scheduler = Connect();
-        dynamic folder = scheduler.GetFolder(@"\");
+        var folder = scheduler.GetFolder(@"\");
         var previousName = "RTX Monitor Startup " + sid;
         try
         {
-            dynamic task = folder.GetTask(previousName);
-            dynamic actions = task.Definition.Actions;
+            var task = folder.GetTask(previousName);
+            var actions = task.Definition.Actions;
             if ((int)actions.Count != 1)
             {
                 return;
             }
 
-            dynamic action = actions.Item(1);
+            var action = actions.Item(1);
             if (!string.Equals((string)action.Path, previousExecutable, StringComparison.OrdinalIgnoreCase)
                 || !string.Equals((string)action.Arguments, "--startup", StringComparison.Ordinal))
             {

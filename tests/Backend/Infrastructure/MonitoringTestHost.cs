@@ -10,6 +10,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using RTXLens.Core.Plugins;
+using RTXLens.Core.Streaming;
 using RTXLens.Hardware.Nvidia;
 using RTXLens.Plugins.GenericNvidia;
 using RTXLens.Contracts.Configuration;
@@ -37,6 +38,7 @@ internal sealed class MonitoringTestHost : IAsyncDisposable
     private readonly Uri _sensorStreamAddress;
 
     public HttpClient Client { get; }
+    public SensorStreamHub SensorHub => _application.Services.GetRequiredService<SensorStreamHub>();
 
     public ILogger CreateLogger(string category) => _application.Services.GetRequiredService<ILoggerFactory>().CreateLogger(category);
 
@@ -223,7 +225,7 @@ internal sealed class MonitoringTestHost : IAsyncDisposable
 
         builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, 0));
 
-        builder.Services.AddMonitoringCore(builder.Configuration);
+        builder.Services.AddMonitoringCore(builder.Configuration, debugInstance: true);
         builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy.AllowAnyOrigin()));
         builder.Services.AddSingleton<IServiceRestart, TestServiceRestart>();
 

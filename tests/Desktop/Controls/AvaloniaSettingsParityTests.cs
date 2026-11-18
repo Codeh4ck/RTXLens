@@ -157,6 +157,8 @@ internal static class AvaloniaSettingsParityTests
             window.Content = new ConfigurationPage(shell);
             Dispatcher.UIThread.RunJobs();
             var tabs = window.GetVisualDescendants().OfType<TabControl>().Single();
+            TestAssert.True(tabs.Items.OfType<TabItem>().Any(tab => Equals(tab.Header, "Mobile Access")),
+                "Mobile Access should be a Configuration tab.");
             OpenTab("Warnings");
             var profilePanel = window.GetVisualDescendants().OfType<RTXLens.App.Controls.SectionPanel>()
                 .Single(panel => Equals(panel.Header, "Device warning profiles"));

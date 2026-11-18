@@ -13,6 +13,7 @@ using RTXLens.Plugins.WireView;
 using RTXLens.Plugins.WireView.Endpoints;
 using RTXLens.Service;
 using RTXLens.Service.Endpoints;
+using RTXLens.Service.Mobile;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 #if DEBUG
@@ -44,6 +45,11 @@ if (!WindowsServiceHelpers.IsWindowsService())
 }
 
 builder.Services.AddMonitoringCore(builder.Configuration, debugInstance);
+
+if (OperatingSystem.IsWindows())
+{
+    builder.Services.AddMobileAccess(debugInstance);
+}
 
 builder.Services.AddGenericNvidiaPlugin();
 builder.Services.AddWireViewPlugin();

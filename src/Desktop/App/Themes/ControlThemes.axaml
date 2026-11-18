@@ -56,6 +56,18 @@
             <Setter Property="Foreground" Value="{DynamicResource PrimaryBrush}" />
         </Style>
 
+        <Style Selector="^.success-action">
+            <Setter Property="Background" Value="{DynamicResource SuccessSurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SuccessBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+        </Style>
+
+        <Style Selector="^.error-action">
+            <Setter Property="Background" Value="{DynamicResource ErrorSurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ErrorBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}" />
+        </Style>
+
         <Style Selector="^:pointerover, ^:focus-visible">
             <Setter Property="Background" Value="{DynamicResource HudHoverSurfaceBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}" />

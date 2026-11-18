@@ -37,6 +37,16 @@
 .panel[data-kind='pins'] .panel-detail { font-size: max(11px, calc(var(--label-base) * .8)); }
 .panel-tools { display: flex; align-items: center; justify-content: space-between; gap: var(--space); flex: none; }
 .metric-switch { display: flex; gap: calc(var(--space) * .5); }
+
+.metric-switch button {
+    appearance: none;
+    border: 2px solid color-mix(in srgb, var(--muted) 25%, var(--border));
+}
+
+.metric-switch button[aria-pressed='true'] {
+    border-color: var(--accent);
+}
+
 .metric-switch button, .reset-peak { height: var(--chart-control-height); min-height: var(--chart-control-height); min-width: 56px; padding: 5px 10px; font-size: max(22px, calc(var(--label-base) * 1.5)); }
 .panel-alert, .service-alert { color: var(--error); background: var(--alert); padding: calc(var(--space) * .7) var(--space); font: 700 max(12px, calc(var(--alert-base) * var(--alert-scale, 1))) var(--font-family, Consolas, monospace); border-left: 3px solid var(--error); }
 .panel-alert { display: none; }

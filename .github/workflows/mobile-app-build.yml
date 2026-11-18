@@ -1,0 +1,356 @@
+name: Mobile App - Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_app_store:
+        description: Publish to App Store (TestFlight)
+        type: boolean
+        default: false
+      publish_play_store:
+        description: Publish to Play Store (Internal testing)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  CI: '1'
+
+jobs:
+  ios:
+    name: iPhone IPA for AltStore
+    runs-on: macos-26
+    timeout-minutes: 40
+    concurrency:
+      group: mobile-preview-ios-${{ github.ref }}
+      cancel-in-progress: true
+    defaults:
+      run:
+        working-directory: src/Mobile
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: src/Mobile/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck && npm test
+
+      - name: Generate the iOS project
+        run: npx --no-install expo prebuild --platform ios --clean --no-install
+
+      - name: Cache CocoaPods downloads
+        uses: actions/cache@v5
+        with:
+          path: ~/Library/Caches/CocoaPods
+          key: >-
+            cocoapods-v1-${{ runner.os }}-${{ runner.arch }}-${{
+              hashFiles('src/Mobile/package-lock.json', 'src/Mobile/ios/Podfile',
+              'src/Mobile/ios/Podfile.properties.json', 'src/Mobile/modules/**/*.podspec') }}
+
+      - name: Install iOS dependencies
+        run: pod install --project-directory=ios
+
+      - name: Identify Xcode build version
+        id: xcode
+        shell: bash
+        run: |
+          xcode_build="$(xcodebuild -version | awk '/^Build version / { print $3 }')"
+          test -n "$xcode_build"
+          echo "build=$xcode_build" >> "$GITHUB_OUTPUT"
+
+      # Xcode validates compiler inputs before reusing individual results. Build products stay fresh.
+      - name: Cache Xcode compilation results
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/rtxlens-xcode-cache
+          key: >-
+            xcode-compile-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.build }}-${{
+              hashFiles('src/Mobile/package-lock.json', 'src/Mobile/ios/Podfile.lock',
+              'src/Mobile/ios/Podfile.properties.json', 'src/Mobile/app.json', 'src/Mobile/app.config.ts',
+              'src/Mobile/modules/**/ios/**', 'src/Mobile/modules/**/expo-module.config.json') }}
+
+      - name: Compile and package the unsigned IPA
+        shell: bash
+        run: |
+          workspace="$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)"
+          test -n "$workspace"
+          scheme="$(basename "$workspace" .xcworkspace)"
+          derived_data="$RUNNER_TEMP/rtxlens-derived-data"
+          xcodebuild -workspace "$workspace" -scheme "$scheme" \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$derived_data" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            COMPILATION_CACHE_ENABLE_CACHING=YES COMPILATION_CACHE_CAS_PATH="$RUNNER_TEMP/rtxlens-xcode-cache" build
+
+          app="$(find "$derived_data/Build/Products/Release-iphoneos" -maxdepth 1 -name '*.app' -print -quit)"
+          test -d "$app"
+          bundle="$RUNNER_TEMP/rtxlens-ios"
+          mkdir -p "$bundle/Payload"
+          ditto "$app" "$bundle/Payload/$(basename "$app")"
+          ditto -c -k --keepParent "$bundle/Payload" "$bundle/RTX-Lens-unsigned.ipa"
+          unzip -t "$bundle/RTX-Lens-unsigned.ipa" >/dev/null
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: RTX-Lens-iOS-AltStore
+          path: ${{ runner.temp }}/rtxlens-ios/RTX-Lens-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 7
+
+  android:
+    name: Android test APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    concurrency:
+      group: mobile-preview-android-${{ github.ref }}
+      cancel-in-progress: true
+    defaults:
+      run:
+        working-directory: src/Mobile
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: src/Mobile/package-lock.json
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - run: npm ci
+      - run: npm run typecheck && npm test
+
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+
+      - name: Generate the Android project
+        run: npx --no-install expo prebuild --platform android --clean --no-install
+
+      # Cache downloads and dependency metadata. Gradle evaluates and builds the generated project each run.
+      - name: Cache Gradle dependencies and wrapper
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.gradle/caches/modules-2/files-2.1
+            ~/.gradle/caches/modules-2/metadata-*
+            ~/.gradle/wrapper/dists
+          key: >-
+            gradle-downloads-v1-${{ runner.os }}-${{ runner.arch }}-${{
+              hashFiles('src/Mobile/package-lock.json', 'src/Mobile/android/**/*.gradle*',
+              'src/Mobile/android/gradle.properties', 'src/Mobile/android/gradle/**',
+              'src/Mobile/modules/**/android/**/*.gradle*', 'src/Mobile/modules/**/expo-module.config.json') }}
+
+      - name: Build the Android app
+        shell: bash
+        run: |
+          cd android
+          ./gradlew :app:assembleRelease --no-daemon --no-build-cache --no-configuration-cache
+
+      - name: Verify and stage the APK
+        shell: bash
+        run: |
+          apk="android/app/build/outputs/apk/release/app-release.apk"
+          test -f "$apk"
+          apksigner="$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)"
+          test -x "$apksigner"
+          "$apksigner" verify "$apk"
+          mkdir -p "$RUNNER_TEMP/rtxlens-android"
+          cp "$apk" "$RUNNER_TEMP/rtxlens-android/RTX-Lens-preview.apk"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: RTX-Lens-Android-Preview
+          path: ${{ runner.temp }}/rtxlens-android/RTX-Lens-preview.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  google-play:
+    name: Signed Android App Bundle
+    if: inputs.publish_play_store
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    environment: google-play
+    concurrency:
+      group: rtxlens-google-play
+      cancel-in-progress: false
+    env:
+      RTXLENS_STORE_BUILD_NUMBER: ${{ github.run_number }}
+      RTXLENS_EXPO_PROJECT_ID: ${{ vars.RTXLENS_EXPO_PROJECT_ID }}
+    defaults:
+      run:
+        working-directory: src/Mobile
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: src/Mobile/package-lock.json
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+
+      - run: npm ci
+      - run: npm run typecheck && npm test
+
+      - name: Build and verify the signed AAB
+        shell: bash
+        env:
+          RTXLENS_PLAY_KEYSTORE: ${{ runner.temp }}/rtxlens-play-upload.jks
+          RTXLENS_PLAY_KEYSTORE_B64: ${{ secrets.PLAY_UPLOAD_KEYSTORE_B64 }}
+          RTXLENS_PLAY_STORE_PASSWORD: ${{ secrets.PLAY_UPLOAD_STORE_PASSWORD }}
+          RTXLENS_PLAY_KEY_ALIAS: ${{ secrets.PLAY_UPLOAD_KEY_ALIAS }}
+          RTXLENS_PLAY_KEY_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEY_PASSWORD }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          : "${RTXLENS_PLAY_KEYSTORE_B64:?Set PLAY_UPLOAD_KEYSTORE_B64 in the google-play environment}"
+          : "${RTXLENS_PLAY_STORE_PASSWORD:?Set PLAY_UPLOAD_STORE_PASSWORD in the google-play environment}"
+          : "${RTXLENS_PLAY_KEY_ALIAS:?Set PLAY_UPLOAD_KEY_ALIAS in the google-play environment}"
+          : "${RTXLENS_PLAY_KEY_PASSWORD:?Set PLAY_UPLOAD_KEY_PASSWORD in the google-play environment}"
+
+          umask 077
+          google_services="$RUNNER_TEMP/rtxlens-google-services.json"
+          trap 'rm -f -- "$RTXLENS_PLAY_KEYSTORE" "$google_services"' EXIT
+          if [[ -n "$GOOGLE_SERVICES_JSON" ]]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > "$google_services"
+            export RTXLENS_GOOGLE_SERVICES_FILE="$google_services"
+          fi
+
+          printf '%s' "$RTXLENS_PLAY_KEYSTORE_B64" | base64 --decode > "$RTXLENS_PLAY_KEYSTORE"
+          unset RTXLENS_PLAY_KEYSTORE_B64 GOOGLE_SERVICES_JSON
+          RTXLENS_PLAY_SIGNING=1 npx --no-install expo prebuild --platform android --clean --no-install
+          cd android
+          ./gradlew :app:bundleRelease --no-daemon --no-build-cache --no-configuration-cache
+          bundle=app/build/outputs/bundle/release/app-release.aab
+          jarsigner -verify "$bundle"
+
+          expected="$(keytool -exportcert -keystore "$RTXLENS_PLAY_KEYSTORE" -alias "$RTXLENS_PLAY_KEY_ALIAS" \
+            -storepass:env RTXLENS_PLAY_STORE_PASSWORD | sha256sum | cut -d ' ' -f 1)"
+          actual="$(keytool -printcert -rfc -jarfile "$bundle" | openssl x509 -outform DER | sha256sum | cut -d ' ' -f 1)"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "The Android bundle was not signed with the Play upload key." >&2
+            exit 1
+          fi
+
+          cp "$bundle" "$RUNNER_TEMP/RTX-Lens-Google-Play.aab"
+
+      - name: Save the signed bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: RTX-Lens-Google-Play
+          path: ${{ runner.temp }}/RTX-Lens-Google-Play.aab
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Check Google Play upload credentials
+        shell: bash
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [[ -z "$PLAY_SERVICE_ACCOUNT_JSON" ]]; then
+            echo "::error::Configure PLAY_SERVICE_ACCOUNT_JSON to upload automatically." \
+              "For the first upload, download the signed AAB from this run and upload it in Play Console."
+            exit 1
+          fi
+
+      - name: Upload to Google Play Internal testing
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.rtxlens.mobile
+          releaseFiles: ${{ runner.temp }}/RTX-Lens-Google-Play.aab
+          tracks: internal
+          status: completed
+
+  app-store-connect:
+    name: Signed iOS archive for TestFlight
+    if: inputs.publish_app_store
+    runs-on: macos-26
+    timeout-minutes: 40
+    environment: app-store-connect
+    concurrency:
+      group: rtxlens-app-store-connect
+      cancel-in-progress: false
+    env:
+      RTXLENS_STORE_BUILD_NUMBER: ${{ github.run_number }}
+      RTXLENS_EXPO_PROJECT_ID: ${{ vars.RTXLENS_EXPO_PROJECT_ID }}
+      RTXLENS_IOS_PUSH: ${{ vars.RTXLENS_IOS_PUSH }}
+      RTXLENS_IOS_PUSH_ENVIRONMENT: production
+    defaults:
+      run:
+        working-directory: src/Mobile
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: src/Mobile/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck && npm test
+
+      - name: Generate the iOS project and install pods
+        shell: bash
+        run: |
+          npx --no-install expo prebuild --platform ios --clean --no-install
+          pod install --project-directory=ios
+
+      - name: Sign and archive the iOS app
+        shell: bash
+        env:
+          IOS_DISTRIBUTION_P12_B64: ${{ secrets.IOS_DISTRIBUTION_P12_B64 }}
+          IOS_DISTRIBUTION_P12_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_P12_PASSWORD }}
+          IOS_APP_STORE_PROFILE_B64: ${{ secrets.IOS_APP_STORE_PROFILE_B64 }}
+        run: bash scripts/archive-app-store.sh
+
+      - name: Upload to App Store Connect
+        shell: bash
+        env:
+          IOS_ASC_KEY_ID: ${{ secrets.IOS_ASC_KEY_ID }}
+          IOS_ASC_ISSUER_ID: ${{ secrets.IOS_ASC_ISSUER_ID }}
+          IOS_ASC_PRIVATE_KEY: ${{ secrets.IOS_ASC_PRIVATE_KEY }}
+        run: |
+          : "${IOS_ASC_KEY_ID:?Set IOS_ASC_KEY_ID in the app-store-connect environment}"
+          : "${IOS_ASC_ISSUER_ID:?Set IOS_ASC_ISSUER_ID in the app-store-connect environment}"
+          : "${IOS_ASC_PRIVATE_KEY:?Set IOS_ASC_PRIVATE_KEY in the app-store-connect environment}"
+          if [[ ! "$IOS_ASC_KEY_ID" =~ ^[A-Z0-9]+$ ]]; then
+            echo "Enter a valid App Store Connect key ID." >&2
+            exit 1
+          fi
+
+          umask 077
+          private_keys="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$private_keys"
+          key="$private_keys/AuthKey_${IOS_ASC_KEY_ID}.p8"
+          trap 'rm -f -- "$key"' EXIT
+          printf '%s\n' "$IOS_ASC_PRIVATE_KEY" > "$key"
+          unset IOS_ASC_PRIVATE_KEY
+          xcrun altool --upload-app --type ios --file "$RUNNER_TEMP/RTX-Lens-App-Store.ipa" \
+            --apiKey "$IOS_ASC_KEY_ID" --apiIssuer "$IOS_ASC_ISSUER_ID"

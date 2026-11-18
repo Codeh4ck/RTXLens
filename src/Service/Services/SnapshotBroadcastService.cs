@@ -7,13 +7,14 @@ using RTXLens.Core.Utilities;
 using RTXLens.Warnings;
 using RTXLens.Service.Configuration;
 using RTXLens.Service.Diagnostics;
+using RTXLens.Service.Mobile;
 
 namespace RTXLens.Service.Services;
 
 internal sealed class SnapshotBroadcastService(IRuntimeConfiguration configuration, TimeProvider clock,
     SensorStateStore store, SensorStreamHub hub, RTXLens.Core.Plugins.PluginRuntimeManager runtime,
     SettingsProfileResolver profiles, DeviceWarningProfileStore warningProfiles, WarningShutdownCoordinator shutdown,
-    SafeguardJournalService safeguard, MonitoringActivity activity) : BackgroundService
+    SafeguardJournalService safeguard, MonitoringActivity activity, MobileAccessService? mobileAccess = null) : BackgroundService
 {
     private readonly DeviceWarningEvaluator _profileWarnings = new();
     private readonly AsyncSignal _wake = new();
@@ -54,6 +55,7 @@ internal sealed class SnapshotBroadcastService(IRuntimeConfiguration configurati
                 });
 
                 activity.Observe(snapshot, settings.ConnectorProfiles);
+                mobileAccess?.ObserveWarnings(snapshot);
 
                 if (
                     lastPublication is null

@@ -20,6 +20,7 @@ namespace RTXLens.App.Views.Configuration;
 
 internal sealed class ConfigurationPage : UserControl
 {
+    private const string MobileAccessTab = "Mobile Access";
     private readonly ShellViewModel _shell;
     private readonly ConfigurationEditorViewModel _editor;
     private readonly TabControl _tabs = new()
@@ -108,6 +109,8 @@ internal sealed class ConfigurationPage : UserControl
             if (ReferenceEquals(args.Source, _tabs))
             {
                 RealizeSelectedTab();
+                actions.IsVisible = !IsMobileAccessSelected;
+                UpdateMessage();
             }
         };
 
@@ -146,6 +149,12 @@ internal sealed class ConfigurationPage : UserControl
         void UpdateMessage()
         {
             expiry.Stop();
+            if (IsMobileAccessSelected)
+            {
+                feedback.IsVisible = false;
+                return;
+            }
+
             if (_editor.ApplyMessageExpiresAt is { } expiresAt)
             {
                 var remaining = expiresAt - DateTimeOffset.UtcNow;
@@ -179,6 +188,8 @@ internal sealed class ConfigurationPage : UserControl
             feedback.IsVisible = message.IsVisible || success.IsVisible;
         }
     }
+
+    private bool IsMobileAccessSelected => (_tabs.SelectedItem as TabItem)?.Header is MobileAccessTab;
 
     private bool _refreshQueued;
 
@@ -219,6 +230,9 @@ internal sealed class ConfigurationPage : UserControl
         tabs.Add(Tab("GPU chart profiles", () => new GpuChartProfilesView(_shell)));
         tabs.Add(Tab("Source selections", CreateSources));
         tabs.Add(Tab("Maintenance", CreateMaintenance));
+
+        var mobile = _tabs.Items.OfType<TabItem>().FirstOrDefault(tab => Equals(tab.Header, MobileAccessTab));
+        tabs.Add(mobile ?? Tab(MobileAccessTab, () => new MobileAccessView(_shell)));
 
         _tabs.ItemsSource = tabs;
         _tabs.SelectedItem = tabs.FirstOrDefault(tab => Equals(tab.Header, previous)) ?? tabs[0];
@@ -501,6 +515,7 @@ internal sealed class ConfigurationPage : UserControl
             Spacing = 10,
             Children = { interval, Caption("Sets how often the service publishes readings to connected apps and widgets.") }
         });
+
         sensors.HeaderActions = HelpButton("How the sensor stream works", "Sensor stream",
             "The sensor stream sends the latest readings to the desktop app and widget. Each plugin's polling interval controls "
             + "how often it reads the hardware.",
@@ -670,6 +685,7 @@ internal sealed class ConfigurationPage : UserControl
         {
             var choices = metric.AvailableSources.Where(option => metric.Sources.All(source => source.Id != option.Id)).ToArray();
             var selected = metric.Candidate;
+
             candidate.ItemsSource = choices;
             candidate.SelectedItem = choices.Contains(selected) ? selected : null;
             candidate.PlaceholderText = choices.Length == 0 ? "No additional sources" : "Choose a source";
@@ -681,6 +697,7 @@ internal sealed class ConfigurationPage : UserControl
             remove.NotifyCanExecuteChanged();
             moveUp.NotifyCanExecuteChanged();
             moveDown.NotifyCanExecuteChanged();
+
             add.IsEnabled = metric.Candidate is { } selected && metric.Sources.All(source => source.Id != selected.Id);
         }
     }
