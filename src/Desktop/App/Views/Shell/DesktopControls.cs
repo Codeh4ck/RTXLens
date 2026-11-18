@@ -57,7 +57,7 @@ internal static class DesktopControls
     public static Button ActionButton(string text, string icon, Action action) =>
         ActionButton(text, new Image { Source = Icon(icon), Width = 15, Height = 15 }, action);
 
-    private static Button ActionButton(string text, Control icon, Action action)
+    public static Button ActionButton(string text, Control icon, Action action)
     {
         var button = new Button
         {

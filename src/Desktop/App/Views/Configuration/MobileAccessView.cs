@@ -3,13 +3,11 @@ using System.Net.NetworkInformation;
 using System.Security;
 using System.Text.Json;
 using Avalonia;
-using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
-using Avalonia.Media.Imaging;
 using Avalonia.Threading;
-using QRCoder;
 using RTXLens.App.ViewModels.Shell;
 using RTXLens.Client.Mobile;
 using RTXLens.Contracts.Mobile;
@@ -29,7 +27,7 @@ internal sealed class MobileAccessView : UserControl
     private readonly ContentControl _notice = Alert();
     private readonly ToggleSwitch _enabled = Switch("Enable mobile access");
     private readonly ToggleSwitch _firewall = Switch("Add a Windows Firewall rule");
-    private readonly ToggleSwitch _automaticForwarding = Switch("Set up router forwarding automatically");
+    private readonly ToggleSwitch _automaticForwarding = Switch("Forward port through UPnP");
 
     private readonly NumericUpDown _port = new()
     {
@@ -50,20 +48,15 @@ internal sealed class MobileAccessView : UserControl
     private readonly TextBlock _listenerStatus = Caption("Checking the local service…");
     private readonly TextBlock _networkStatus = Caption();
     private readonly TextBlock _noIpStatus = Caption();
-    private readonly TextBlock _externalStatus = Caption();
-    private readonly TextBlock _pairingStatus = Caption();
-    private readonly TextBlock _inviteStatus = Caption();
     private readonly StackPanel _devices = new() { Spacing = 8 };
-    private readonly Image _qr = new() { Width = 224, Height = 224, Stretch = Stretch.Uniform };
     private readonly Button _apply;
     private readonly Button _invite;
-    private readonly StackPanel _approval;
-    private readonly StackPanel _inviteDetails;
+    private readonly Button _review;
     private readonly CancellationToken _appStop;
     private CancellationTokenSource? _visible;
     private MobileAccessStatus? _status;
     private MobileDevice[]? _shownDevices;
-    private DateTimeOffset? _inviteExpiry;
+    private MobilePairingWindow? _pairingWindow;
     private bool _busy;
 
     public MobileAccessView(ShellViewModel shell) : this(CreateClient(shell), shell.StopToken)
@@ -78,8 +71,6 @@ internal sealed class MobileAccessView : UserControl
 
         _localAddress.ItemsSource = send is null ? [] : localAddresses ?? LocalAddresses();
         _localAddress.SelectedIndex = 0;
-
-        AutomationProperties.SetName(_qr, "Mobile pairing QR code");
 
         var publicField = Field("Public IPv4 address", _publicIp);
         var hostnameField = Field("Hostname", _hostname);
@@ -143,31 +134,12 @@ internal sealed class MobileAccessView : UserControl
 
         _invite = ActionButton("Create pairing code", "qr-code-action", async void () => await CreateInviteAsync());
 
-        var approve = ActionButton("Approve", "wireview-apply", async void () => await ResolvePairingAsync(MobileAccessOperation.Approve));
-        var reject = ActionButton("Reject", "cancel-action", async void () => await ResolvePairingAsync(MobileAccessOperation.Reject));
-
-        _approval = new StackPanel { Spacing = 8, IsVisible = false, Children = { _pairingStatus, Actions(approve, reject) } };
-
-        _qr.HorizontalAlignment = HorizontalAlignment.Left;
-        _inviteDetails = new StackPanel { Spacing = 8, IsVisible = false, Children = { _qr, _inviteStatus } };
-        _externalStatus.IsVisible = false;
-
+        var pairingInfo = IconButton("Pairing and remote access information", "info-action", async void () => await ShowPairingInfoAsync());
+        _review = ActionButton("Review pairing request", "qr-code-action", async void () => await OpenPairingWindowAsync(code: null));
         RenderDevices([]);
 
-        var pairing = Section("Pairing and phones", new StackPanel
-        {
-            Spacing = 12,
-            Children =
-            {
-                Caption("Pair your phone while it’s on the same network as this PC."),
-                _inviteDetails,
-                _approval,
-                _devices,
-                _externalStatus
-            }
-        });
-
-        pairing.HeaderActions = _invite;
+        var pairing = Section("Pairing & devices", new StackPanel { Spacing = 12, Children = { _review, _devices } });
+        pairing.HeaderActions = Actions(_invite, pairingInfo);
 
         var panels = Columns(connection, pairing);
         StackAtNarrowWidth(panels, 940, firstColumnWeight: 1.4);
@@ -205,7 +177,7 @@ internal sealed class MobileAccessView : UserControl
             _visible?.Dispose();
             _visible = null;
 
-            ClearInvite();
+            _pairingWindow?.Close();
 
             _keyPassword.Text = string.Empty;
         };
@@ -213,11 +185,7 @@ internal sealed class MobileAccessView : UserControl
 
     private async Task RefreshAsync(bool reloadSettings)
     {
-        if (_inviteExpiry <= DateTimeOffset.UtcNow)
-        {
-            ClearInvite();
-        }
-
+        _pairingWindow?.CheckExpiry(DateTimeOffset.UtcNow);
         await SendAsync(new MobileAccessRequest(MobileAccessOperation.Status), reloadSettings);
     }
 
@@ -249,7 +217,6 @@ internal sealed class MobileAccessView : UserControl
 
         if (response is { Success: true })
         {
-            ClearInvite();
             SetAlert(_notice, "Mobile access settings saved.", "success");
         }
     }
@@ -321,7 +288,8 @@ internal sealed class MobileAccessView : UserControl
 
     private async Task CreateInviteAsync()
     {
-        if (_status is not { Listening: true, LocalAddress: { } localAddress } status
+        if (_pairingWindow is not null || TopLevel.GetTopLevel(this) is not Window
+            || _status is not { Listening: true, LocalAddress: { } localAddress, PendingApproval: null } status
             || (status.NoIpHostname ?? status.PublicAddress) is not { } remoteAddress)
         {
             return;
@@ -333,36 +301,94 @@ internal sealed class MobileAccessView : UserControl
             return;
         }
 
-        ClearInvite();
-
         var code = new MobilePairingCode(1, new UriBuilder("https", localAddress, status.Port).Uri,
             new UriBuilder("https", remoteAddress, status.Port).Uri, invite.PublicKeyFingerprint, invite.Secret, invite.ExpiresAt);
-
-        var payload = JsonSerializer.Serialize(code, MobileAccessProtocol.Json);
-
-        using var data = QRCodeGenerator.GenerateQrCode(payload, QRCodeGenerator.ECCLevel.M);
-        using var renderer = new PngByteQRCode(data);
-        using var stream = new MemoryStream(renderer.GetGraphic(4));
-
-        _qr.Source = new Bitmap(stream);
-        _inviteDetails.IsVisible = true;
-        _inviteExpiry = invite.ExpiresAt;
-        _inviteStatus.Text = $"Scan in RTX Lens on your phone. Code expires at {invite.ExpiresAt.ToLocalTime():t}.";
+        await OpenPairingWindowAsync(code);
     }
 
-    private async Task ResolvePairingAsync(MobileAccessOperation operation)
+    private async Task OpenPairingWindowAsync(MobilePairingCode? code)
     {
-        if (_status?.PendingApproval is { } pending
-            && await SendAsync(new MobileAccessRequest(operation, Id: pending.Id)) is { Success: true })
+        if (_pairingWindow is not null || TopLevel.GetTopLevel(this) is not Window owner
+            || (code is null && _status?.PendingApproval is null))
         {
-            await RefreshAsync(reloadSettings: false);
+            return;
         }
+
+        var dialog = new MobilePairingWindow(code, ResolvePairingAsync);
+        if (owner.Screens.ScreenFromWindow(owner) is { } screen)
+        {
+            dialog.Width = Math.Min(dialog.Width, screen.WorkingArea.Width / screen.Scaling);
+            dialog.MaxHeight = screen.WorkingArea.Height / screen.Scaling;
+        }
+
+        _pairingWindow = dialog;
+        if (code is null)
+        {
+            dialog.UpdateApproval(_status?.PendingApproval);
+        }
+        UpdateButtons();
+
+        try
+        {
+            var closed = dialog.ShowDialog(owner);
+            await RefreshAsync(reloadSettings: false);
+            await closed;
+        }
+        finally
+        {
+            _pairingWindow = null;
+            UpdateButtons();
+        }
+    }
+
+    private async Task ResolvePairingAsync(MobileAccessOperation operation, Guid id)
+    {
+        if (_status?.PendingApproval?.Id != id || _pairingWindow is not { } dialog)
+        {
+            return;
+        }
+
+        dialog.ReportError(null);
+        var response = await SendAsync(new MobileAccessRequest(operation, Id: id));
+        if (response is { Success: true })
+        {
+            dialog.ShowDecision(operation);
+        }
+
+        await RefreshAsync(reloadSettings: false);
+    }
+
+    private async Task ShowPairingInfoAsync()
+    {
+        if (TopLevel.GetTopLevel(this) is not Window owner)
+        {
+            return;
+        }
+
+        var content = new StackPanel
+        {
+            Spacing = 12,
+            Children =
+            {
+                DialogText("Pair your device on the same local network as this PC. "
+                    + "The pairing code is valid for five minutes and pairs one device."),
+                DialogText("For remote access, keep this PC and the RTX Lens service running. "
+                    + "Switch the device to mobile data, then use Test remote access in its RTX Lens settings.")
+            }
+        };
+
+        if (_status?.Devices.Max(device => device.LastExternalConnectionAt) is { } lastExternal)
+        {
+            content.Children.Add(Caption($"Last external connection at {lastExternal.ToLocalTime():g}."));
+        }
+
+        await ShowInformationAsync(owner, "Pairing and remote access", content);
     }
 
     private async Task RevokeAsync(MobileDevice device)
     {
         if (TopLevel.GetTopLevel(this) is Window owner
-            && await ConfirmAsync(owner, "Revoke phone access", $"Disconnect {device.Name} and revoke its access?", "Revoke")
+            && await ConfirmAsync(owner, "Revoke device access", $"Disconnect {device.Name} and revoke its access?", "Revoke")
             && await SendAsync(new MobileAccessRequest(MobileAccessOperation.Revoke, Id: device.Id)) is { Success: true })
         {
             await RefreshAsync(reloadSettings: false);
@@ -385,6 +411,7 @@ internal sealed class MobileAccessView : UserControl
         }
 
         _busy = true;
+        UpdateButtons();
         var cancellationToken = visible.Token;
 
         try
@@ -405,7 +432,9 @@ internal sealed class MobileAccessView : UserControl
 
             if (!response.Success)
             {
-                SetAlert(_notice, response.Error ?? "The service could not complete the request.", "warning");
+                var message = response.Error ?? "The service could not complete the request.";
+                SetAlert(_notice, message, "warning");
+                _pairingWindow?.ReportError(message);
             }
             else if (request.Operation == MobileAccessOperation.Status && reloadSettings && response.Status?.Error is null)
             {
@@ -426,6 +455,7 @@ internal sealed class MobileAccessView : UserControl
 
             var message = error is OperationCanceledException ? "The local service did not respond in time." : error.Message;
             SetAlert(_notice, message, "warning");
+            _pairingWindow?.ReportError(message);
 
             return null;
         }
@@ -446,6 +476,7 @@ internal sealed class MobileAccessView : UserControl
         if (status.Error is not null)
         {
             SetAlert(_notice, status.Error, "warning");
+            _pairingWindow?.ReportError(status.Error);
         }
 
         if (loadSettings)
@@ -472,16 +503,7 @@ internal sealed class MobileAccessView : UserControl
             UpdateForwardingInstructions();
         }
 
-        _approval.IsVisible = status.PendingApproval is not null;
-        _pairingStatus.Text = status.PendingApproval is { } approval ? $"Pairing request from {approval.DeviceName}." : string.Empty;
-
-        var lastExternal = status.Devices.Max(device => device.LastExternalConnectionAt);
-
-        _externalStatus.IsVisible = status.Devices.Length > 0;
-        _externalStatus.Text = lastExternal is { } verified
-            ? $"Last external connection at {verified.ToLocalTime():g}."
-            : "Switch your phone to mobile data and reconnect to verify remote access.";
-
+        _pairingWindow?.UpdateApproval(status.PendingApproval);
         RenderDevices(status.Devices);
     }
 
@@ -497,14 +519,23 @@ internal sealed class MobileAccessView : UserControl
 
         if (devices.Length == 0)
         {
-            _devices.Children.Add(Caption("No paired phones."));
+            _devices.Children.Add(Alert("No paired devices.", "warning"));
             return;
         }
 
         foreach (var device in devices)
         {
+            if (_devices.Children.Count > 0)
+            {
+                var divider = new Border { Height = 1 };
+                divider[!Border.BackgroundProperty] = new DynamicResourceExtension("PanelBorderBrush");
+                _devices.Children.Add(divider);
+            }
+
             var details = device.LastConnectedAt is { } connectedAt ? $"Last seen {connectedAt.ToLocalTime():g}" : "No connections yet";
-            var name = new StackPanel { Spacing = 2, Children = { DialogText(device.Name), Caption(details) } };
+            var title = DialogText(device.Name);
+            title.FontWeight = FontWeight.SemiBold;
+            var name = new StackPanel { Spacing = 3, VerticalAlignment = VerticalAlignment.Center, Children = { title, Caption(details) } };
             var revoke = ActionButton("Revoke", "cancel-action", async void () => await RevokeAsync(device));
             Control actions = revoke;
             if (device.LockScreenNotifications)
@@ -514,6 +545,8 @@ internal sealed class MobileAccessView : UserControl
                 actions = Actions(test, revoke);
             }
 
+            actions.VerticalAlignment = VerticalAlignment.Center;
+            actions.HorizontalAlignment = HorizontalAlignment.Right;
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 12, Children = { name, actions } };
             Grid.SetColumn(actions, 1);
 
@@ -524,8 +557,12 @@ internal sealed class MobileAccessView : UserControl
     private void UpdateButtons()
     {
         _apply.IsEnabled = !_busy && _status is not null;
-        _invite.IsEnabled = !_busy && _status is { Listening: true, LocalAddress: not null }
+        _invite.IsEnabled = !_busy && _pairingWindow is null
+            && _status is { Listening: true, LocalAddress: not null, PendingApproval: null }
             && (_status.NoIpHostname is not null || _status.PublicAddress is not null);
+        _review.IsVisible = _pairingWindow is null && _status?.PendingApproval is not null;
+        _review.IsEnabled = !_busy;
+        _pairingWindow?.SetRequestAvailability(_busy, _status?.PendingApproval is not null);
     }
 
     private void UpdateForwardingInstructions()
@@ -534,18 +571,8 @@ internal sealed class MobileAccessView : UserControl
         var port = _port.Value?.ToString("0", CultureInfo.InvariantCulture) ?? "the selected port";
 
         _networkStatus.Text = _automaticForwarding.IsChecked == true
-            ? $"RTX Lens will request TCP {port} → {host}:{port} on the router."
+            ? $"RTX Lens will use UPnP to forward TCP {port} to {host}:{port}."
             : $"For manual setup, forward TCP {port} to {host}:{port} on the router. Reserve the PC’s local IP in your router settings.";
-    }
-
-    private void ClearInvite()
-    {
-        (_qr.Source as IDisposable)?.Dispose();
-
-        _qr.Source = null;
-        _inviteDetails.IsVisible = false;
-        _inviteExpiry = null;
-        _inviteStatus.Text = string.Empty;
     }
 
     private static Func<MobileAccessRequest, CancellationToken, Task<MobileAccessResponse>>? CreateClient(ShellViewModel shell)
