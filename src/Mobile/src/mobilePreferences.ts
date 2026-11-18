@@ -10,6 +10,7 @@ export type TemperatureUnit = 'celsius' | 'fahrenheit';
 export type NotificationPreferences = { categories: number; showTitle: boolean };
 
 export const homeCards = [
+  { id: 'status', label: 'PC status' },
   { id: 'gpuUsage', label: 'GPU usage' },
   { id: 'coreTemperature', label: 'Core temperature' },
   { id: 'connectorPower', label: 'Connector power' },
@@ -30,11 +31,10 @@ export function homePanelKey(panel: HomePanel): string {
   return panel.kind === 'metric' ? panel.id : JSON.stringify([panel.pluginId, panel.deviceId, panel.connectorId]);
 }
 
-export function moveHomePanel(panels: HomePanel[], index: number, direction: -1 | 1): HomePanel[] {
-  const target = index + direction;
+export function moveHomePanel(panels: HomePanel[], index: number, target: number): HomePanel[] {
   if (!panels[index] || !panels[target]) return panels;
   const reordered = [...panels];
-  [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+  reordered.splice(target, 0, reordered.splice(index, 1)[0]);
   return reordered;
 }
 
@@ -63,6 +63,11 @@ export function decodeDisplayPreferences(value: string): DisplayPreferences {
   } else if ('visibleHomeCards' in parsed && Array.isArray(parsed.visibleHomeCards)) {
     const saved = parsed.visibleHomeCards;
     panels = panels.filter(panel => panel.kind === 'metric' && saved.includes(panel.id));
+  }
+
+  // Older dashboards always displayed the status panel above the saved cards.
+  if (!('layoutVersion' in parsed) && !panels.some(panel => panel.kind === 'metric' && panel.id === 'status')) {
+    panels = [{ kind: 'metric', id: 'status' }, ...panels];
   }
 
   return {

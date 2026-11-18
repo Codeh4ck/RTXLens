@@ -1,14 +1,19 @@
-import type { ReactNode } from 'react';
+import { useColors, useThemeStyles, type Colors } from './appearance';
+import { createContext, useContext, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
-export const colors = {
-  background: '#0B111A', surface: '#121B29', raised: '#172433', line: '#26394D', text: '#F0F6FF',
-  muted: '#A3B6CA', accent: '#58E5CD', accentSurface: '#123334', warning: '#FFD08B', warningSurface: '#392C20',
-  danger: '#FF9AB0', dangerSurface: '#391F2C',
-};
+export const HomeInteractionContext = createContext(false);
+export function useHomeLongPress() {
+  return useContext(HomeInteractionContext) ? consumeHomeLongPress : undefined;
+}
+// Home handles the gesture on its container. Suppress the child control's tap after a hold.
+function consumeHomeLongPress() {}
+
+export function useStyles() { return useThemeStyles(createStyles); }
 
 const paths = {
+  palette: 'M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-4c-1-1 0-3 2-3h2c5 0 3-11-6-11ZM7 10h1m3-3h1m4 2h1',
   home: 'm3 10 9-7 9 7v10H3zm6 10v-6h6v6',
   power: 'm13 2-9 12h7l-1 8 10-12h-7l1-8Z',
   gpu: 'M7 7h10v10H7zM9 1v3m6-3v3M9 20v3m6-3v3M1 9h3m-3 6h3m16-6h3m-3 6h3M4 4h16v16H4z',
@@ -38,10 +43,11 @@ const tabs: { id: Tab; label: string }[] = [
   { id: 'warnings', label: 'Warnings' }, { id: 'settings', label: 'Settings' },
 ];
 
-export function Icon({ name, color = colors.accent, size = 20 }: { name: IconName; color?: string; size?: number }) {
+export function Icon({ name, color, size = 20 }: { name: IconName; color?: string; size?: number }) {
+  const colors = useColors();
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path d={paths[name]} stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d={paths[name]} stroke={color ?? colors.accent} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
     </Svg>
   );
 }
@@ -49,6 +55,8 @@ export function Icon({ name, color = colors.accent, size = 20 }: { name: IconNam
 export function BottomNavigation({ selected, warningCount, onSelect }: {
   selected: Tab; warningCount: number; onSelect: (tab: Tab) => void;
 }) {
+  const styles = useStyles();
+  const colors = useColors();
   return (
     <View accessibilityRole="tablist" style={styles.navigation}>
       {tabs.map(({ id, label }) => {
@@ -71,6 +79,7 @@ export function BottomNavigation({ selected, warningCount, onSelect }: {
 }
 
 export function Page({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+  const styles = useStyles();
   return (
     <ScrollView contentContainerStyle={styles.page}>
       <View style={styles.pageHeader}>
@@ -83,6 +92,7 @@ export function Page({ title, description, children }: { title: string; descript
 }
 
 export function Card({ title, icon, children }: { title?: string; icon?: IconName; children: ReactNode }) {
+  const styles = useStyles();
   return (
     <View style={styles.card}>
       {title && <View style={styles.row}>{icon && <Icon name={icon} />}<Text accessibilityRole="header" style={styles.heading}>{title}</Text></View>}
@@ -94,9 +104,12 @@ export function Card({ title, icon, children }: { title?: string; icon?: IconNam
 export function Button({ icon, label, variant = 'secondary', disabled = false, onPress }: {
   icon: IconName; label: string; variant?: 'secondary' | 'primary' | 'danger'; disabled?: boolean; onPress: () => void;
 }) {
-  const color = variant === 'primary' ? colors.background : variant === 'danger' ? colors.danger : colors.text;
+  const styles = useStyles();
+  const colors = useColors();
+  const onLongPress = useHomeLongPress();
+  const color = variant === 'primary' ? colors.onAccent : variant === 'danger' ? colors.danger : colors.text;
   return (
-    <Pressable accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={onPress}
+    <Pressable accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onLongPress={onLongPress} delayLongPress={420} onPress={onPress}
       style={({ pressed }) => [styles.button, variant === 'primary' && styles.primaryButton, (pressed || disabled) && styles.pressed]}>
       <Icon name={icon} color={color} size={17} />
       <Text style={[styles.buttonLabel, { color }]}>{label}</Text>
@@ -107,11 +120,13 @@ export function Button({ icon, label, variant = 'secondary', disabled = false, o
 export function Selection<T extends string>({ options, selected, onSelect }: {
   options: { id: T; label: string }[]; selected: T; onSelect: (id: T) => void;
 }) {
+  const styles = useStyles();
+  const onLongPress = useHomeLongPress();
   return (
     <View style={styles.selection}>
       {options.map(option => (
         <Pressable key={option.id} accessibilityRole="button" accessibilityState={{ selected: option.id === selected }}
-          onPress={() => onSelect(option.id)} style={[styles.option, option.id === selected && styles.activeOption]}>
+          onLongPress={onLongPress} delayLongPress={420} onPress={() => onSelect(option.id)} style={[styles.option, option.id === selected && styles.activeOption]}>
           <Text style={[styles.optionText, option.id === selected && styles.activeTabLabel]}>{option.label}</Text>
         </Pressable>
       ))}
@@ -120,10 +135,11 @@ export function Selection<T extends string>({ options, selected, onSelect }: {
 }
 
 export function Notice({ children }: { children: string }) {
+  const styles = useStyles();
   return <Text accessibilityRole="alert" style={styles.notice}>{children}</Text>;
 }
 
-export const styles = StyleSheet.create({
+const createStyles = (colors: Colors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   bottom: { backgroundColor: colors.surface, borderTopWidth: 1, borderColor: colors.line },
   page: { paddingHorizontal: 20, paddingTop: 15, paddingBottom: 24, gap: 16, alignSelf: 'center', width: '100%', maxWidth: 680 },
@@ -145,7 +161,7 @@ export const styles = StyleSheet.create({
   tabIcon: { alignItems: 'center', justifyContent: 'center', width: 40, height: 30, borderRadius: 11 },
   activeTabIcon: { backgroundColor: colors.accentSurface },
   tabLabel: { color: colors.muted, fontSize: 11, fontWeight: '600' },
-  activeTabLabel: { color: colors.accent },
+  activeTabLabel: { color: colors.tertiary },
   dot: { position: 'absolute', top: 4, right: 7, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.warning },
   selection: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, borderRadius: 13, backgroundColor: colors.background, padding: 4 },
   option: { flexGrow: 1, minHeight: 42, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 9, borderRadius: 9 },

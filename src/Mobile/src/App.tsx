@@ -1,8 +1,11 @@
+import { useColors, useThemeStyles, type Colors } from './appearance';
+import { AppearanceSettings } from './appearanceSettings';
+import { ThemeContext, decodeAppearance, defaultAppearance, isLight, themeColors, type Appearance } from './appearance';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { useNetworkState, NetworkStateType } from 'expo-network';
 import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Alert, AppState, Linking, Platform, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
@@ -11,14 +14,14 @@ import { destinations, localSwitchAddress, retryDelay, sessionResult, type Desti
 import { IncidentHistory } from './history';
 import type { IncidentRef } from './incidentProtocol';
 import { useLockScreenNotifications } from './lockScreenNotifications';
-import { allowsWarning, type NotificationPreferences } from './mobilePreferences';
+import { allowsWarning, moveHomePanel, type NotificationPreferences } from './mobilePreferences';
 import {
-  DashboardSettings, NotificationPreferencesCard, TemperatureSettings, TemperatureUnitContext, TestRemoteAccess, useMobilePreferences,
+  ConnectionAddresses, DashboardSettings, NotificationPreferencesCard, TemperatureSettings, TemperatureUnitContext, TestRemoteAccess, useMobilePreferences,
 } from './mobileSettings';
 import { decodeFrame, decodePairingCode, decodeSavedComputer, requestPairing, type PairedComputer, type SensorFrame } from './protocol';
 import { Gpu, Home, Power, Warnings } from './screens';
 import { transport } from './transport';
-import { BottomNavigation, Button, Card, Notice, Page, colors, styles, type Tab } from './ui';
+import { BottomNavigation, Button, Card, Notice, Page, useStyles, type Tab } from './ui';
 import { WarningEvents } from './warningEvents';
 
 const computerKey = 'rtxlens.paired-computer';
@@ -28,17 +31,34 @@ const localProbeInterval = 30_000;
 type Connection = 'idle' | 'connecting' | 'reconnecting' | 'connected' | 'offline' | 'repair';
 
 export default function App() {
-  return (
-    <SafeAreaProvider>
-      <StatusBar style="light" />
-      <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
-        <MobilePreview />
-      </SafeAreaView>
-    </SafeAreaProvider>
-  );
+  const [appearance, setAppearance] = useState(defaultAppearance);
+  const [ready, setReady] = useState(false);
+  const writes = useRef(Promise.resolve());
+  useEffect(() => {
+    void SecureStore.getItemAsync('rtxlens.appearance').then(raw => {
+      if (raw) setAppearance(decodeAppearance(raw));
+    }).catch(() => {}).finally(() => setReady(true));
+  }, []);
+  const palette = useMemo(() => themeColors(appearance), [appearance]);
+  function save(next: Appearance) {
+    const pending = writes.current.then(async () => {
+      await SecureStore.setItemAsync('rtxlens.appearance', JSON.stringify(next));
+      setAppearance(next);
+    });
+    writes.current = pending.catch(() => {});
+    return pending;
+  }
+  return <ThemeContext.Provider value={palette}><SafeAreaProvider>
+    <StatusBar style={isLight(palette.background) ? 'dark' : 'light'} />
+    <SafeAreaView style={{ flex: 1, backgroundColor: palette.background }} edges={['top', 'left', 'right']}>
+      {ready && <MobilePreview appearance={appearance} saveAppearance={save} />}
+    </SafeAreaView>
+  </SafeAreaProvider></ThemeContext.Provider>;
 }
-
-function MobilePreview() {
+function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance; saveAppearance: (next: Appearance) => Promise<void> }) {
+  const styles = useStyles();
+  const colors = useColors();
+  const local = useThemeStyles(createLocalStyles);
   const [permission, requestPermission] = useCameraPermissions();
   const [computer, setComputer] = useState<PairedComputer | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -406,10 +426,10 @@ function MobilePreview() {
   }
 
   async function saveNotificationPreferences(value: NotificationPreferences) {
-    if (push.enabled && (!live || !await push.applyPreferences(value))) {
-      throw new Error('Could not apply notification preferences on the PC.');
-    }
     await preferences.saveNotifications(value);
+    if (push.enabled && live && !await push.applyPreferences(value)) {
+      throw new Error('Saved on this phone. Reconnect to sync lock-screen preferences with your PC.');
+    }
   }
 
   const warningCount = live ? frame?.warnings.filter(warning => warning.phase === 'Active').length ?? 0 : 0;
@@ -432,10 +452,14 @@ function MobilePreview() {
                 : connection === 'repair' ? 'Pair again' : connection === 'offline' ? 'Phone offline' : 'Disconnected'}
             </Text>
             {destination && <Text selectable style={styles.caption}>{destination.address}</Text>}
-            <View>
-              <Text style={styles.text}>Connection priority</Text>
-              <Text style={styles.caption}>Try the local address first, then use the remote address if needed.</Text>
-            </View>
+            <ConnectionAddresses computer={computer} save={async updated => {
+              await SecureStore.setItemAsync(computerKey, JSON.stringify(updated), {
+                keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+              });
+              blockedPairing.current = null;
+              setError(null);
+              setComputer(updated);
+            }} />
             <TestRemoteAccess computer={computer} wifi={wifi} />
             <View style={styles.actions}>
               {(connection === 'reconnecting' || connection === 'offline') && (
@@ -472,7 +496,7 @@ function MobilePreview() {
           ) : <Button icon="warnings" label="Enable notifications" variant="primary" onPress={enableNotifications} />}
         </Card>
         {preferencesLoaded && <NotificationPreferencesCard value={preferences.notifications} syncRequired={push.enabled}
-          canSync={live && !push.busy} retrySave={preferences.error !== null} save={saveNotificationPreferences} />}
+          canSync={live} save={saveNotificationPreferences} />}
         {push.available && <Card title="Lock-screen notifications" icon="warnings">
           <Text style={styles.caption}>Get warnings when RTX Lens is closed. Alerts are delivered through Expo and your phone’s push service.</Text>
           {push.error && <Notice>{push.error}</Notice>}
@@ -490,6 +514,7 @@ function MobilePreview() {
             onPress={() => void push.set(!push.enabled, !push.enabled)} />
           {!live && <Text style={styles.caption}>Connect to your PC to change this setting.</Text>}
         </Card>}
+        <AppearanceSettings value={appearance} save={saveAppearance} />
         {preferencesLoaded && <TemperatureSettings unit={preferences.temperature} save={preferences.saveTemperature} />}
         {preferencesLoaded && <DashboardSettings value={preferences.display} busy={preferences.savingDisplay}
           sensors={frame?.sensors ?? []} save={preferences.saveDisplay} />}
@@ -506,7 +531,10 @@ function MobilePreview() {
         onNotificationClosed={() => setNotificationLink(previous => previous && { ...previous, incident: null })} />} />;
   } else {
     content = <Home frame={frame} live={live} paired={computer !== null} remote={destination?.route === 'remote'}
-      panels={preferences.display.homePanels}
+      panels={preferences.display.homePanels} onMove={async (from, to) => {
+        const homePanels = moveHomePanel(preferences.display.homePanels, from, to);
+        await preferences.saveDisplay({ ...preferences.display, homePanels });
+      }}
       connecting={connection === 'connecting' || connection === 'reconnecting'} reconnecting={connection === 'reconnecting'} onNavigate={navigate} />;
   }
 
@@ -534,7 +562,7 @@ function MobilePreview() {
   );
 }
 
-const local = StyleSheet.create({
+const createLocalStyles = (colors: Colors) => StyleSheet.create({
   state: { color: colors.accent, fontSize: 15, fontWeight: '700' },
   camera: { height: 255, borderRadius: 14, overflow: 'hidden' },
   connectionPrompt: { alignSelf: 'center', width: '100%', maxWidth: 680, paddingHorizontal: 20, paddingTop: 12 },

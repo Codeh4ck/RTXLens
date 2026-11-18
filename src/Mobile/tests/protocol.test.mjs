@@ -9,6 +9,7 @@ import {
   allowsWarning, decodeDisplayPreferences, decodeNotificationPreferences, defaultDisplayPreferences, homePanelKey, moveHomePanel,
   warningCategories, warningCategory,
 } from '../src/mobilePreferences.ts';
+import { decodeAppearance, defaultAppearance, schemes, selectedPalette, themeColors } from '../src/appearance.ts';
 import { WarningEvents } from '../src/warningEvents.ts';
 
 const now = Date.now();
@@ -123,12 +124,13 @@ test('uses the service notification sequence and deduplicates simulation warning
 });
 
 test('keeps default Home cards and restores custom selections including an empty dashboard', () => {
+  assert.deepEqual(decodeDisplayPreferences('{"layoutVersion":2,"homePanels":[]}').homePanels, []);
   assert.deepEqual(decodeDisplayPreferences('{}'), defaultDisplayPreferences);
   assert.deepEqual(decodeDisplayPreferences('{"visibleHomeCards":[],"hideIdleMsiConnectors":true}'), {
-    homePanels: [], hideIdleMsiConnectors: true,
+    homePanels: [{ kind: 'metric', id: 'status' }], hideIdleMsiConnectors: true,
   });
   assert.deepEqual(decodeDisplayPreferences('{"visibleHomeCards":["activeWarnings","coreTemperature","missing","activeWarnings"]}'), {
-    homePanels: [{ kind: 'metric', id: 'coreTemperature' }, { kind: 'metric', id: 'activeWarnings' }], hideIdleMsiConnectors: false,
+    homePanels: [{ kind: 'metric', id: 'status' }, { kind: 'metric', id: 'coreTemperature' }, { kind: 'metric', id: 'activeWarnings' }], hideIdleMsiConnectors: false,
   });
 });
 
@@ -137,12 +139,12 @@ test('restores reordered metric and pin panels even when the pin source is unava
   const panels = [
     { kind: 'metric', id: 'gpuUsage' }, pin, { kind: 'metric', id: 'activeWarnings' },
   ];
-  const reordered = moveHomePanel(panels, 1, -1);
+  const reordered = moveHomePanel(panels, 1, 0);
   assert.deepEqual(reordered, [pin, panels[0], panels[2]]);
-  assert.deepEqual(moveHomePanel(reordered, 1, 1), [pin, panels[2], panels[0]]);
+  assert.deepEqual(moveHomePanel(reordered, 1, 2), [pin, panels[2], panels[0]]);
   assert.deepEqual(moveHomePanel(reordered, 0, -1), reordered);
-  assert.deepEqual(moveHomePanel(reordered, 2, 1), reordered);
-  assert.deepEqual(decodeDisplayPreferences(JSON.stringify({ homePanels: [...reordered, pin, { kind: 'metric', id: 'unknown' }] })).homePanels, reordered);
+  assert.deepEqual(moveHomePanel(reordered, 2, 3), reordered);
+  assert.deepEqual(decodeDisplayPreferences(JSON.stringify({ layoutVersion: 2, homePanels: [...reordered, pin, { kind: 'metric', id: 'unknown' }] })).homePanels, reordered);
 });
 
 test('builds independent pin panels for each reporting plugin, device, and connector', () => {
@@ -268,4 +270,18 @@ test('validates incident pagination and rejects mismatched reports', () => {
   assert.equal(report.steps[0].exitCode, 0);
   assert.throws(() => decodeIncident(JSON.stringify({ ...incident, kind: 'warning' }), page.items[0]), /invalid incident/);
   assert.throws(() => decodeIncidentPage('{"items":[],"next":"../configuration"}'), /invalid history/);
+});
+
+test('restores desktop schemes in both modes and validates custom colors', () => {
+  for (const [scheme, dark, light] of schemes) {
+    for (const mode of [true, false]) {
+      const appearance = { ...defaultAppearance, scheme, light: mode };
+      assert.deepEqual(decodeAppearance(JSON.stringify(appearance)), appearance);
+      assert.equal(selectedPalette(appearance).primary, (mode ? light : dark).split(' ')[0]);
+    }
+  }
+  const custom = { primary: '#FFFFFF', secondary: '#FFFFFF', tertiary: '#FFFFFF', background: '#FFFFFF' };
+  const value = { ...defaultAppearance, scheme: 'Custom', custom };
+  assert.notEqual(themeColors(value).accent, custom.background);
+  assert.deepEqual(decodeAppearance(JSON.stringify({ ...value, custom: { ...custom, primary: 'invalid' } })), defaultAppearance);
 });

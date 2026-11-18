@@ -1,3 +1,5 @@
+import { useColors, useThemeStyles, type Colors } from './appearance';
+import { HomeLayout } from './homeLayout';
 import { useContext, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -8,13 +10,17 @@ import {
 import { homeCards, homePanelKey, type HomeCardId, type HomePanel } from './mobilePreferences';
 import { TemperatureUnitContext } from './mobileSettings';
 import type { SensorFrame, SensorReading } from './protocol';
-import { Button, Card, Icon, Page, Selection, colors, styles, type IconName, type Tab } from './ui';
+import { Button, Card, Icon, Page, Selection, useHomeLongPress, useStyles, type IconName, type Tab } from './ui';
 
 type TelemetryProps = { frame: SensorFrame | null; live: boolean };
 
-export function Home({ frame, live, paired, connecting, reconnecting, remote, panels, onNavigate }: TelemetryProps & {
-  paired: boolean; connecting: boolean; reconnecting: boolean; remote: boolean; panels: HomePanel[]; onNavigate: (tab: Tab) => void;
+export function Home({ frame, live, paired, connecting, reconnecting, remote, panels, onMove, onNavigate }: TelemetryProps & {
+  paired: boolean; connecting: boolean; reconnecting: boolean; remote: boolean; panels: HomePanel[];
+  onMove: (from: number, to: number) => Promise<void>; onNavigate: (tab: Tab) => void;
 }) {
+  const styles = useStyles();
+  const colors = useColors();
+  const local = useThemeStyles(createLocalStyles);
   const temperatureUnit = useContext(TemperatureUnitContext);
   const sensors = frame?.sensors ?? [];
   const gpuGroups = groupMetrics(sensors, 'gpu');
@@ -29,7 +35,7 @@ export function Home({ frame, live, paired, connecting, reconnecting, remote, pa
   const title = !paired ? 'Pair your PC' : !live ? reconnecting ? 'Reconnecting to your PC' : connecting ? 'Connecting to your PC' : 'PC disconnected'
     : !frame ? 'Waiting for readings' : warningCount ? `${warningCount} active ${warningCount === 1 ? 'warning' : 'warnings'}`
       : frame.reportingSources ? 'Monitoring active' : 'No devices reporting';
-  const tiles: Record<HomeCardId, { value: string; icon: IconName; tab: Tab }> = {
+  const tiles: Record<Exclude<HomeCardId, 'status'>, { value: string; icon: IconName; tab: Tab }> = {
     gpuUsage: { value: formatReading(findMetric(gpu, 'GpuCore', 'Utilization')), icon: 'activity', tab: 'gpu' },
     coreTemperature: {
       value: formatReading(findMetric(gpu, 'GpuCore', 'Temperature'), temperatureUnit), icon: 'temp', tab: 'gpu',
@@ -38,9 +44,8 @@ export function Home({ frame, live, paired, connecting, reconnecting, remote, pa
     activeWarnings: { value: String(warningCount), icon: 'warnings', tab: 'warnings' },
   };
 
-  return (
-    <Page title="RTX Lens">
-      <View style={[local.hero, { borderColor: live ? warningCount ? '#826039' : '#316B66' : colors.line }]}>
+  const status = (
+      <View style={[local.hero, { borderColor: live ? warningCount ? colors.warning : colors.secondary : colors.line }]}>
         <View style={styles.row}>
           <View style={[local.statusIcon, { backgroundColor: live && warningCount ? colors.warningSurface : colors.accentSurface }]}>
             <Icon name={live && warningCount ? 'warnings' : 'monitor'} color={tone} size={24} />
@@ -56,34 +61,32 @@ export function Home({ frame, live, paired, connecting, reconnecting, remote, pa
         {paired && !live && <Button icon="settings" label="Connection settings" onPress={() => onNavigate('settings')} />}
       </View>
 
-      {frame && panels.length > 0 && (
-        <View style={local.tileGrid}>
-          {panels.map(panel => {
-            if (panel.kind === 'metric') {
-              const { value, icon, tab } = tiles[panel.id];
-              const title = homeCards.find(card => card.id === panel.id)?.label ?? panel.id;
-              return <Tile key={panel.id} title={title} value={value} icon={icon} onPress={() => onNavigate(tab)} />;
-            }
-
-            const key = homePanelKey(panel);
-            const source = pinSources.get(key);
-            const limit = frame.pinLimits.find(limit => limit.pluginId === panel.pluginId && limit.deviceId === panel.deviceId);
-            return (
-              <View key={key} style={local.pinPanel}>
-                <HomePinChart title={source?.title ?? pinPanelTitle(panel)} pins={source?.pins} limit={limit?.overcurrentAmperes} />
-              </View>
-            );
-          })}
-        </View>
-      )}
-      {frame && !live && <Text style={styles.caption}>Last readings at {time(frame.timestamp)}</Text>}
-    </Page>
   );
+  return <HomeLayout move={onMove} configure={() => onNavigate('settings')}
+    footer={frame && !live && <Text style={styles.caption}>Last readings at {time(frame.timestamp)}</Text>}
+    panels={panels.map(panel => {
+      const key = homePanelKey(panel);
+      if (panel.kind === 'metric') {
+        const title = homeCards.find(card => card.id === panel.id)!.label;
+        if (panel.id === 'status') return { key, title, wide: true, content: status };
+        const { value, icon, tab } = tiles[panel.id];
+        return { key, title, wide: false, content: <Tile title={title} value={frame ? value : 'Unavailable'}
+          icon={icon} onPress={() => onNavigate(tab)} /> };
+      }
+      const source = pinSources.get(key);
+      const title = source?.title ?? pinPanelTitle(panel);
+      const limit = frame?.pinLimits.find(limit => limit.pluginId === panel.pluginId && limit.deviceId === panel.deviceId);
+      return { key, title, wide: true, content: <HomePinChart title={title} pins={source?.pins} limit={limit?.overcurrentAmperes} /> };
+    })} />;
 }
 
 function Tile({ title, value, icon, onPress }: { title: string; value: string; icon: IconName; onPress: () => void }) {
+  const styles = useStyles();
+  const colors = useColors();
+  const local = useThemeStyles(createLocalStyles);
+  const onLongPress = useHomeLongPress();
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [local.tile, pressed && styles.pressed]}>
+    <Pressable accessibilityRole="button" onLongPress={onLongPress} delayLongPress={420} onPress={onPress} style={({ pressed }) => [local.tile, pressed && styles.pressed]}>
       <View style={local.tileIcons}><Icon name={icon} /><Icon name="next" size={14} color={colors.muted} /></View>
       <Text style={styles.caption}>{title}</Text>
       <Text style={[local.tileValue, value === 'Unavailable' && local.unavailable]}>{value}</Text>
@@ -92,6 +95,7 @@ function Tile({ title, value, icon, onPress }: { title: string; value: string; i
 }
 
 export function Power({ frame, live, hideIdleMsiConnectors }: TelemetryProps & { hideIdleMsiConnectors: boolean }) {
+  const local = useThemeStyles(createLocalStyles);
   const [source, setSource] = useState('');
   const [pinMetric, setPinMetric] = useState<PinMetric>('Current');
   const groups = groupMetrics(frame?.sensors ?? [], 'power');
@@ -136,6 +140,7 @@ export function Power({ frame, live, hideIdleMsiConnectors }: TelemetryProps & {
 }
 
 function HomePinChart({ title, pins, limit }: { title: string; pins?: SensorReading[]; limit?: number }) {
+  const styles = useStyles();
   const [metric, setMetric] = useState<PinMetric>('Current');
   return pins ? <PinChart title={title} pins={pins} metric={metric} limit={limit} onSelect={setMetric} /> : (
     <Card title={title} icon="activity">
@@ -147,6 +152,8 @@ function HomePinChart({ title, pins, limit }: { title: string; pins?: SensorRead
 function PinChart({ title = 'Pin distribution', pins, metric, limit, onSelect }: {
   title?: string; pins: SensorReading[]; metric: PinMetric; limit?: number; onSelect: (metric: PinMetric) => void;
 }) {
+  const styles = useStyles();
+  const local = useThemeStyles(createLocalStyles);
   const options = pinMetrics.filter(name => pins.some(pin => pin.identity.metric === name));
   const selected = options.includes(metric) ? metric : options[0];
   if (!selected) {
@@ -188,6 +195,8 @@ function PinChart({ title = 'Pin distribution', pins, metric, limit, onSelect }:
 }
 
 export function Gpu({ frame, live }: TelemetryProps) {
+  const styles = useStyles();
+  const local = useThemeStyles(createLocalStyles);
   const [source, setSource] = useState('');
   const groups = groupMetrics(frame?.sensors ?? [], 'gpu');
   const selected = groups.find(group => group.key === source) ?? groups.find(group => group.source === 'generic-nvidia') ?? groups[0];
@@ -258,6 +267,7 @@ function linkSpeed(readings: SensorReading[], genMetric: string, widthMetric: st
 export function Warnings({ frame, live, simulations, history, showHistory }: TelemetryProps & {
   simulations: SensorFrame['simulationWarnings']; history: ReactNode; showHistory?: boolean;
 }) {
+  const styles = useStyles();
   const [view, setView] = useState<'active' | 'history'>(showHistory ? 'history' : 'active');
   const warnings = [...frame?.warnings ?? []].sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? ''));
 
@@ -282,6 +292,9 @@ export function Warnings({ frame, live, simulations, history, showHistory }: Tel
 }
 
 function WarningCard({ title, detail, metadata, status }: { title: string; detail: string; metadata: string; status: string }) {
+  const styles = useStyles();
+  const colors = useColors();
+  const local = useThemeStyles(createLocalStyles);
   return (
     <Card>
       <View style={styles.row}>
@@ -296,6 +309,7 @@ function WarningCard({ title, detail, metadata, status }: { title: string; detai
 }
 
 function Empty({ icon, title, live }: { icon: IconName; title: string; live: boolean }) {
+  const styles = useStyles();
   return <Card title={title} icon={icon}>
     <Text style={styles.caption}>{live ? 'The connected service has no readings for this view yet.' : 'Connect to your PC to see live readings.'}</Text>
   </Card>;
@@ -309,6 +323,8 @@ function Reading({ reading, value }: { reading: SensorReading; value?: string })
 }
 
 export function ReadingRow({ label, value, fault = false }: { label: string; value: string; fault?: boolean }) {
+  const styles = useStyles();
+  const local = useThemeStyles(createLocalStyles);
   return (
     <View style={[local.reading, fault && local.fault]}>
       <Text style={[styles.text, local.readingLabel]}>{label}</Text>
@@ -325,14 +341,12 @@ function time(date: string) {
   return new Date(date).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
-const local = StyleSheet.create({
-  hero: { backgroundColor: '#10242B', borderWidth: 1, borderRadius: 25, padding: 19, gap: 12, alignItems: 'flex-start' },
+const createLocalStyles = (colors: Colors) => StyleSheet.create({
+  hero: { backgroundColor: colors.accentSurface, borderWidth: 1, borderRadius: 25, padding: 19, gap: 12, alignItems: 'flex-start' },
   statusIcon: { padding: 10, borderRadius: 14 },
   status: { fontSize: 14, fontWeight: '700' },
   heroTitle: { fontSize: 25, fontWeight: '700', color: colors.text, letterSpacing: -0.4 },
-  tileGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  pinPanel: { flexBasis: '100%' },
-  tile: { flexBasis: '45%', flexGrow: 1, padding: 14, borderRadius: 18, borderWidth: 1, borderColor: colors.line,
+  tile: { padding: 14, borderRadius: 18, borderWidth: 1, borderColor: colors.line,
     backgroundColor: colors.surface, gap: 7 },
   tileIcons: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   tileValue: { color: colors.text, fontWeight: '700', fontSize: 22, fontVariant: ['tabular-nums'] },
@@ -347,7 +361,7 @@ const local = StyleSheet.create({
   pin: { flex: 1, alignItems: 'center', gap: 6 },
   pinValue: { color: colors.text, fontSize: 12, fontWeight: '700', width: '100%', textAlign: 'center', fontVariant: ['tabular-nums'] },
   track: { backgroundColor: colors.raised, width: '66%', height: 104, borderRadius: 6, overflow: 'hidden', justifyContent: 'flex-end' },
-  fill: { backgroundColor: colors.accent, borderRadius: 4 },
+  fill: { backgroundColor: colors.secondary, borderRadius: 4 },
   overLimit: { backgroundColor: colors.danger },
   warningStatus: { color: colors.warning, fontSize: 13, fontWeight: '700' },
   limitRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingBottom: 8,

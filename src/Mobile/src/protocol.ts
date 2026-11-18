@@ -83,7 +83,7 @@ function isHostName(host: string): boolean {
     && parts.every(part => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(part));
 }
 
-function readAddress(value: unknown, local: boolean): string | null {
+export function readAddress(value: unknown, local: boolean): string | null {
   if (typeof value !== 'string') {
     return null;
   }

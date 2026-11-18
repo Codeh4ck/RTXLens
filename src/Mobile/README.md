@@ -23,11 +23,11 @@ To test a notification without creating a real fault, pair with the Debug servic
 
 In **Warnings → History**, open a saved service warning or Safeguard+ execution to view its details and captured readings. The desktop **Mobile Access** settings control warning retention. Safeguard+ executions use Safeguard+ History retention. Desktop Debug Console messages are session-only.
 
-Under mobile **Settings**, **Test remote access** checks the saved remote address without switching the live connection. To verify access from outside your home network, run the test using mobile data. **Temperature units** applies to live readings and captured incident readings.
+The desktop pairing QR code supplies the initial local and remote addresses. Edit either under **Settings → PC connection** if it changes. The phone keeps verifying the paired PC’s key. Under mobile **Settings**, **Test remote access** checks the saved remote address without switching the live connection. To verify access from outside your home network, run the test using mobile data. **Temperature units** applies to live readings and captured incident readings.
 
-In **Home screen**, add or remove metric and pin panels, then use the up and down arrows to order them. A pin panel follows the selected device and connector. Add panels from multiple reporting plugins to view them together. Under **MSI PSU**, enable **Hide connectors with zero current** to hide those connectors in Power until they start drawing current.
+In **Settings → Home screen**, switch any panel on or off. On Home, touch and hold, drag a panel to its new position, then tap **Done reordering**. A pin panel follows the selected device and connector. Add panels from multiple reporting plugins to view them together. Under **MSI PSU**, enable **Hide connectors with zero current** to hide those connectors in Power until they start drawing current.
 
-**Warning filters** and **Lock-screen privacy** apply to phone notifications, while warnings and incident history remain visible in the app. To save changes while lock-screen delivery is enabled, connect to the updated Windows service so it can apply the phone’s preferences.
+**Warning filters** and **Lock-screen privacy** apply to phone notifications, while warnings and incident history remain visible in the app. Changes save automatically on the phone. Offline changes sync to the PC when it reconnects. Under **Appearance**, choose a desktop color scheme, switch between dark and light, or enter custom colors.
 
 ## Lock-screen notifications
 

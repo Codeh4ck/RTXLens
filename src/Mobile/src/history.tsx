@@ -1,3 +1,4 @@
+import { useThemeStyles, type Colors } from './appearance';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,12 +10,14 @@ import { TemperatureUnitContext } from './mobileSettings';
 import type { PairedComputer, SensorReading } from './protocol';
 import { ReadingRow } from './screens';
 import { transport } from './transport';
-import { Button, Card, Icon, Notice, Page, colors, styles } from './ui';
+import { Button, Card, Icon, Notice, Page, useStyles } from './ui';
 
 export function IncidentHistory({ computer, destination, live, target, onNotificationClosed }: {
   computer: PairedComputer | null; destination: Destination | null; live: boolean;
   target?: IncidentRef | null; onNotificationClosed?: () => void;
 }) {
+  const styles = useStyles();
+  const local = useThemeStyles(createLocalStyles);
   const [items, setItems] = useState<IncidentSummary[]>([]);
   const [next, setNext] = useState<string | null>(null);
   const [selected, setSelected] = useState<IncidentRef | null>(target ?? null);
@@ -138,6 +141,8 @@ export function IncidentHistory({ computer, destination, live, target, onNotific
 }
 
 function IncidentDetail({ incident }: { incident: Incident }) {
+  const styles = useStyles();
+  const local = useThemeStyles(createLocalStyles);
   const temperatureUnit = useContext(TemperatureUnitContext);
   const groups = new Map<string, { name: string; readings: SensorReading[] }>();
   for (const reading of incident.readings) {
@@ -198,7 +203,7 @@ function message(error: unknown) {
   return error instanceof Error ? error.message : 'Could not load the PC’s warning history.';
 }
 
-const local = StyleSheet.create({
+const createLocalStyles = (colors: Colors) => StyleSheet.create({
   entry: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line },
   entryText: { flex: 1, gap: 3 },
