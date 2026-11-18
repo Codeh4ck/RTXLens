@@ -9,6 +9,58 @@ Push the mobile files on the feature/mobile-app branch to run the **Mobile App -
 - **iPhone**. Open RTX-Lens-unsigned.ipa with [AltStore Classic](https://faq.altstore.io/altstore-classic/how-to-install-altstore-windows) to sign and install it with your Apple Account. Enable Developer Mode when prompted. With free signing, refresh the installation every seven days.
 - **Android**. Open RTX-Lens-preview.apk on the phone and allow installation from the app that opened the file if Android asks. This APK uses test signing.
 
+## Store builds
+
+Once this workflow is on the default branch, open **Actions → Mobile App - Build → Run workflow** and select the branch and destination. A push to the mobile branch continues to produce preview packages.
+
+| Destination | Result |
+| --- | --- |
+| `preview` | Unsigned AltStore IPA and test-signed Android APK |
+| `play-bundle` | Signed Android App Bundle for the first manual Play Console upload |
+| `play-internal` | Uploads a signed bundle to Google Play Internal testing |
+| `testflight` | Uploads a signed iOS build to App Store Connect for TestFlight |
+| `both-stores` | Runs the two store uploads in parallel |
+
+Store builds use the GitHub workflow run number for the iOS build number and Android version code. Dispatch a fresh run if a build number already exists in a store. Manage tester access, public review, and production releases in each store console.
+
+Before public review, prepare the store listing, screenshots, privacy policy, and store-specific privacy declarations. Provide review instructions and a way to exercise the app's connected views, which normally require pairing with the RTX Lens Windows service.
+
+Both stores use `com.rtxlens.mobile` as the app identifier. Create the named GitHub environments below and store credentials in their **Environment secrets**. Limit those environments to branches you trust for distribution.
+
+### Google Play
+
+1. [Register for Play Console](https://support.google.com/googleplay/android-developer/answer/6112435) and complete its verification. A new personal account also requires Android device verification. For public production access, new personal accounts must complete a closed test with at least 12 testers opted in continuously for 14 days.
+2. Create **RTX Lens** as an Android app, set up [Play App Signing](https://developer.android.com/studio/publish/app-signing), and create a dedicated upload keystore. Back up the keystore and passwords securely.
+3. Add the upload key settings to the `google-play` environment. Run `play-bundle`, download the AAB from the artifact ZIP, and upload it to the app's **Internal testing** track in Play Console.
+4. [Enable the Google Play Developer API](https://developers.google.com/android-publisher/getting_started) in a Google Cloud project. Create a service account, invite it in Play Console, and give it app-level access to release to testing tracks for RTX Lens. Add its JSON key to the `google-play` environment before running `play-internal`.
+
+| Environment secret | Value |
+| --- | --- |
+| `PLAY_UPLOAD_KEYSTORE_B64` | Base64 of the private upload keystore file |
+| `PLAY_UPLOAD_STORE_PASSWORD` | Keystore password |
+| `PLAY_UPLOAD_KEY_ALIAS` | Alias of the upload key |
+| `PLAY_UPLOAD_KEY_PASSWORD` | Upload key password |
+| `PLAY_SERVICE_ACCOUNT_JSON` | Raw service account JSON for automated uploads |
+
+For push-enabled Android store builds, also add the raw Firebase `google-services.json` as the `GOOGLE_SERVICES_JSON` environment secret and the Expo project ID as the `RTXLENS_EXPO_PROJECT_ID` environment variable. Use the same Expo project and FCM credentials described below.
+
+### App Store Connect
+
+1. Enroll in the [Apple Developer Program](https://developer.apple.com/programs/enroll/). Register the explicit bundle ID and create the app record in App Store Connect.
+2. Create an Apple Distribution certificate with its private key and a matching [App Store Connect provisioning profile](https://developer.apple.com/help/account/provisioning-profiles/create-an-app-store-provisioning-profile). Export the certificate and private key as a password-protected `.p12`.
+3. Create a [team API key](https://developer.apple.com/documentation/appstoreconnectapi/creating-api-keys-for-app-store-connect-api) with upload permission. Store its credentials and the signing files in the `app-store-connect` environment. Run `testflight` and wait for the build to process in App Store Connect.
+
+| Environment secret | Value |
+| --- | --- |
+| `IOS_DISTRIBUTION_P12_B64` | Base64 of the Apple Distribution `.p12` containing the private key |
+| `IOS_DISTRIBUTION_P12_PASSWORD` | Password for the `.p12` |
+| `IOS_APP_STORE_PROFILE_B64` | Base64 of the App Store Connect `.mobileprovision` |
+| `IOS_ASC_KEY_ID` | App Store Connect team API key ID |
+| `IOS_ASC_ISSUER_ID` | App Store Connect API issuer ID |
+| `IOS_ASC_PRIVATE_KEY` | Raw App Store Connect `.p8` private key |
+
+For a push-enabled iOS store build, set environment variables `RTXLENS_IOS_PUSH=1` and `RTXLENS_EXPO_PROJECT_ID` and use a provisioning profile with the production push entitlement. Add the APNs credentials in Expo as described below.
+
 ## Test the connection
 
 1. Run the RTX Lens service and desktop build with Mobile Access support. Enable it and create a pairing code under **Configuration → Mobile Access**.

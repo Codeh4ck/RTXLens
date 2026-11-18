@@ -2,6 +2,17 @@ name: Mobile App - Build
 
 on:
   workflow_dispatch:
+    inputs:
+      distribution:
+        description: Mobile build destination
+        type: choice
+        default: preview
+        options:
+          - preview
+          - play-bundle
+          - play-internal
+          - testflight
+          - both-stores
   push:
     branches: [feature/mobile-app]
     paths:
@@ -17,6 +28,7 @@ env:
 jobs:
   ios:
     name: iPhone IPA for AltStore
+    if: github.event_name == 'push' || inputs.distribution == 'preview'
     runs-on: macos-26
     timeout-minutes: 40
     concurrency:
@@ -102,6 +114,7 @@ jobs:
 
   android:
     name: Android test APK
+    if: github.event_name == 'push' || inputs.distribution == 'preview'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     concurrency:
@@ -173,3 +186,173 @@ jobs:
           path: ${{ runner.temp }}/rtxlens-android/RTX-Lens-preview.apk
           if-no-files-found: error
           retention-days: 7
+
+  google-play:
+    name: Signed Android App Bundle
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      (inputs.distribution == 'play-bundle' || inputs.distribution == 'play-internal' || inputs.distribution == 'both-stores')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    environment: google-play
+    concurrency:
+      group: rtxlens-google-play
+      cancel-in-progress: false
+    env:
+      RTXLENS_STORE_BUILD_NUMBER: ${{ github.run_number }}
+      RTXLENS_EXPO_PROJECT_ID: ${{ vars.RTXLENS_EXPO_PROJECT_ID }}
+    defaults:
+      run:
+        working-directory: src/Mobile
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: src/Mobile/package-lock.json
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+
+      - run: npm ci
+      - run: npm run typecheck && npm test
+
+      - name: Build and verify the signed AAB
+        shell: bash
+        env:
+          RTXLENS_PLAY_KEYSTORE: ${{ runner.temp }}/rtxlens-play-upload.jks
+          RTXLENS_PLAY_KEYSTORE_B64: ${{ secrets.PLAY_UPLOAD_KEYSTORE_B64 }}
+          RTXLENS_PLAY_STORE_PASSWORD: ${{ secrets.PLAY_UPLOAD_STORE_PASSWORD }}
+          RTXLENS_PLAY_KEY_ALIAS: ${{ secrets.PLAY_UPLOAD_KEY_ALIAS }}
+          RTXLENS_PLAY_KEY_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEY_PASSWORD }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          : "${RTXLENS_PLAY_KEYSTORE_B64:?Set PLAY_UPLOAD_KEYSTORE_B64 in the google-play environment}"
+          : "${RTXLENS_PLAY_STORE_PASSWORD:?Set PLAY_UPLOAD_STORE_PASSWORD in the google-play environment}"
+          : "${RTXLENS_PLAY_KEY_ALIAS:?Set PLAY_UPLOAD_KEY_ALIAS in the google-play environment}"
+          : "${RTXLENS_PLAY_KEY_PASSWORD:?Set PLAY_UPLOAD_KEY_PASSWORD in the google-play environment}"
+
+          umask 077
+          google_services="$RUNNER_TEMP/rtxlens-google-services.json"
+          trap 'rm -f -- "$RTXLENS_PLAY_KEYSTORE" "$google_services"' EXIT
+          if [[ -n "$GOOGLE_SERVICES_JSON" ]]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > "$google_services"
+            export RTXLENS_GOOGLE_SERVICES_FILE="$google_services"
+          fi
+
+          printf '%s' "$RTXLENS_PLAY_KEYSTORE_B64" | base64 --decode > "$RTXLENS_PLAY_KEYSTORE"
+          unset RTXLENS_PLAY_KEYSTORE_B64 GOOGLE_SERVICES_JSON
+          RTXLENS_PLAY_SIGNING=1 npx --no-install expo prebuild --platform android --clean --no-install
+          cd android
+          ./gradlew :app:bundleRelease --no-daemon --no-build-cache --no-configuration-cache
+          bundle=app/build/outputs/bundle/release/app-release.aab
+          jarsigner -verify "$bundle"
+
+          expected="$(keytool -exportcert -keystore "$RTXLENS_PLAY_KEYSTORE" -alias "$RTXLENS_PLAY_KEY_ALIAS" \
+            -storepass:env RTXLENS_PLAY_STORE_PASSWORD | sha256sum | cut -d ' ' -f 1)"
+          actual="$(keytool -printcert -rfc -jarfile "$bundle" | openssl x509 -outform DER | sha256sum | cut -d ' ' -f 1)"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "The Android bundle was not signed with the Play upload key." >&2
+            exit 1
+          fi
+
+          cp "$bundle" "$RUNNER_TEMP/RTX-Lens-Google-Play.aab"
+
+      - name: Upload to Google Play Internal testing
+        if: inputs.distribution == 'play-internal' || inputs.distribution == 'both-stores'
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.rtxlens.mobile
+          releaseFiles: ${{ runner.temp }}/RTX-Lens-Google-Play.aab
+          tracks: internal
+          status: completed
+
+      - name: Save the signed bundle for manual upload
+        if: inputs.distribution == 'play-bundle'
+        uses: actions/upload-artifact@v7
+        with:
+          name: RTX-Lens-Google-Play
+          path: ${{ runner.temp }}/RTX-Lens-Google-Play.aab
+          if-no-files-found: error
+          retention-days: 7
+
+  app-store-connect:
+    name: Signed iOS archive for TestFlight
+    if: github.event_name == 'workflow_dispatch' && (inputs.distribution == 'testflight' || inputs.distribution == 'both-stores')
+    runs-on: macos-26
+    timeout-minutes: 40
+    environment: app-store-connect
+    concurrency:
+      group: rtxlens-app-store-connect
+      cancel-in-progress: false
+    env:
+      RTXLENS_STORE_BUILD_NUMBER: ${{ github.run_number }}
+      RTXLENS_EXPO_PROJECT_ID: ${{ vars.RTXLENS_EXPO_PROJECT_ID }}
+      RTXLENS_IOS_PUSH: ${{ vars.RTXLENS_IOS_PUSH }}
+      RTXLENS_IOS_PUSH_ENVIRONMENT: production
+    defaults:
+      run:
+        working-directory: src/Mobile
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: src/Mobile/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck && npm test
+
+      - name: Generate the iOS project and install pods
+        shell: bash
+        run: |
+          npx --no-install expo prebuild --platform ios --clean --no-install
+          pod install --project-directory=ios
+
+      - name: Sign and archive the iOS app
+        shell: bash
+        env:
+          IOS_DISTRIBUTION_P12_B64: ${{ secrets.IOS_DISTRIBUTION_P12_B64 }}
+          IOS_DISTRIBUTION_P12_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_P12_PASSWORD }}
+          IOS_APP_STORE_PROFILE_B64: ${{ secrets.IOS_APP_STORE_PROFILE_B64 }}
+        run: bash scripts/archive-app-store.sh
+
+      - name: Upload to App Store Connect
+        shell: bash
+        env:
+          IOS_ASC_KEY_ID: ${{ secrets.IOS_ASC_KEY_ID }}
+          IOS_ASC_ISSUER_ID: ${{ secrets.IOS_ASC_ISSUER_ID }}
+          IOS_ASC_PRIVATE_KEY: ${{ secrets.IOS_ASC_PRIVATE_KEY }}
+        run: |
+          : "${IOS_ASC_KEY_ID:?Set IOS_ASC_KEY_ID in the app-store-connect environment}"
+          : "${IOS_ASC_ISSUER_ID:?Set IOS_ASC_ISSUER_ID in the app-store-connect environment}"
+          : "${IOS_ASC_PRIVATE_KEY:?Set IOS_ASC_PRIVATE_KEY in the app-store-connect environment}"
+          if [[ ! "$IOS_ASC_KEY_ID" =~ ^[A-Z0-9]+$ ]]; then
+            echo "Enter a valid App Store Connect key ID." >&2
+            exit 1
+          fi
+
+          umask 077
+          private_keys="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$private_keys"
+          key="$private_keys/AuthKey_${IOS_ASC_KEY_ID}.p8"
+          trap 'rm -f -- "$key"' EXIT
+          printf '%s\n' "$IOS_ASC_PRIVATE_KEY" > "$key"
+          unset IOS_ASC_PRIVATE_KEY
+          xcrun altool --upload-app --type ios --file "$RUNNER_TEMP/RTX-Lens-App-Store.ipa" \
+            --apiKey "$IOS_ASC_KEY_ID" --apiIssuer "$IOS_ASC_ISSUER_ID"
