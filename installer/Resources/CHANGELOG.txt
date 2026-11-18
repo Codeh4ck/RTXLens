@@ -1,3 +1,8 @@
+1.1.1 - Mobile access
+- Add the RTX Lens mobile app for iOS and Android, with live GPU metrics, power and per-pin readings, and warning history.
+- Configure direct phone access in the desktop app and pair devices using a QR code.
+- Customize the mobile Home screen and theme. Lock-screen alerts are available in builds configured for push notifications.
+
 1.1.0 - Avalonia desktop app
 - Port the RTX Lens desktop app to Avalonia with refreshed controls and customizable color themes.
 - Restore single-instance startup, window placement, Safeguard+ execution reports and MSI fan curve defaults.
