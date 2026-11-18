@@ -1,6 +1,7 @@
 1.1.1 - Mobile access
 - Add the RTX Lens mobile app for iOS and Android, with live GPU metrics, power and per-pin readings, and warning history.
 - Configure direct phone access in the desktop app and pair devices using a QR code.
+- Allow same-subnet mobile connections on Windows Public networks when RTX Lens manages the firewall rule.
 - Customize the mobile Home screen and theme. Lock-screen alerts are available in builds configured for push notifications.
 
 1.1.0 - Avalonia desktop app

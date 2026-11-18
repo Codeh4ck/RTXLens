@@ -25,6 +25,10 @@ internal static class MobileAccessTests
     {
         await runner.RunAsync(PairedClientReusesTheSensorStreamAsync);
         await runner.RunAsync(RestartKeepsIdentityAndDisableRemovesRulesAsync);
+        if (OperatingSystem.IsWindows())
+        {
+            runner.Run(PublicFirewallScopeIsLimitedToTheLocalSubnet);
+        }
         await runner.RunAsync(DebugSimulationWarningsStayOffTheLocalSensorStreamAsync);
         await runner.RunAsync(ReportsPortConflictAndRecoversAsync);
         await runner.RunAsync(NetworkSetupFailureKeepsTheListenerAvailableAsync);
@@ -452,6 +456,7 @@ internal static class MobileAccessTests
         try
         {
             TestAssert.Equal(rules, network.Owned);
+            TestAssert.Equal(2, network.ApplyCount);
             using var socket = await ConnectAsync(
                 second.ListenerAddress!, invite.PublicKeyFingerprint, credential.Token, cancellationToken);
             using var frame = await WebSocketMessageReader.ReadJsonAsync(socket, cancellationToken);
@@ -466,6 +471,18 @@ internal static class MobileAccessTests
         {
             await second.StopAsync(CancellationToken.None);
         }
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static void PublicFirewallScopeIsLimitedToTheLocalSubnet()
+    {
+        var id = Guid.NewGuid();
+        var rules = MobileNetworkAccess.GetFirewallRules(new MobileNetworkRules(id, 59275, OpenFirewall: true, PortForwarding: null));
+        var legacyName = $"RTX Lens Mobile Access ({id:N})";
+
+        TestAssert.Equal(2, rules.Length);
+        TestAssert.Equal((legacyName, 3, "*"), rules[0]);
+        TestAssert.Equal(($"{legacyName} - Public LAN", 4, "LocalSubnet"), rules[1]);
     }
 
     private static void ExpiredInviteCannotBeUsed()
@@ -664,9 +681,11 @@ internal static class MobileAccessTests
         public MobileNetworkRules? Owned { get; private set; }
         public MobileNetworkRules? Removed { get; private set; }
         public Exception? ApplyError { get; init; }
+        public int ApplyCount { get; private set; }
 
         public void Apply(MobileNetworkRules rules)
         {
+            ApplyCount++;
             if (ApplyError is not null)
             {
                 throw ApplyError;

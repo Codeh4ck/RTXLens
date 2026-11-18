@@ -102,6 +102,7 @@ internal sealed class MobileAccessView : UserControl
         _apply = CommitButton("Apply mobile access", async void () => await ApplyAsync());
 
         _listenerStatus.VerticalAlignment = VerticalAlignment.Center;
+        ToolTip.SetTip(_firewall, "On Public networks, Windows Firewall allows RTX Lens connections only from the local subnet.");
 
         var status = new WrapPanel { ItemSpacing = 12, LineSpacing = 6, Children = { _enabled, _listenerStatus } };
         var address = new Panel { Children = { publicField, hostnameField } };
@@ -205,6 +206,10 @@ internal sealed class MobileAccessView : UserControl
             var message = settings.PortForwarding is not null
                 ? $"Allow TCP port {settings.Port} through the router to {settings.LocalAddress}?"
                 : $"Allow inbound TCP connections to RTX Lens on port {settings.Port} through Windows Firewall?";
+            if (settings.OpenFirewall)
+            {
+                message += " On Public networks, the Windows Firewall rule only allows devices on the same subnet.";
+            }
 
             if (TopLevel.GetTopLevel(this) is not Window owner || !await ConfirmAsync(owner, "Allow mobile access", message, "Allow"))
             {

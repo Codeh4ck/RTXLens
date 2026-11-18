@@ -35,9 +35,6 @@ internal sealed class ConfigurationPage : UserControl
         _shell = shell;
         _editor = shell.Configuration;
 
-        var revision = Caption();
-        BindTo(revision, TextBlock.TextProperty, _editor, nameof(_editor.RevisionText));
-
         var message = Alert();
         var success = Alert(tone: "success", dismiss: _editor.DismissApplyMessage);
 
@@ -82,11 +79,9 @@ internal sealed class ConfigurationPage : UserControl
             Spacing = 8
         };
 
-        actions.Children.Add(revision);
         actions.Children.Add(reload);
         actions.Children.Add(apply);
 
-        revision.VerticalAlignment = VerticalAlignment.Center;
         var heading = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("*,Auto"),

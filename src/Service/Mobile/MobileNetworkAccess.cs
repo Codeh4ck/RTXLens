@@ -22,7 +22,7 @@ internal sealed class MobileNetworkAccess : IMobileNetworkAccess
     {
         if (rules.OpenFirewall)
         {
-            Run(() => AddFirewallRule(rules),
+            Run(() => AddFirewallRules(rules),
                 "Windows Firewall could not add the Mobile Access rule. Run the service as administrator and retry.");
         }
 
@@ -37,7 +37,7 @@ internal sealed class MobileNetworkAccess : IMobileNetworkAccess
     {
         if (rules.OpenFirewall)
         {
-            Run(() => RemoveFirewallRule(rules), "Windows Firewall could not remove the previous Mobile Access rule.");
+            Run(() => RemoveFirewallRules(rules), "Windows Firewall could not remove the previous Mobile Access rule.");
         }
 
         if (rules.PortForwarding is { } forwarding)
@@ -60,13 +60,15 @@ internal sealed class MobileNetworkAccess : IMobileNetworkAccess
         }
     }
 
-    private static void RemoveFirewallRule(MobileNetworkRules rules)
+    private static void RemoveFirewallRules(MobileNetworkRules rules)
     {
         dynamic firewall = CreateComObject("HNetCfg.FwPolicy2");
-        var name = RuleName(rules);
-        if (FindFirewallRule(firewall.Rules, name) is not null)
+        foreach (var rule in GetFirewallRules(rules))
         {
-            firewall.Rules.Remove(name);
+            if (FindFirewallRule(firewall.Rules, rule.Name) is not null)
+            {
+                firewall.Rules.Remove(rule.Name);
+            }
         }
     }
 
@@ -80,7 +82,7 @@ internal sealed class MobileNetworkAccess : IMobileNetworkAccess
         }
     }
 
-    private static void AddFirewallRule(MobileNetworkRules rules)
+    private static void AddFirewallRules(MobileNetworkRules rules)
     {
         var application = Environment.ProcessPath;
         if (!string.Equals(Path.GetFileName(application), "RTXLens.Service.exe", StringComparison.OrdinalIgnoreCase))
@@ -88,25 +90,40 @@ internal sealed class MobileNetworkAccess : IMobileNetworkAccess
             throw new InvalidOperationException("Automatic firewall setup requires the RTX Lens service executable.");
         }
 
-        var name = RuleName(rules);
         dynamic firewall = CreateComObject("HNetCfg.FwPolicy2");
-
-        if (FindFirewallRule(firewall.Rules, name) is not null)
+        foreach (var settings in GetFirewallRules(rules))
         {
-            return;
-        }
+            if (FindFirewallRule(firewall.Rules, settings.Name) is not null)
+            {
+                continue;
+            }
 
-        dynamic rule = CreateComObject("HNetCfg.FWRule");
-        rule.Name = name;
-        rule.Description = "Inbound RTX Lens mobile streaming and pairing.";
-        rule.ApplicationName = application;
-        rule.Protocol = 6; // TCP
-        rule.LocalPorts = rules.LocalPort.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        rule.Direction = 1; // Inbound
-        rule.Profiles = 3; // Domain and Private
-        rule.Action = 1; // Allow
-        rule.Enabled = true;
-        firewall.Rules.Add(rule);
+            dynamic rule = CreateComObject("HNetCfg.FWRule");
+            rule.Name = settings.Name;
+            rule.Description = "Inbound RTX Lens mobile streaming and pairing.";
+            rule.ApplicationName = application;
+            rule.Protocol = 6; // TCP
+            rule.LocalPorts = rules.LocalPort.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            rule.Direction = 1; // Inbound
+            rule.Profiles = settings.Profiles;
+            rule.RemoteAddresses = settings.RemoteAddresses;
+            rule.Action = 1; // Allow
+            rule.Enabled = true;
+            firewall.Rules.Add(rule);
+        }
+    }
+
+    internal static (string Name, int Profiles, string RemoteAddresses)[] GetFirewallRules(MobileNetworkRules rules)
+    {
+        const int domainAndPrivate = 3;
+        const int publicProfile = 4;
+        var name = RuleName(rules);
+
+        return
+        [
+            (name, domainAndPrivate, "*"),
+            ($"{name} - Public LAN", publicProfile, "LocalSubnet")
+        ];
     }
 
     private static void AddMapping(MobileNetworkRules rules, MobilePortForwarding forwarding)
