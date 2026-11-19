@@ -354,6 +354,9 @@ MigrationBackup/
 /.idea/
 *.tsbuildinfo
 
+# Local iOS signing credentials
+/.ios-signing/
+
 # Unused bundled fonts (the widget uses installed fonts)
 /src/Widget/resources/fonts/
 

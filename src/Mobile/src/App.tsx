@@ -365,6 +365,9 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
         await SecureStore.setItemAsync(computerKey, JSON.stringify(paired), {
           keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
         });
+        if (push.available) {
+          await enableNotifications(paired.token);
+        }
         setComputer(paired);
         setTab('home');
       }
@@ -415,12 +418,15 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
     setTab(next);
   }
 
-  async function enableNotifications() {
+  async function enableNotifications(newPairingToken?: string) {
     setNotificationError(null);
     try {
       const value = await notificationPermission(true);
       canNotify.current = value === 'granted';
       setNotifications(value);
+      if (value === 'granted' && newPairingToken) {
+        await push.saveEnabledPairing(newPairingToken);
+      }
     } catch {
       setNotificationError('Could not enable system notifications.');
     }
@@ -494,7 +500,7 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
           {notificationError && <Notice>{notificationError}</Notice>}
           {notifications === 'granted' ? <Text style={local.state}>Enabled</Text> : notifications === 'blocked' ? (
             <Button icon="settings" label="Open system settings" onPress={() => void Linking.openSettings()} />
-          ) : <Button icon="warnings" label="Enable notifications" variant="primary" onPress={enableNotifications} />}
+          ) : <Button icon="warnings" label="Enable notifications" variant="primary" onPress={() => void enableNotifications()} />}
         </Card>
         {preferencesLoaded && <NotificationPreferencesCard value={preferences.notifications} syncRequired={push.enabled}
           canSync={live} save={saveNotificationPreferences} />}

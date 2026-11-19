@@ -13,7 +13,7 @@ export function useLockScreenNotifications(computer: PairedComputer | null, addr
   preferences: RefObject<NotificationPreferences>, preferencesLoaded: boolean) {
   const pairingToken = computer?.token;
   const fingerprint = computer?.publicKeyFingerprint;
-  const [preference, setPreference] = useState<string | null>(null);
+  const [preference, setPreference] = useState<string | null>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const registered = useRef(false);
@@ -28,12 +28,19 @@ export function useLockScreenNotifications(computer: PairedComputer | null, addr
     if (!available) return;
     let current = true;
     void SecureStore.getItemAsync(preferenceKey).then(value => {
-      if (current) setPreference(value);
+      if (current) setPreference(previous => previous === undefined ? value : previous);
     }).catch(() => {
       if (current) setError('Could not read lock-screen notification settings.');
     });
     return () => { current = false; };
   }, [available]);
+
+  const saveEnabledPairing = useCallback(async (token: string) => {
+    await SecureStore.setItemAsync(preferenceKey, token, {
+      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    });
+    setPreference(token);
+  }, []);
 
   const register = useCallback(async (token: string | null, options: NotificationPreferences) => {
     if (!transport || !pairingToken || !fingerprint || !address) {
@@ -55,10 +62,7 @@ export function useLockScreenNotifications(computer: PairedComputer | null, addr
           throw new Error('Allow RTX Lens notifications in your phone’s settings.');
         }
         if (requestPermission && pairingToken) {
-          await SecureStore.setItemAsync(preferenceKey, pairingToken, {
-            keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-          });
-          setPreference(pairingToken);
+          await saveEnabledPairing(pairingToken);
         }
 
         let nativeToken: DevicePushToken | undefined;
@@ -98,7 +102,7 @@ export function useLockScreenNotifications(computer: PairedComputer | null, addr
     });
     operation.current = pending;
     return pending;
-  }, [pairingToken, preferences, register]);
+  }, [pairingToken, preferences, register, saveEnabledPairing]);
 
   useEffect(() => {
     if (!available || !enabled || !live || !preferencesLoaded) return;
@@ -124,5 +128,5 @@ export function useLockScreenNotifications(computer: PairedComputer | null, addr
   }
 
   return { available, enabled, ready, busy, error, registered, set: update,
-    applyPreferences: (options: NotificationPreferences) => update(true, false, options), forgetRegistration };
+    applyPreferences: (options: NotificationPreferences) => update(true, false, options), forgetRegistration, saveEnabledPairing };
 }
