@@ -190,7 +190,7 @@ internal sealed class ServiceLogJournal(ActivityLoggerProvider input, RuntimeCon
         }
     }
 
-    private void PublishPending(bool flush = false)
+    internal void PublishPending(bool flush = false)
     {
         lock (_writeGate)
         {
@@ -253,9 +253,14 @@ internal sealed class ServiceLogJournal(ActivityLoggerProvider input, RuntimeCon
             }
 
             var capacity = settings.EventLogStorageMb * 1024L * 1024L;
-            while (current.Revision > 0 && _bytes > capacity && _entries.First is { } first)
+            if (current.Revision > 0 && _bytes > capacity)
             {
-                Remove(first);
+                // Compact to 90% so the next small append does not rewrite the retained file again.
+                var target = capacity - capacity / 10;
+                while (_bytes > target && _entries.First is { } first)
+                {
+                    Remove(first);
+                }
                 removed = true;
             }
 

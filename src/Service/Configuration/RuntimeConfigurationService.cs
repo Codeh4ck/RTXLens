@@ -107,41 +107,7 @@ public sealed class RuntimeConfigurationService(PluginRuntimeManager runtime, Ru
             }
 
             var candidate = runtime.WarningRegistry.Migrate(RuntimeJson.Clone(update(RuntimeJson.Clone(previous.Configuration))));
-            if (candidate.Monitoring.ConnectorProfiles.Version == 0)
-            {
-                candidate.Monitoring.ConnectorProfiles = RuntimeJson.Clone(previous.Configuration).Monitoring.ConnectorProfiles;
-            }
-
-            runtime.Validate(candidate);
-            var contents = RuntimeJson.Serialize(candidate);
-            try
-            {
-                await PersistAsync(contents, cancellationToken);
-            }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-            {
-                logger.LogActivity(LogLevel.Error, "configuration.save-failed", "Configuration",
-                    "The service could not save its settings.", eventViewer: true, exception: error);
-                throw;
-            }
-
-            // Once committed to disk, finish applying even if the HTTP caller disconnects.
-            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            try
-            {
-                await runtime.ApplyAsync(candidate, deadline.Token);
-            }
-            catch
-            {
-                await RestoreAsync(previous.Configuration);
-                throw;
-            }
-
-            _observedContents = contents;
-            Volatile.Write(ref _current, new ConfigurationSnapshot(previous.Revision + 1, candidate, Version: CreateVersion(previous.Revision + 1)));
-            Changed?.Invoke();
-            logger.LogActivity(LogLevel.Information, "configuration.applied", "Configuration", "Service settings applied.",
-                $"Revision {Current.Revision}.");
+            await CommitAsync(candidate, null, cancellationToken);
             return Current;
         }
         catch (ArgumentException)
@@ -175,50 +141,32 @@ public sealed class RuntimeConfigurationService(PluginRuntimeManager runtime, Ru
     private async Task ReloadAsync(CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken);
+        var previous = Current;
+        string? contents = null;
         try
         {
-            var contents = await ReadContentsAsync(cancellationToken);
-            if (contents == _observedContents && Current.LastError is null)
+            contents = await ReadContentsAsync(cancellationToken);
+            if (contents == _observedContents)
             {
                 return;
             }
-
-            var candidate = runtime.WarningRegistry.Migrate(runtime.MigrateConfiguration(RuntimeJson.Deserialize(contents)));
-            if (candidate.Monitoring.ConnectorProfiles.Version == 0)
-            {
-                candidate.Monitoring.ConnectorProfiles = RuntimeJson.Clone(Current.Configuration).Monitoring.ConnectorProfiles;
-            }
-
-            runtime.Validate(candidate);
-            var previous = Current;
-
-            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            deadline.CancelAfter(TimeSpan.FromSeconds(10));
-            try
-            {
-                await runtime.ApplyAsync(candidate, deadline.Token);
-            }
-            catch
-            {
-                await RestoreAsync(previous.Configuration);
-                throw;
-            }
-
             _observedContents = contents;
-            Volatile.Write(ref _current, new ConfigurationSnapshot(previous.Revision + 1, candidate, Version: CreateVersion(previous.Revision + 1)));
-            Changed?.Invoke();
-            logger.LogActivity(LogLevel.Information, "configuration.reloaded", "Configuration", "Service settings reloaded from disk.",
-                $"Revision {Current.Revision}.");
+            var candidate = runtime.WarningRegistry.Migrate(runtime.MigrateConfiguration(RuntimeJson.Deserialize(contents)));
+            await CommitAsync(candidate, contents, cancellationToken);
         }
         catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            if (Current.LastError != exception.Message)
+            if (contents is null)
+            {
+                // The file may reappear with the same contents after a transient read failure.
+                _observedContents = null;
+            }
+            if (ReferenceEquals(Current, previous) && Current.LastError != exception.Message)
             {
                 logger.LogActivity(LogLevel.Warning, "configuration.reload-rejected", "Configuration",
                     "Settings from disk were rejected. The service retained the last valid configuration.",
                     eventViewer: true, exception: exception);
-                Volatile.Write(ref _current, Current with { LastError = exception.Message });
-                Changed?.Invoke();
+                Publish(Current with { LastError = exception.Message });
             }
         }
         finally
@@ -227,24 +175,118 @@ public sealed class RuntimeConfigurationService(PluginRuntimeManager runtime, Ru
         }
     }
 
-    private async Task RestoreAsync(ServiceConfiguration configuration)
+    private async Task CommitAsync(ServiceConfiguration candidate, string? fileContents, CancellationToken cancellationToken)
+    {
+        var previous = Current;
+        if (candidate.Monitoring.ConnectorProfiles.Version == 0)
+        {
+            candidate.Monitoring.ConnectorProfiles = RuntimeJson.Clone(previous.Configuration).Monitoring.ConnectorProfiles;
+        }
+
+        runtime.Validate(candidate);
+        var fromDisk = fileContents is not null;
+        var contents = fileContents ?? RuntimeJson.Serialize(candidate);
+        if (!fromDisk)
+        {
+            await SaveUpdateAsync(contents, cancellationToken);
+        }
+
+        // After persisting an API update, finish applying even if the caller disconnects.
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(fromDisk ? cancellationToken : CancellationToken.None);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
+        var revision = previous.Revision + 1;
+        try
+        {
+            await runtime.ApplyAsync(candidate, deadline.Token);
+        }
+        catch (Exception applyError)
+        {
+            _observedContents = contents;
+            var failure = await RecoverAsync(applyError, revision, async () =>
+            {
+                var restored = RuntimeJson.Serialize(previous.Configuration);
+                await PersistAsync(restored, CancellationToken.None);
+                _observedContents = restored;
+            }, async () =>
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                await runtime.ApplyAsync(previous.Configuration, timeout.Token);
+            });
+            var detail = failure?.Message ?? $"Applying revision {revision} failed: {applyError.Message}. Disk and runtime were restored to revision {previous.Revision}.";
+            logger.LogActivity(failure is null ? LogLevel.Warning : LogLevel.Error,
+                failure is null ? "configuration.rolled-back" : "configuration.rollback-failed", "Configuration",
+                detail, eventViewer: true, exception: (Exception?)failure ?? applyError);
+            Publish(previous with { LastError = detail });
+            if (failure is not null)
+            {
+                throw failure;
+            }
+            throw;
+        }
+
+        _observedContents = contents;
+        Publish(new ConfigurationSnapshot(revision, candidate, Version: CreateVersion(revision)));
+        logger.LogActivity(LogLevel.Information, fromDisk ? "configuration.reloaded" : "configuration.applied",
+            "Configuration", fromDisk ? "Service settings reloaded from disk." : "Service settings applied.", $"Revision {revision}.");
+    }
+
+    internal static async Task<AggregateException?> RecoverAsync(Exception applyError, long revision,
+        Func<Task> restoreFile, Func<Task> restoreRuntime)
+    {
+        List<Exception> errors = [applyError];
+        async Task<string> Restore(string target, Func<Task> operation)
+        {
+            try
+            {
+                await operation();
+                return $"{target} restored";
+            }
+            catch (Exception error)
+            {
+                errors.Add(error);
+                return $"{target} restore failed: {error.Message}";
+            }
+        }
+
+        var disk = await Restore("Disk", restoreFile);
+        var hardware = await Restore("Runtime", restoreRuntime);
+        return errors.Count == 1 ? null : new AggregateException(
+            $"Applying revision {revision} failed: {applyError.Message}. {disk}. {hardware}.", errors);
+    }
+
+    private void Publish(ConfigurationSnapshot snapshot)
+    {
+        Volatile.Write(ref _current, snapshot);
+        if (Changed is not { } handlers)
+        {
+            return;
+        }
+        foreach (Action notify in handlers.GetInvocationList())
+        {
+            try
+            {
+                notify();
+            }
+            catch (Exception error)
+            {
+                logger.LogActivity(LogLevel.Error, "configuration.notification-failed", "Configuration",
+                    $"A listener failed after revision {snapshot.Revision} was published.", exception: error);
+            }
+        }
+    }
+
+    private async Task SaveUpdateAsync(string contents, CancellationToken cancellationToken)
     {
         try
         {
-            var contents = RuntimeJson.Serialize(configuration);
-            await PersistAsync(contents, CancellationToken.None);
-
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            await runtime.ApplyAsync(configuration, timeout.Token);
-
-            _observedContents = contents;
-            logger.LogActivity(LogLevel.Warning, "configuration.rolled-back", "Configuration",
-                "Applying new settings failed. The previous settings were restored.", eventViewer: true);
+            await PersistAsync(contents, cancellationToken);
         }
-        catch (Exception error)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            logger.LogActivity(LogLevel.Error, "configuration.rollback-failed", "Configuration",
-                "The previous settings could not be restored.", eventViewer: true, exception: error);
+            var detail = $"Could not save revision {Current.Revision + 1}: {error.Message}";
+            logger.LogActivity(LogLevel.Error, "configuration.save-failed", "Configuration",
+                "The service could not save its settings.", detail, eventViewer: true, exception: error);
+            Publish(Current with { LastError = detail });
             throw;
         }
     }
@@ -255,11 +297,38 @@ public sealed class RuntimeConfigurationService(PluginRuntimeManager runtime, Ru
         try
         {
             await File.WriteAllTextAsync(temporaryPath, contents, cancellationToken);
-            File.Move(temporaryPath, file.Path, overwrite: true);
+            await ReplaceFileAsync(temporaryPath, cancellationToken);
         }
-        finally
+        catch
         {
-            File.Delete(temporaryPath);
+            try
+            {
+                File.Delete(temporaryPath);
+            }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
+            {
+                logger.LogWarning(cleanup, "Could not remove a temporary configuration file.");
+            }
+            throw;
+        }
+    }
+
+    private async Task ReplaceFileAsync(string temporaryPath, CancellationToken cancellationToken)
+    {
+        // A Windows reader can briefly block renaming the destination. Retry only the atomic move.
+        for (var delayMs = 20; ; delayMs *= 2)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                File.Move(temporaryPath, file.Path, overwrite: true);
+                return;
+            }
+            catch (Exception error) when (OperatingSystem.IsWindows() && delayMs <= 160 &&
+                (error is UnauthorizedAccessException || error is IOException && (error.HResult & 0xffff) is 32 or 33))
+            {
+                await Task.Delay(delayMs, cancellationToken);
+            }
         }
     }
 

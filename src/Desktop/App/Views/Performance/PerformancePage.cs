@@ -27,6 +27,7 @@ internal sealed class PerformancePage : UserControl
     private readonly Dictionary<string, IBrush> _traceColors = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _cursors = new(StringComparer.Ordinal);
     private readonly TextBlock _status = Caption();
+    private readonly ContentControl _importAlert;
     private readonly TextBlock _emptySources = Caption("Waiting for supported sensor readings.");
     private readonly TextBlock _timelineEnd = Caption("00:00:00");
     private readonly ToggleSwitch _follow = ToolbarToggle("Follow latest", isChecked: true);
@@ -45,11 +46,12 @@ internal sealed class PerformancePage : UserControl
     public PerformancePage(PerformanceRecorder recorder)
     {
         _recorder = recorder;
+        _importAlert = Alert(dismiss: DismissImportAlert);
         _start = ActionButton("New recording", "chart-record", recorder.Start);
         _stop = ActionButton("Stop recording", "chart-stop", recorder.Stop);
         _clear = ActionButton("Clear recording", "chart-clear", recorder.Clear);
-        _import = ActionButton("Import recording", "chart-import", async void () => await ImportAsync());
-        _export = ActionButton("Export recording", "chart-export", async void () => await ExportAsync());
+        _import = ActionButton("Import recording", "chart-import", ImportAsync);
+        _export = ActionButton("Export recording", "chart-export", ExportAsync);
 
         var actions = new WrapPanel
         {
@@ -205,7 +207,7 @@ internal sealed class PerformancePage : UserControl
             Margin = new Thickness(0, 12, 0, 12),
             RowDefinitions = new RowDefinitions("Auto,*"),
             RowSpacing = 10,
-            Children = { heading, content }
+            Children = { new StackPanel { Spacing = 8, Children = { heading, _importAlert } }, content }
         };
         Grid.SetRow(content, 1);
         Content = page;
@@ -316,7 +318,8 @@ internal sealed class PerformancePage : UserControl
     private void RenderFrame()
     {
         var metadata = _recorder.ReadFrame(_sessionId, _cursors, includeSamples: false);
-        if (_sessionId != metadata.SessionId)
+        var sessionChanged = _sessionId != metadata.SessionId;
+        if (sessionChanged)
         {
             _sessionId = metadata.SessionId;
             _visibleRange = null;
@@ -327,7 +330,14 @@ internal sealed class PerformancePage : UserControl
             _visibleRange?.Minimum ?? 0, _visibleRange?.Maximum ?? Math.Max(1, metadata.DurationSeconds),
             Math.Max(200, (int)_plots.Bounds.Width), Follow: _followLatest, Fit: !_followLatest && _visibleRange is null);
         var frame = _recorder.ReadDisplayFrame(viewport);
-        _status.Text = $"{frame.Status} · {frame.SampleCount:N0} samples";
+        var samples = $"{frame.SampleCount:N0} samples";
+        var imported = frame.Status == PerformanceRecorder.ImportedStatus;
+        if (sessionChanged)
+        {
+            SetAlert(_importAlert, imported ? $"Imported recording · {samples}" : null, "success");
+        }
+        _status.Text = imported ? samples : $"{frame.Status} · {samples}";
+        _status.IsVisible = !(_importAlert.IsVisible && _importAlert.Classes.Contains("success"));
         _start.IsEnabled = !frame.Recording && frame.Series.Any(series => series is { Available: true, Selected: true });
         _stop.IsEnabled = frame.Recording;
         _clear.IsEnabled = frame is { Recording: false, SampleCount: > 0 };
@@ -613,29 +623,36 @@ _timeline.IsEnabled = _timeline.Maximum > 0;
     private static string FormatHoverTime(double seconds) =>
         TimeSpan.FromMilliseconds(Math.Round(seconds * 1000)).ToString(@"hh\:mm\:ss\.fff");
 
-    private async Task ImportAsync()
+    private Task ImportAsync() => ImportAsync(PickRecordingAsync);
+
+    private async Task<Stream?> PickRecordingAsync()
     {
         if (TopLevel.GetTopLevel(this)?.StorageProvider is not { } storage)
         {
-            return;
+            return null;
         }
 
+        var files = await storage.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Import recording",
+            FileTypeFilter =
+            [
+                new FilePickerFileType("RTX Lens recording or HTML export") { Patterns = ["*.json", "*.rtxlens-recording", "*.html"] }
+            ]
+        });
+        return files.Count == 0 ? null : await files[0].OpenReadAsync();
+    }
+
+    internal async Task ImportAsync(Func<Task<Stream?>> open)
+    {
         try
         {
-            var files = await storage.OpenFilePickerAsync(new FilePickerOpenOptions
-            {
-                Title = "Import recording",
-                FileTypeFilter =
-                [
-                    new FilePickerFileType("RTX Lens recording or HTML export") { Patterns = ["*.json", "*.rtxlens-recording", "*.html"] }
-                ]
-            });
-            if (files.Count == 0)
+            await using var stream = await open();
+            if (stream is null)
             {
                 return;
             }
 
-            await using var stream = await files[0].OpenReadAsync();
             if (stream is { CanSeek: true, Length: > PerformanceRecordingFile.MaximumFileBytes })
             {
                 throw new InvalidDataException("The recording exceeds the supported file size.");
@@ -643,12 +660,20 @@ _timeline.IsEnabled = _timeline.Maximum > 0;
 
             using var reader = new StreamReader(stream);
             _recorder.Import(await Task.Run(async () => PerformanceRecordingFile.Deserialize(await reader.ReadToEndAsync())));
+            RenderFrame();
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException
-            or System.Text.Json.JsonException)
+            or InvalidDataException or System.Text.Json.JsonException)
         {
-            _status.Text = error.Message;
+            SetAlert(_importAlert, error.Message, "warning");
+            _status.IsVisible = true;
         }
+    }
+
+    private void DismissImportAlert()
+    {
+        SetAlert(_importAlert, null);
+        _status.IsVisible = true;
     }
 
     private async Task ExportAsync()
@@ -690,11 +715,13 @@ _timeline.IsEnabled = _timeline.Maximum > 0;
             using var writer = new StreamWriter(stream);
             await writer.WriteAsync(contents);
             _status.Text = "Recording exported.";
+            _status.IsVisible = true;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException
             or InvalidOperationException)
         {
             _status.Text = error.Message;
+            _status.IsVisible = true;
         }
     }
 }

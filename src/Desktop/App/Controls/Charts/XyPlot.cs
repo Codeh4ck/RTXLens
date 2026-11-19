@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using RTXLens.Contracts.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.VisualTree;
@@ -125,6 +127,7 @@ public abstract class XyPlot : Control
 
     public sealed override void Render(DrawingContext context)
     {
+        var started = Stopwatch.GetTimestamp();
         base.Render(context);
 
         var layout = GetPlotLayout();
@@ -144,6 +147,7 @@ public abstract class XyPlot : Control
 
         DrawMarkers(context, layout);
         DrawOverlay(context, layout);
+        TelemetryMetrics.RenderDuration.Record(Stopwatch.GetElapsedTime(started).TotalMilliseconds);
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)

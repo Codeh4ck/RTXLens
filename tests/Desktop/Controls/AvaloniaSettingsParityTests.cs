@@ -1,3 +1,4 @@
+using static RTXLens.UI.Tests.Controls.AvaloniaControlsTests;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -358,8 +359,7 @@ internal static class AvaloniaSettingsParityTests
                 var button = (target ?? window).GetVisualDescendants().OfType<Button>()
                     .Single(item => AutomationProperties.GetName(item) == title);
                 TestAssert.True(button.IsEffectivelyEnabled, $"{title} should be enabled.");
-                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                Dispatcher.UIThread.RunJobs();
+                AvaloniaControlsTests.InvokeButton(button);
             }
         }
         finally
@@ -372,18 +372,6 @@ internal static class AvaloniaSettingsParityTests
     {
         PumpUntil(() => task.IsCompleted);
         task.GetAwaiter().GetResult();
-    }
-
-    private static void PumpUntil(Func<bool> ready)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(3);
-        while (!ready() && DateTime.UtcNow < deadline)
-        {
-            Dispatcher.UIThread.RunJobs();
-            Thread.Sleep(1);
-        }
-
-        TestAssert.True(ready(), "The UI operation did not complete.");
     }
 
     private sealed class SettingsService : HttpMessageHandler

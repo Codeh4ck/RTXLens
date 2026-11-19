@@ -152,7 +152,7 @@ internal sealed class HardwarePage : UserControl
             void UpdateSettings() => settings.IsVisible = panel is { CanReadDevice: true, IsReporting: true }
                                                           && shell.CanOpenWireViewSettings;
 
-            var clear = ActionButton("Clear faults", "chart-clear", async void () =>
+            var clear = ActionButton("Clear faults", "chart-clear", async () =>
             {
                 if (TopLevel.GetTopLevel(actions) is not Window owner)
                 {

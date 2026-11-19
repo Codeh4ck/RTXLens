@@ -48,8 +48,8 @@ internal sealed class WireViewDeviceWindow : LensWindow
         MinHeight = 420;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
-        _refresh = ActionButton("Refresh", "refresh", async void () => await RefreshAsync());
-        _apply = CommitButton("Apply", async void () => await ApplyAsync());
+        _refresh = ActionButton("Refresh", "refresh", RefreshAsync);
+        _apply = CommitButton("Apply", ApplyAsync);
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _refresh, _apply } };
         var header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 12 };
         header.Children.Add(new StackPanel { Spacing = 4, Children = { _firmware, _description } });

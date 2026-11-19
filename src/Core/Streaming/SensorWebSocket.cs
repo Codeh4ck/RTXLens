@@ -6,8 +6,7 @@ namespace RTXLens.Core.Streaming;
 
 public static class SensorWebSocket
 {
-    public static async Task StreamAsync(HttpContext context, SensorStreamHub hub, IHostApplicationLifetime lifetime,
-        Func<byte[], byte[]>? formatFrame = null)
+    public static async Task StreamAsync(HttpContext context, SensorStreamHub hub, IHostApplicationLifetime lifetime, Func<byte[], byte[]>? formatFrame = null)
     {
         if (!context.WebSockets.IsWebSocketRequest)
         {
@@ -28,6 +27,7 @@ public static class SensorWebSocket
         if (send.IsCompletedSuccessfully && !receive.IsCompleted && socket.State == WebSocketState.Open)
         {
             using var closeDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+
             try
             {
                 await socket.CloseOutputAsync(WebSocketCloseStatus.EndpointUnavailable, "Stream unavailable", closeDeadline.Token);
@@ -73,12 +73,11 @@ public static class SensorWebSocket
         }
     }
 
-    private static async Task SendAsync(WebSocket socket, Subscription subscription, Func<byte[], byte[]>? formatFrame,
-        CancellationToken cancellationToken)
+    private static async Task SendAsync(WebSocket socket, Subscription subscription, Func<byte[], byte[]>? formatFrame, CancellationToken token)
     {
-        await foreach (var frame in subscription.Reader.ReadAllAsync(cancellationToken))
+        await foreach (var frame in subscription.Reader.ReadAllAsync(token))
         {
-            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
             deadline.CancelAfter(TimeSpan.FromSeconds(5));
 
             var payload = formatFrame is null ? frame : formatFrame(frame);

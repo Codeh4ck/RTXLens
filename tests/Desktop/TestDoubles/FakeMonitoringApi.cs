@@ -24,6 +24,7 @@ internal sealed class FakeMonitoringApi : IMonitoringApi
     public ConfigurationSnapshot Configuration = UiTestData.Configuration;
     public Channel<SensorSnapshot> Frames { get; } = Channel.CreateUnbounded<SensorSnapshot>();
     public int StreamConnections;
+    public Exception? FirstStreamError { get; init; }
     public int CatalogRequests;
     public int ConfigurationRequests;
 
@@ -55,7 +56,10 @@ internal sealed class FakeMonitoringApi : IMonitoringApi
     public Task RestartServiceAsync(CancellationToken token) => Task.CompletedTask;
     public async IAsyncEnumerable<SensorSnapshot> ReadSensorsAsync([EnumeratorCancellation] CancellationToken token)
     {
-        Interlocked.Increment(ref StreamConnections);
+        if (Interlocked.Increment(ref StreamConnections) == 1 && FirstStreamError is { } error)
+        {
+            throw error;
+        }
         await foreach (var frame in Frames.Reader.ReadAllAsync(token))
         {
             yield return frame;

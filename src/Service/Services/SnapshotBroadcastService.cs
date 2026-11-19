@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Text.Json;
+using RTXLens.Contracts.Diagnostics;
 using RTXLens.Contracts.Configuration;
 using RTXLens.Core;
 using RTXLens.Core.Configuration;
@@ -35,6 +37,7 @@ internal sealed class SnapshotBroadcastService(IRuntimeConfiguration configurati
                 var current = configuration.Current;
                 var settings = current.Configuration.Monitoring;
                 var now = clock.GetUtcNow();
+                var started = Stopwatch.GetTimestamp();
                 var snapshot = store.Snapshot(now, settings.Selections) with { ConfigurationRevision = current.Revision };
 
                 snapshot = activity.ResolveConnectorSources(snapshot, current.Configuration);
@@ -54,6 +57,7 @@ internal sealed class SnapshotBroadcastService(IRuntimeConfiguration configurati
                     shutdown.Evaluate(evaluated.Shutdowns);
                 });
 
+                TelemetryMetrics.SnapshotDuration.Record(Stopwatch.GetElapsedTime(started).TotalMilliseconds);
                 activity.Observe(snapshot, settings.ConnectorProfiles);
                 mobileAccess?.ObserveWarnings(snapshot);
 

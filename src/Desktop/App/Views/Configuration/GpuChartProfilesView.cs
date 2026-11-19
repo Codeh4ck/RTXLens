@@ -43,10 +43,10 @@ internal sealed class GpuChartProfilesView : ProfileRequestView
     public GpuChartProfilesView(ShellViewModel shell) : base(shell)
     {
         AutomationProperties.SetName(_profiles, "GPU chart profile");
-        _use = ActionButton("Use selected profile", "wireview-apply", async void () => await RunAsync(UseSelectedAsync));
+        _use = ActionButton("Use selected profile", "wireview-apply", () => RunAsync(UseSelectedAsync));
         _use.Classes.Add("desktop-action");
         _use.VerticalAlignment = VerticalAlignment.Center;
-        _add = IconButton("Add GPU chart profile", "add-action", async void () =>
+        _add = IconButton("Add GPU chart profile", "add-action", async () =>
         {
             if (TopLevel.GetTopLevel(this) is Window owner &&
                 await RequestProfileNameAsync(owner, "New GPU chart profile") is { } name)
@@ -54,7 +54,7 @@ internal sealed class GpuChartProfilesView : ProfileRequestView
                 await RunAsync(api => AddAsync(api, name));
             }
         });
-        _delete = IconButton("Delete GPU chart profile", "chart-clear", async void () =>
+        _delete = IconButton("Delete GPU chart profile", "chart-clear", async () =>
         {
             if (_profiles.SelectedItem is ProfileOption { IsCustom: true, Profile: var profile }
                 && TopLevel.GetTopLevel(this) is Window owner
@@ -64,7 +64,7 @@ internal sealed class GpuChartProfilesView : ProfileRequestView
             }
         });
 
-        _save = CommitButton("Save configuration", async void () => await RunAsync(SaveAsync));
+        _save = CommitButton("Save configuration", () => RunAsync(SaveAsync));
         _power.PlaceholderText = "Use cable rating";
 
         _fields = Stack(

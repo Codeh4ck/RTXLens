@@ -22,6 +22,10 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
     private readonly DateTimeOffset _startedAt = clock.GetUtcNow();
     private readonly Dictionary<Guid, string> _loggedStatus = new();
 
+    private readonly Dictionary<Guid, CachedHistory> _historyCache = new();
+    private readonly HashSet<Guid> _readFailures = [];
+    private DateTimeOffset _nextMailCleanup;
+
     public SafeguardExecutionNotice[]? Notices => Volatile.Read(ref _notices);
 
     public void Observe(SensorSnapshot snapshot) => _telemetry.Observe(snapshot);
@@ -49,8 +53,9 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
 
             var telemetry = storage.Read<SafeguardTelemetry>("telemetry", id);
             var delivery = storage.Read<SafeguardDelivery>("delivery", id);
-            return new MobileIncident(id, "safeguard", execution.Name, "Safeguard+", execution.StartedAt, execution.FinishedAt,
-                SafeguardStorage.DisplayStatus(execution, now))
+            var status = SafeguardStorage.DisplayStatus(execution, now);
+
+            return new MobileIncident(id, "safeguard", execution.Name, "Safeguard+", execution.StartedAt, execution.FinishedAt, status)
             {
                 Connector = execution.Connector, DelayMs = execution.DelayMs, Steps = execution.Steps ?? [], DeliveryStatus = delivery?.Status,
                 CapturedAt = telemetry?.CapturedAt, Readings = telemetry?.Readings ?? []
@@ -104,6 +109,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
     {
         SafeguardStorage? storage = null;
         using var timer = new PeriodicTimer(interval, clock);
+
         do
         {
             try
@@ -126,7 +132,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
     }
 
     [SupportedOSPlatform("windows")]
-    private Task RefreshNoticesAsync(SafeguardStorage storage, CancellationToken token)
+    internal Task RefreshNoticesAsync(ISafeguardJournalStorage storage, CancellationToken token)
     {
         CapturePendingTelemetry(storage, token);
 
@@ -135,12 +141,17 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
         var notices = new List<SafeguardExecutionNotice>();
         var newExecutions = new List<SafeguardExecutionNotice>();
 
-        foreach (var id in storage.Ids("history"))
+        var retained = storage.Ids("history").ToHashSet();
+
+        foreach (var id in retained)
         {
             token.ThrowIfCancellationRequested();
+
             try
             {
-                var execution = storage.Read<SafeguardExecution>("history", id);
+                var execution = ReadHistory(storage, id);
+                _readFailures.Remove(id);
+
                 if (execution is null || execution.Id != id || execution.Connector is not (1 or 2))
                 {
                     continue;
@@ -149,19 +160,22 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
                 if (execution.StartedAt < cutoff && !SafeguardStorage.IsRunning(execution, now))
                 {
                     storage.DeleteExecutionHistory(id);
+
+                    _historyCache.Remove(id);
+                    _loggedStatus.Remove(id);
+
                     continue;
                 }
 
-                if (now - execution.StartedAt <= SafeguardTelemetryBuffer.MaximumCaptureAge
-                    && !File.Exists(storage.Location("telemetry", id)))
+                if (now - execution.StartedAt <= SafeguardTelemetryBuffer.MaximumCaptureAge && !File.Exists(storage.Location("telemetry", id)))
                 {
                     CaptureTelemetry(storage, id, execution.StartedAt);
                 }
 
                 var status = SafeguardStorage.DisplayStatus(execution, now);
-                var notice = new SafeguardExecutionNotice(id, execution.Name, execution.Connector, execution.StartedAt, status,
-                    execution.ScriptId == SafeguardScripts.Simulation);
+                var notice = new SafeguardExecutionNotice(id, execution.Name, execution.Connector, execution.StartedAt, status, execution.ScriptId == SafeguardScripts.Simulation);
                 notices.Add(notice);
+
                 if (mobilePush is not null && !notice.IsSimulation && notice.StartedAt >= _startedAt && !_loggedStatus.ContainsKey(id))
                 {
                     newExecutions.Add(notice);
@@ -171,18 +185,24 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
             }
             catch (Exception error) when (IsRecordError(error))
             {
-                logger.LogWarning("Could not read Safeguard+ execution {ExecutionId} ({Type})", id, error.GetType().Name);
+                if (_readFailures.Add(id))
+                {
+                    logger.LogWarning("Could not read Safeguard+ execution {ExecutionId} ({Type})", id, error.GetType().Name);
+                }
             }
         }
 
-        if (_loggedStatus.Count > notices.Count)
+        foreach (var id in _loggedStatus.Keys.Where(id => !retained.Contains(id)).ToArray())
         {
-            var retained = notices.Select(notice => notice.Id).ToHashSet();
-            foreach (var id in _loggedStatus.Keys.Where(id => !retained.Contains(id)).ToArray())
-            {
-                _loggedStatus.Remove(id);
-            }
+            _loggedStatus.Remove(id);
         }
+
+        foreach (var id in _historyCache.Keys.Where(id => !retained.Contains(id)).ToArray())
+        {
+            _historyCache.Remove(id);
+        }
+
+        _readFailures.RemoveWhere(id => !retained.Contains(id));
 
         Volatile.Write(ref _notices, [.. notices.OrderBy(notice => notice.StartedAt).ThenBy(notice => notice.Id)]);
         foreach (var notice in newExecutions)
@@ -190,6 +210,39 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
             mobilePush?.SendSafeguard(notice.Id, notice.Connector, notice.StartedAt);
         }
         return Task.CompletedTask;
+    }
+
+    private sealed record CachedHistory(DateTime LastWrite, long Length, SafeguardExecution? Execution);
+
+    private SafeguardExecution? ReadHistory(ISafeguardJournalStorage storage, Guid id)
+    {
+        var file = new FileInfo(storage.Location("history", id));
+        var lastWrite = file.LastWriteTimeUtc;
+        var length = file.Length;
+
+        if (_historyCache.TryGetValue(id, out var cached) && cached.LastWrite == lastWrite && cached.Length == length)
+        {
+            return cached.Execution;
+        }
+
+        _historyCache.Remove(id);
+        try
+        {
+            var record = storage.Read<SafeguardExecution>("history", id);
+
+            if (record?.FinishedAt is not null)
+            {
+                // The notice only uses the summary. Full reports load their own steps on demand.
+                _historyCache[id] = new(lastWrite, length, record with { Steps = [] });
+            }
+
+            return record;
+        }
+        catch (Exception error) when (error is JsonException or InvalidDataException)
+        {
+            _historyCache[id] = new(lastWrite, length, null);
+            throw;
+        }
     }
 
     private void ObserveExecution(SafeguardExecution execution, string status)
@@ -232,7 +285,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
     }
 
     [SupportedOSPlatform("windows")]
-    private void CapturePendingTelemetry(SafeguardStorage storage, CancellationToken token)
+    private void CapturePendingTelemetry(ISafeguardJournalStorage storage, CancellationToken token)
     {
         foreach (var id in storage.Ids("outbox"))
         {
@@ -256,7 +309,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
     }
 
     [SupportedOSPlatform("windows")]
-    private SafeguardTelemetry? CaptureTelemetry(SafeguardStorage storage, Guid id, DateTimeOffset startedAt)
+    private SafeguardTelemetry? CaptureTelemetry(ISafeguardJournalStorage storage, Guid id, DateTimeOffset startedAt)
     {
         SafeguardTelemetry? frame = null;
         try
@@ -292,7 +345,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
     }
 
     [SupportedOSPlatform("windows")]
-    private async Task ProcessMailAsync(SafeguardStorage storage, CancellationToken token)
+    internal async Task ProcessMailAsync(ISafeguardJournalStorage storage, CancellationToken token)
     {
         var now = clock.GetUtcNow();
         foreach (var id in storage.Ids("requests"))
@@ -306,6 +359,8 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
             token.ThrowIfCancellationRequested();
             await DeliverAlarmAsync(storage, id, now, token);
         }
+
+        if (now < _nextMailCleanup) return;
 
         foreach (var id in storage.Ids("results"))
         {
@@ -324,10 +379,11 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
                 storage.Delete("delivery", id);
             }
         }
+        _nextMailCleanup = now.AddMinutes(1);
     }
 
     [SupportedOSPlatform("windows")]
-    private async Task HandleMailRequestAsync(SafeguardStorage storage, Guid id, DateTimeOffset now, CancellationToken token)
+    private async Task HandleMailRequestAsync(ISafeguardJournalStorage storage, Guid id, DateTimeOffset now, CancellationToken token)
     {
         SafeguardMailResult result;
 
@@ -415,7 +471,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
     }
 
     [SupportedOSPlatform("windows")]
-    private async Task DeliverAlarmAsync(SafeguardStorage storage, Guid id, DateTimeOffset now, CancellationToken token)
+    private async Task DeliverAlarmAsync(ISafeguardJournalStorage storage, Guid id, DateTimeOffset now, CancellationToken token)
     {
         var attempt = 1;
         try
@@ -501,7 +557,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
     }
 
     [SupportedOSPlatform("windows")]
-    private void DeleteMailJob(SafeguardStorage storage, Guid id)
+    private void DeleteMailJob(ISafeguardJournalStorage storage, Guid id)
     {
         try
         {
@@ -573,7 +629,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
         await client.SendAsync(message, deadline.Token);
     }
 
-    private static bool IsRecordError(Exception error) => error is IOException or UnauthorizedAccessException or JsonException;
+    private static bool IsRecordError(Exception error) => error is IOException or UnauthorizedAccessException or JsonException or InvalidDataException;
 
     private static bool IsMailError(Exception error) => IsRecordError(error)
         || error is ArgumentException or FormatException or CryptographicException or OperationCanceledException

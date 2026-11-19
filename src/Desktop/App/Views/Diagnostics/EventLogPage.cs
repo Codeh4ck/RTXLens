@@ -55,9 +55,9 @@ internal sealed class EventLogPage : UserControl
 
         var filters = ToolbarGroup("Filters", _level, _source, _sort);
         var actions = ToolbarGroup("Actions",
-            ActionButton("Export logs", "chart-export", async void () => await ExportAsync()),
-            ActionButton("Clear events", "chart-clear", async void () => await ClearAsync()),
-            ActionButton("Load older", "refresh", async void () => await LoadOlderAsync()));
+            ActionButton("Export logs", "chart-export", ExportAsync),
+            ActionButton("Clear events", "chart-clear", ClearAsync),
+            ActionButton("Load older", "refresh", LoadOlderAsync));
         var toolbar = new WrapPanel
         {
             ItemSpacing = 20,
@@ -213,7 +213,7 @@ internal sealed class EventLogPage : UserControl
             {
                 return;
             }
-            catch (Exception error) when (error is IOException or HttpRequestException or OperationCanceledException or JsonException)
+            catch (Exception error) when (error is IOException or InvalidDataException or HttpRequestException or OperationCanceledException or JsonException)
             {
                 _status.Text = error.Message;
             }
@@ -298,7 +298,7 @@ internal sealed class EventLogPage : UserControl
         {
             Receive(await _client.ReadHistoryAsync(_entries.Min(entry => entry.Sequence), _stop.Token));
         }
-        catch (Exception error) when (error is IOException or HttpRequestException or OperationCanceledException or JsonException)
+        catch (Exception error) when (error is IOException or InvalidDataException or HttpRequestException or OperationCanceledException or JsonException)
         {
             _status.Text = error.Message;
         }
@@ -324,7 +324,7 @@ internal sealed class EventLogPage : UserControl
             Receive(page);
             _status.Text = "Events cleared.";
         }
-        catch (Exception error) when (error is IOException or HttpRequestException or OperationCanceledException or JsonException)
+        catch (Exception error) when (error is IOException or InvalidDataException or HttpRequestException or OperationCanceledException or JsonException)
         {
             _status.Text = error.Message;
         }

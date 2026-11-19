@@ -29,6 +29,7 @@ MonitoringOptionsTests.Run(runner);
 SensorIdentityTests.Run(runner);
 SensorStreamHubTests.Run(runner);
 WireViewConfigParserTests.Run(runner);
+WireViewPollingTests.Run(runner);
 AsusAlertTests.Run(runner);
 await AsusPluginTests.RunAsync(runner);
 await MsiPluginTests.RunAsync(runner);
@@ -36,6 +37,10 @@ MsiFanCurveTests.Run(runner);
 await MsiEndpointTests.RunAsync(runner);
 
 SafeguardEmailTests.Run(runner);
+if (OperatingSystem.IsWindows())
+{
+    await SafeguardHistoryPollingTests.RunAsync(runner);
+}
 await SettingsProfileTests.RunEndpointsAsync(runner);
 await WarningConfigurationTests.RunAsync(runner);
 await HealthEndpointTests.RunAsync(runner);

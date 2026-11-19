@@ -83,25 +83,25 @@ internal sealed class AfterburnerSettingsWindow : LensWindow
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         _connectors.Theme = (ControlTheme)Application.Current!.FindResource("ConfigurationTabStripTheme")!;
 
-        _save = ActionButton("Save config", "chart-export", async void () => await RunAsync(SaveAsync));
-        _restore = ActionButton("Restore config", "chart-import", async void () => await RunAsync(RestoreAsync));
-        _delete = ActionButton("Delete", "chart-clear", async void () => await RunAsync(DeleteAsync));
-        _apply = CommitButton("Apply Afterburner settings", async void () => await RunAsync(ApplyAsync));
-        _restart = ActionButton("Start Afterburner", "refresh", async void () => await RunAsync(RestartAsync));
+        _save = ActionButton("Save config", "chart-export", () => RunAsync(SaveAsync));
+        _restore = ActionButton("Restore config", "chart-import", () => RunAsync(RestoreAsync));
+        _delete = ActionButton("Delete", "chart-clear", () => RunAsync(DeleteAsync));
+        _apply = CommitButton("Apply Afterburner settings", () => RunAsync(ApplyAsync));
+        _restart = ActionButton("Start Afterburner", "refresh", () => RunAsync(RestartAsync));
         _restart.Content = Row(new Image { Source = Icon("refresh"), Width = 15, Height = 15 }, _restartText);
-        _backupFolder = ActionButton("Open backup folder", "folder-action", async void () => await RunAsync(OpenBackupFolderAsync));
+        _backupFolder = ActionButton("Open backup folder", "folder-action", () => RunAsync(OpenBackupFolderAsync));
 
-        var locate = IconButton("Locate Afterburner", "folder-action", async void () => await RunAsync(LocateAsync));
-        var refresh = IconButton("Refresh Afterburner status", "refresh", async void () => await RunAsync(async () =>
+        var locate = IconButton("Locate Afterburner", "folder-action", () => RunAsync(LocateAsync));
+        var refresh = IconButton("Refresh Afterburner status", "refresh", () => RunAsync(async () =>
         {
             if (await ConfirmDiscardAsync())
             {
                 await DiscoverAsync(_store?.Installation);
             }
         }));
-        var softwareInfo = IconButton("About software alarms", "info-action", async void () => await ShowInformationAsync(this,
+        var softwareInfo = IconButton("About software alarms", "info-action", () => ShowInformationAsync(this,
             "Afterburner software alarms", DialogText("Afterburner checks the configured software current limits. The PSU hardware protection remains active.")));
-        var limitInfo = IconButton("About current limits", "info-action", async void () => await ShowInformationAsync(this,
+        var limitInfo = IconButton("About current limits", "info-action", () => ShowInformationAsync(this,
             "Software current limits", DialogText("The limits are shared by both connectors. Current difference is the highest pin current minus the lowest.")));
         var limits = Columns(Field("Max per-pin current (A)", _maximum), Field("Max pin current difference (A)", _difference));
         var limitRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8, Children = { limits, limitInfo } };
@@ -133,7 +133,7 @@ internal sealed class AfterburnerSettingsWindow : LensWindow
             Spacing = 10,
             Children = { Toolbar(_save, _restore, _delete), backups, _backupFolder }
         });
-        backupPanel.HeaderActions = IconButton("About configuration backups", "info-action", async void () => await ShowInformationAsync(this,
+        backupPanel.HeaderActions = IconButton("About configuration backups", "info-action", () => ShowInformationAsync(this,
             "Configuration backups", DialogText("Save config copies both files currently on disk, even while Afterburner is running. "
                 + "RTX Lens also makes a backup before applying settings or restoring a backup.")));
 

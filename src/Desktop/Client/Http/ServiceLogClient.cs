@@ -25,8 +25,7 @@ public sealed class ServiceLogClient(HttpClient http)
     {
         response.EnsureSuccessStatusCode();
 
-        return await response.Content.ReadFromJsonAsync(ClientJsonContext.Default.ServiceLogPage, token).ConfigureAwait(false)
-            ?? throw new InvalidDataException("The backend returned an empty event history.");
+        return Validate(await response.Content.ReadFromJsonAsync(ClientJsonContext.Default.ServiceLogPage, token).ConfigureAwait(false));
     }
 
     public async IAsyncEnumerable<ServiceLogPage> FollowAsync(string instance, long after,
@@ -46,10 +45,18 @@ public sealed class ServiceLogClient(HttpClient http)
                 continue;
             }
 
-            var page = JsonSerializer.Deserialize(line.AsSpan(6), ClientJsonContext.Default.ServiceLogPage)
-                ?? throw new InvalidDataException("The backend returned an empty event stream update.");
-            yield return page;
+            yield return Validate(JsonSerializer.Deserialize(line.AsSpan(6), ClientJsonContext.Default.ServiceLogPage));
         }
+    }
+
+    private static ServiceLogPage Validate(ServiceLogPage? page)
+    {
+        if (page is null || string.IsNullOrWhiteSpace(page.InstanceId) || page.Entries is null ||
+            page.Entries.Any(entry => entry is null || entry.Source is null || entry.Message is null))
+        {
+            throw new InvalidDataException("The backend returned an incomplete event log page.");
+        }
+        return page;
     }
 
     private static async ValueTask<string?> ReadLineAsync(StreamReader reader, CancellationToken token)

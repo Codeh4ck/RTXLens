@@ -6,7 +6,7 @@ using System.Text.Json;
 namespace RTXLens.Plugins.Msi.Contracts.Safeguard;
 
 [SupportedOSPlatform("windows")]
-public sealed class SafeguardStorage
+public sealed class SafeguardStorage : ISafeguardJournalStorage
 {
     private static readonly SecurityIdentifier Administrators = new(WellKnownSidType.BuiltinAdministratorsSid, null);
     private static readonly SecurityIdentifier SystemAccount = new(WellKnownSidType.LocalSystemSid, null);
@@ -16,7 +16,7 @@ public sealed class SafeguardStorage
 
     private readonly string _root;
     private readonly HashSet<string> _verifiedAreas = [];
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
 
     public SafeguardStorage(string? root = null)
     {
@@ -35,12 +35,10 @@ public sealed class SafeguardStorage
         try
         {
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
-            if (stream.Length > 128 * 1024)
-            {
-                throw new InvalidDataException("Safeguard+ record is too large.");
-            }
 
-            return JsonSerializer.Deserialize<T>(stream, Json);
+            return stream.Length > 128 * 1024
+                ? throw new InvalidDataException("Safeguard+ record is too large.")
+                : JsonSerializer.Deserialize<T>(stream, Json);
         }
         catch (FileNotFoundException)
         {
@@ -60,13 +58,13 @@ public sealed class SafeguardStorage
             var security = new FileSecurity();
             security.SetOwner(Administrators);
             security.SetAccessRuleProtection(true, false);
+
             foreach (var account in new[] { Administrators, SystemAccount })
             {
                 security.AddAccessRule(new FileSystemAccessRule(account, FileSystemRights.FullControl, AccessControlType.Allow));
             }
 
-            using (var stream = new FileInfo(temporary).Create(FileMode.CreateNew, FileSystemRights.FullControl,
-                FileShare.None, 4096, FileOptions.None, security))
+            using (var stream = new FileInfo(temporary).Create(FileMode.CreateNew, FileSystemRights.FullControl, FileShare.None, 4096, FileOptions.None, security))
             {
                 JsonSerializer.Serialize(stream, value, Json);
                 stream.Flush(flushToDisk: true);
@@ -84,6 +82,7 @@ public sealed class SafeguardStorage
     {
         var path = Location(area, id);
         EnsureNoLinks(path);
+
         File.Delete(path);
     }
 
@@ -147,19 +146,22 @@ public sealed class SafeguardStorage
         }
 
         var path = Path.Combine(_root, area);
+
         lock (_gate)
         {
-            if (!_verifiedAreas.Contains(area))
+            if (_verifiedAreas.Contains(area))
             {
-                ProtectDirectory(path);
-                _verifiedAreas.Add(area);
+                return path;
             }
+
+            ProtectDirectory(path);
+            _verifiedAreas.Add(area);
         }
 
         return path;
     }
 
-    public static void EnsureNoLinks(string path)
+    private static void EnsureNoLinks(string path)
     {
         for (var current = Path.GetFullPath(path); !string.IsNullOrEmpty(current); current = Path.GetDirectoryName(current))
         {
@@ -185,21 +187,22 @@ public sealed class SafeguardStorage
             var security = new DirectorySecurity();
             security.SetOwner(Administrators);
             security.SetAccessRuleProtection(true, false);
-            var inheritance = InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit;
+
             foreach (var account in new[] { Administrators, SystemAccount })
             {
-                security.AddAccessRule(new FileSystemAccessRule(account, FileSystemRights.FullControl, inheritance,
-                    PropagationFlags.None, AccessControlType.Allow));
+                security.AddAccessRule(new FileSystemAccessRule(account, FileSystemRights.FullControl,
+                    InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
             }
 
             directory.Create(security);
         }
 
         EnsureNoLinks(path);
+
         var actual = directory.GetAccessControl(AccessControlSections.Owner | AccessControlSections.Access);
-        if (!Trusted(actual.GetOwner(typeof(SecurityIdentifier)))
-            || actual.GetAccessRules(true, true, typeof(SecurityIdentifier)).OfType<FileSystemAccessRule>()
-                .Any(rule => rule.AccessControlType == AccessControlType.Allow && !Trusted(rule.IdentityReference)))
+
+        if (!Trusted(actual.GetOwner(typeof(SecurityIdentifier))) || actual.GetAccessRules(true, true,
+                    typeof(SecurityIdentifier)).OfType<FileSystemAccessRule>().Any(rule => rule.AccessControlType == AccessControlType.Allow && !Trusted(rule.IdentityReference)))
         {
             throw new UnauthorizedAccessException("The Safeguard+ data folder has unexpected permissions.");
         }

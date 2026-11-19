@@ -15,6 +15,4 @@ internal static class DesktopBuild
     public const string InstanceName = "RTXLens.App";
     public static readonly Guid TrayIconId = new("2C899FB2-3A10-4548-A37E-28F976C6B3AF");
 #endif
-
-    public const string ShowMessageName = InstanceName + ".Show";
 }

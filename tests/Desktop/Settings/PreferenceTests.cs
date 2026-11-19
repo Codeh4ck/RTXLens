@@ -11,7 +11,6 @@ internal static class PreferenceTests
         runner.Run(RejectsInvalidPreferences);
         await runner.RunAsync(PersistsExitConfirmationChoiceAsync);
         await runner.RunAsync(PersistsAndRecoversFromCorruptPreferencesAsync);
-        await runner.RunAsync(MigratesWindowHeightOnceWithoutLosingPreferencesAsync);
         await runner.RunAsync(WindowPlacementPreferencesAreIndependentAsync);
     }
 
@@ -39,40 +38,6 @@ internal static class PreferenceTests
             TestAssert.True(reloaded.RememberWindowPosition, "Turning size persistence off must preserve position persistence.");
             await store.SaveAsync(reloaded.Value);
             TestAssert.False(store.Load().RememberWindowSize, "An explicit opt-out must survive reloading.");
-
-            var previous = JsonNode.Parse(await File.ReadAllTextAsync(path))!.AsObject();
-            previous["autoResizeWindows"] = true;
-            await File.WriteAllTextAsync(path, previous.ToJsonString());
-            TestAssert.True(store.Load().RememberWindowSize, "The old auto-resize mode must no longer prevent remembering size.");
-        }
-        finally
-        {
-            File.Delete(path);
-        }
-    }
-
-    private static async Task MigratesWindowHeightOnceWithoutLosingPreferencesAsync()
-    {
-        var path = Path.Combine(Path.GetTempPath(), "rtx-window-test-" + Guid.NewGuid().ToString("N") + ".json");
-        try
-        {
-            TestAssert.Equal(1565d, new AppPreferences().WindowWidth);
-            TestAssert.Equal(1103d, new AppPreferences().WindowHeight);
-            var store = new PreferencesStore(path);
-            await store.SaveAsync(new AppPreferences { WindowWidth = 1120, WindowHeight = 800, Theme = AppTheme.Dark, StartMinimized = true });
-            var legacy = JsonNode.Parse(await File.ReadAllTextAsync(path))!.AsObject();
-            legacy.Remove("windowLayoutVersion");
-            await File.WriteAllTextAsync(path, legacy.ToJsonString());
-            var migrated = store.Load();
-            TestAssert.True(store.LastError is null, store.LastError ?? "Legacy preferences must load successfully.");
-            TestAssert.Equal(1050d, migrated.WindowHeight);
-            TestAssert.Equal(1120d, migrated.WindowWidth);
-            TestAssert.True(migrated is { Theme: AppTheme.Dark, StartMinimized: true }, "Migrating window height must preserve other preferences.");
-            await store.SaveAsync(migrated with { WindowHeight = 900 });
-            TestAssert.Equal(900d, store.Load().WindowHeight);
-            legacy["windowHeight"] = 1200;
-            await File.WriteAllTextAsync(path, legacy.ToJsonString());
-            TestAssert.Equal(1200d, store.Load().WindowHeight);
         }
         finally
         {
@@ -129,6 +94,10 @@ internal static class PreferenceTests
                 WireViewPsuConnector = 2, ShowAsusPsuCurrent = true, AsusPsuConnector = 1 };
             await store.SaveAsync(value);
             TestAssert.Equal(value, store.Load());
+            await File.WriteAllTextAsync(path, "null");
+            TestAssert.Equal(new AppPreferences(), store.Load());
+            TestAssert.True(store.LastError is not null, "Null preferences must be reported.");
+
             await File.WriteAllTextAsync(path, "{broken");
             TestAssert.Equal(new AppPreferences(), store.Load());
             TestAssert.True(store.LastError is not null, "Corrupt preferences must be reported.");

@@ -40,6 +40,12 @@ internal sealed class MonitoringTestHost : IAsyncDisposable
     public HttpClient Client { get; }
     public SensorStreamHub SensorHub => _application.Services.GetRequiredService<SensorStreamHub>();
 
+    public RTXLens.Core.SensorStateStore SensorStore => _application.Services.GetRequiredService<RTXLens.Core.SensorStateStore>();
+
+    public Task StopSnapshotBroadcastAsync() => _application.Services
+        .GetServices<Microsoft.Extensions.Hosting.IHostedService>().OfType<SnapshotBroadcastService>().Single()
+        .StopAsync(CancellationToken.None);
+
     public ILogger CreateLogger(string category) => _application.Services.GetRequiredService<ILoggerFactory>().CreateLogger(category);
 
     public string ConfigurationPath { get; }

@@ -63,10 +63,10 @@ internal sealed class SafeguardScriptWindow : LensWindow
 
         var cancel = ActionButton("Cancel", "cancel-action", () => Close());
         var footer = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8 };
-        var save = CommitButton("Save parameters", async void () => await RunAsync(SaveAsync));
+        var save = CommitButton("Save parameters", () => RunAsync(SaveAsync));
         if (script.SendsMail)
         {
-            var test = ActionButton("Send test email", "mail-action", async void () => await RunAsync(async () =>
+            var test = ActionButton("Send test email", "mail-action", () => RunAsync(async () =>
             {
                 var preview = new SafeguardMailPreview(script.Id, connector, ReadInteger("DelayMs"));
                 SafeguardScripts.ValidateDelay(preview.DelayMs);

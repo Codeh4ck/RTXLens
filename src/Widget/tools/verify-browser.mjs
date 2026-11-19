@@ -243,6 +243,13 @@ try {
     await page.setViewportSize({width:840,height:344});
     await properties({...base,smallPanel:'3'});
     assert.equal(await page.locator('#panel3').isVisible(),true,'Compact selector starts on the requested panel');
+    paused = true;
+    for (const socket of sockets) send(socket);
+    await properties({...base, smallPanel: '3', autoPage: true, pageSeconds: 3});
+    assert.equal(await page.locator('#panel3').isVisible(), true, 'Paging starts with a full interval');
+    await page.locator('#panel1').waitFor({ state: 'visible' });
+    paused = false;
+    for (const socket of sockets) send(socket);
     await page.setViewportSize({width:2536,height:696});
     await properties(base);
 
@@ -320,8 +327,15 @@ try {
 
     await properties(base);
     paused = true;
-    await page.waitForTimeout(1900);
-    assert.equal((await page.locator('#panel1 .pin-value').first().innerText()).trim(), '-');
+    await page.waitForFunction(() => document.querySelector('#panel1 .pin-value').textContent.trim() === '-');
+    const idleRenders = await page.evaluate(() => new Promise(resolve => {
+        let renders = 0;
+        // Each dashboard render publishes its connection state on the root.
+        const observer = new MutationObserver(records => { renders += records.length; });
+        observer.observe(document.querySelector('.widget'), { attributes: true, attributeFilter: ['data-connection'] });
+        setTimeout(() => { observer.disconnect(); resolve(renders); }, 1200);
+    }));
+    assert.equal(idleRenders, 0, 'Expired telemetry and disabled paging should leave the dashboard idle');
     paused = false;
     for (const socket of sockets) send(socket);
     await page.waitForFunction(() => document.querySelector('#panel1 .pin-value').textContent.includes('5.8'));
@@ -399,7 +413,7 @@ try {
     console.log(JSON.stringify({ package: latest.package, screenshots:output, layouts:reports.map(report=>({name:report.name,
         size:`${report.width}x${report.height}`,panels:report.panels,overflow:report.overflow.length,
         minimumBar:report.barHeights.length?Math.min(...report.barHeights):null})), errors, readOnlyRequests:requests.length,
-        scenarios:'sources, comparison connectors, metric switching, peaks, compact starting panel, simplified chart captions and height, SVG masks, background image transforms, video rejection, shared font, scan line toggle, reconnect, stale expiry, alerts, disabled plugins, unsupported schema, fixed usage width, ungrouped clocks/RPM, hidden content removal, paused background rendering, mouse/touch double tap, scrollable read-only config in all slots, configuration error/retry, warning previews and acknowledgement' }, null, 2));
+        scenarios:'sources, comparison connectors, metric switching, peaks, compact starting panel, simplified chart captions and height, idle redraws, compact auto-paging without frames, SVG masks, background image transforms, video rejection, shared font, scan line toggle, reconnect, stale expiry, alerts, disabled plugins, unsupported schema, fixed usage width, ungrouped clocks/RPM, hidden content removal, paused background rendering, mouse/touch double tap, scrollable read-only config in all slots, configuration error/retry, warning previews and acknowledgement' }, null, 2));
     assert.deepEqual(overflow, [], 'Visible metrics must fit their assigned slots');
 } catch (error) {
     await page.screenshot({ path: join(output, 'failure.png') }).catch(() => {});

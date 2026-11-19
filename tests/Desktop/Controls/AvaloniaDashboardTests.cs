@@ -387,6 +387,36 @@ internal static class AvaloniaDashboardTests
         }
     }
 
+    public static void EventLogRecoversAfterAnInvalidStreamPage()
+    {
+        var historyReads = 0;
+        using var http = new HttpClient(new JsonResponseHandler(request =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/stream"))
+            {
+                return historyReads == 1 ? "data: {}\n\n" : "";
+            }
+            var sequence = ++historyReads;
+            var page = new ServiceLogPage("fixture", 1, sequence,
+                [new(sequence, DateTimeOffset.UtcNow, ServiceLogLevel.Information, "test", "fixture", "event", null)]);
+            return System.Text.Json.JsonSerializer.Serialize(page, ClientJsonContext.Default.ServiceLogPage);
+        })) { BaseAddress = new Uri("http://localhost/") };
+        using var stop = new CancellationTokenSource();
+        var window = new Window { Content = new EventLogPage(new ServiceLogClient(http), stop.Token) };
+        window.Show();
+        try
+        {
+            bool Shows(string message) => window.GetVisualDescendants().OfType<TextBlock>().Any(block => block.Text == message);
+            AvaloniaControlsTests.PumpUntil(() => Shows("The backend returned an incomplete event log page."));
+            AvaloniaControlsTests.PumpUntil(() => historyReads >= 2 && Shows("Following backend events"));
+        }
+        finally
+        {
+            stop.Cancel();
+            window.Close();
+        }
+    }
+
     public static void MatchesEventTableAndDialogLayouts(string? screenshotDirectory)
     {
         var now = DateTimeOffset.Now;
@@ -587,8 +617,7 @@ internal static class AvaloniaDashboardTests
     private static void ClickShellAction(Window window, string label)
     {
         var button = window.GetVisualDescendants().OfType<Button>().Single(item => AutomationProperties.GetName(item) == label);
-        button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        Dispatcher.UIThread.RunJobs();
+        AvaloniaControlsTests.InvokeButton(button);
     }
 
     private static void AssertAlignedHorizontally(Control reference, Control actual, Window window)

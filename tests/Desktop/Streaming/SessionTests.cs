@@ -12,6 +12,7 @@ internal static class SessionTests
         await runner.RunAsync(KeepsOnlyTheLatestFrameAndUsesOneConnectionAsync);
         await runner.RunAsync(RefreshesMetadataWhenTheConfigurationRevisionChangesAsync);
         await runner.RunAsync(ReconnectsAndCancelsCleanlyAsync);
+        await runner.RunAsync(RecoversAfterAnIncompatibleFrameAsync);
     }
 
     private static async Task KeepsOnlyTheLatestFrameAndUsesOneConnectionAsync()
@@ -58,6 +59,22 @@ internal static class SessionTests
         await UntilAsync(() => api.StreamConnections == 2, stop.Token);
         stop.Cancel();
         await run;
+    }
+
+    private static async Task RecoversAfterAnIncompatibleFrameAsync()
+    {
+        var api = new FakeMonitoringApi { FirstStreamError = new InvalidDataException("Unsupported sensor schema.") };
+        var session = new MonitoringSession(api);
+        var incompatible = false;
+        session.StatusChanged += status => incompatible |= status.Message.Contains("Unsupported sensor schema.", StringComparison.Ordinal);
+        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var run = session.RunAsync(stop.Token);
+        api.Frames.Writer.TryWrite(UiTestData.Frame(sequence: 42));
+        await UntilAsync(() => session.Latest?.Sequence == 42, stop.Token);
+        stop.Cancel();
+        await run;
+        TestAssert.Equal(2, api.StreamConnections);
+        TestAssert.True(incompatible, "The compatibility error must be visible before the session recovers.");
     }
 
     private static async Task UntilAsync(Func<bool> condition, CancellationToken token)

@@ -1,5 +1,6 @@
 import type { ConfigurationSnapshot } from '../contracts/ConfigurationSnapshot.ts';
 import type { ConnectionState } from '../contracts/ConnectionState.ts';
+import type { PluginHealth } from '../contracts/PluginHealth.ts';
 import type { PluginInfo } from '../contracts/PluginInfo.ts';
 import type { SensorReading } from '../contracts/SensorReading.ts';
 import type { SensorSnapshot } from '../contracts/SensorSnapshot.ts';
@@ -18,12 +19,33 @@ export class TelemetryStore {
     private readonly indexed = new Map<string, SensorReading>();
     private readonly observed = new Map<string, number>();
 
+    private readonly byPlugin = new Map<string, SensorReading[]>();
+    private readonly healthByPlugin = new Map<string, PluginHealth>();
+    nextFreshnessChange = Infinity;
+
+    readingsFor(pluginId: string): readonly SensorReading[] {
+        return this.byPlugin.get(pluginId) ?? [];
+    }
+
+    health(pluginId: string): PluginHealth | undefined {
+        return this.healthByPlugin.get(pluginId);
+    }
+
     update(snapshot: SensorSnapshot): void {
         this.snapshot = snapshot;
-        this.indexed.clear();
-        this.observed.clear();
+        this.clearIndexes();
+        for (const plugin of snapshot.plugins) {
+            this.healthByPlugin.set(plugin.pluginId, plugin);
+        }
 
         for (const reading of snapshot.sensors) {
+            const id = reading.identity.pluginId;
+            let group = this.byPlugin.get(id);
+            if (!group) {
+                group = [];
+                this.byPlugin.set(id, group);
+            }
+            group.push(reading);
             this.indexed.set(reading.identity.key, reading);
             this.observed.set(reading.identity.key, Date.parse(reading.observedAt));
         }
@@ -37,8 +59,15 @@ export class TelemetryStore {
         this.wireLimitDevice = null;
         this.wireName = '';
         this.msiName = 'MSI MPG Ai1300TS / Ai1600TS';
+        this.clearIndexes();
+    }
+
+    private clearIndexes(): void {
+        this.byPlugin.clear();
+        this.healthByPlugin.clear();
         this.indexed.clear();
         this.observed.clear();
+        this.nextFreshnessChange = Infinity;
     }
 
     staleAfter(pluginId: string): number {
@@ -52,20 +81,25 @@ export class TelemetryStore {
             return false;
         }
 
-        const state = this.snapshot?.plugins.find((plugin) => plugin.pluginId === reading.identity.pluginId)?.state;
+        const state = this.health(reading.identity.pluginId)?.state;
         const enabled =
             this.configuration?.configuration.plugins[reading.identity.pluginId]?.enabled ??
             this.catalog.find((plugin) => plugin.id === reading.identity.pluginId)?.enabled;
 
-        const age = now - (this.observed.get(reading.identity.key) ?? NaN);
+        const observed = this.observed.get(reading.identity.key);
+        if (enabled === false || state !== 'Ready' || observed === undefined || !Number.isFinite(observed)) {
+            return false;
+        }
 
-        return (
-            enabled !== false &&
-            state === 'Ready' &&
-            Number.isFinite(age) &&
-            age >= -30000 &&
-            age <= this.staleAfter(reading.identity.pluginId)
-        );
+        // Only readings consulted by the current presentation can schedule its next redraw.
+        if (now < observed - 30000) {
+            this.nextFreshnessChange = Math.min(this.nextFreshnessChange, observed - 30000);
+            return false;
+        }
+        const expires = Math.floor(observed + this.staleAfter(reading.identity.pluginId)) + 1;
+        if (now >= expires) return false;
+        this.nextFreshnessChange = Math.min(this.nextFreshnessChange, expires);
+        return true;
     }
 
     device(pluginId: string, requested: string, now: number): string | null {
@@ -73,10 +107,7 @@ export class TelemetryStore {
             return requested.trim();
         }
 
-        return (
-            this.snapshot?.sensors.find((reading) => reading.identity.pluginId === pluginId && this.valid(reading, now))?.identity
-                .deviceId ?? null
-        );
+        return this.readingsFor(pluginId).find(reading => this.valid(reading, now))?.identity.deviceId ?? null;
     }
 
     reading(
@@ -122,7 +153,7 @@ export class TelemetryStore {
     }
 
     reporting(pluginId: string, now: number): boolean {
-        return this.snapshot?.sensors.some((reading) => reading.identity.pluginId === pluginId && this.valid(reading, now)) ?? false;
+        return this.readingsFor(pluginId).some(reading => this.valid(reading, now));
     }
 
     state(pluginId: string, now: number): string {
@@ -141,7 +172,7 @@ export class TelemetryStore {
             return this.connection === 'live' ? 'Ready' : 'Reconnecting';
         }
 
-        const health = this.snapshot?.plugins.find((plugin) => plugin.pluginId === pluginId);
+        const health = this.health(pluginId);
         const state = health?.state ?? info?.state ?? 'NotInstalled';
 
         return state === 'Ready' ? 'Stale' : state;

@@ -98,8 +98,8 @@ internal sealed class MobileAccessView : UserControl
 
         noIpFields.IsVisible = false;
 
-        var reload = IconButton("Reload settings", "refresh", async void () => await RefreshAsync(reloadSettings: true));
-        _apply = CommitButton("Apply mobile access", async void () => await ApplyAsync());
+        var reload = IconButton("Reload settings", "refresh", () => RefreshAsync(reloadSettings: true));
+        _apply = CommitButton("Apply mobile access", ApplyAsync);
 
         _listenerStatus.VerticalAlignment = VerticalAlignment.Center;
         ToolTip.SetTip(_firewall, "On Public networks, Windows Firewall allows RTX Lens connections only from the local subnet.");
@@ -133,10 +133,10 @@ internal sealed class MobileAccessView : UserControl
 
         UpdateForwardingInstructions();
 
-        _invite = ActionButton("Create pairing code", "qr-code-action", async void () => await CreateInviteAsync());
+        _invite = ActionButton("Create pairing code", "qr-code-action", CreateInviteAsync);
 
-        var pairingInfo = IconButton("Pairing and remote access information", "info-action", async void () => await ShowPairingInfoAsync());
-        _review = ActionButton("Review pairing request", "qr-code-action", async void () => await OpenPairingWindowAsync(code: null));
+        var pairingInfo = IconButton("Pairing and remote access information", "info-action", ShowPairingInfoAsync);
+        _review = ActionButton("Review pairing request", "qr-code-action", () => OpenPairingWindowAsync(code: null));
         RenderDevices([]);
 
         var pairing = Section("Pairing & devices", new StackPanel { Spacing = 12, Children = { _review, _devices } });
@@ -541,12 +541,12 @@ internal sealed class MobileAccessView : UserControl
             var title = DialogText(device.Name);
             title.FontWeight = FontWeight.SemiBold;
             var name = new StackPanel { Spacing = 3, VerticalAlignment = VerticalAlignment.Center, Children = { title, Caption(details) } };
-            var revoke = ActionButton("Revoke", "cancel-action", async void () => await RevokeAsync(device));
+            var revoke = ActionButton("Revoke", "cancel-action", () => RevokeAsync(device));
             Control actions = revoke;
             if (device.LockScreenNotifications)
             {
                 name.Children.Add(Caption("Lock-screen notifications enabled"));
-                var test = ActionButton("Send test", "mail-action", async void () => await SendTestNotificationAsync(device));
+                var test = ActionButton("Send test", "mail-action", () => SendTestNotificationAsync(device));
                 actions = Actions(test, revoke);
             }
 

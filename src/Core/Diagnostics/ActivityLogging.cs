@@ -9,8 +9,7 @@ public sealed record ActivityEvent(string Code, string Source, string Message, s
 
 public static class ActivityLogging
 {
-    public static void LogActivity(this ILogger logger, LogLevel level, string code, string source, string message,
-        string? detail = null, bool eventViewer = false, Exception? exception = null)
+    public static void LogActivity(this ILogger logger, LogLevel level, string code, string source, string message, string? detail = null, bool eventViewer = false, Exception? exception = null)
     {
         if (!logger.IsEnabled(level))
         {

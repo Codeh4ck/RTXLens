@@ -52,7 +52,7 @@ internal static class PackageTests
             Check.That((int.Parse(components[row[1]][2]) & 256) != 0, "Payload component uses the x64 installation view: " + relative, false);
         }
 
-        Check.That(expected.Count == 0, "Every published DLL, executable, PRI, XBF, asset and runtime file is included exactly once.");
+        Check.That(expected.Count == 0, "Every published payload file is included exactly once.");
 
         var shortcut = Read(database, "SELECT `Component_`, `Target` FROM `Shortcut` WHERE `Shortcut`='StartMenuShortcut'").Single();
         Check.That(components[shortcut[0]][1] == "MonitorMenuFolder" && shortcut[1] == "[AppInstallFolder]RTXLens.App.exe",
@@ -113,10 +113,7 @@ internal static class PackageTests
 
     private static void CheckLanguageMetadata(string language, string relative)
     {
-        var knownSdkFile = relative.EndsWith(".mui", StringComparison.OrdinalIgnoreCase)
-            || relative.EndsWith("Microsoft.ui.xaml.dll", StringComparison.OrdinalIgnoreCase)
-            || relative.EndsWith("Microsoft.UI.Xaml.Phone.dll", StringComparison.OrdinalIgnoreCase);
-        if (language.Length > 20 && !knownSdkFile)
+        if (language.Length > 20)
         {
             throw new InvalidDataException("Unexpected MSI language-list overflow: " + relative);
         }
@@ -133,8 +130,7 @@ internal static class PackageTests
                 continue;
             }
 
-            try { _ = CultureInfo.GetCultureInfo(lcid); }
-            catch (CultureNotFoundException) when (knownSdkFile) { }
+            _ = CultureInfo.GetCultureInfo(lcid);
         }
     }
 

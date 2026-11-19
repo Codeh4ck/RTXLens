@@ -37,7 +37,6 @@ public sealed record AppPreferences
 
     public double WindowWidth { get; init; } = DefaultWindowWidth;
     public double WindowHeight { get; init; } = DefaultWindowHeight;
-    public int WindowLayoutVersion { get; init; } = 1;
 #if DEBUG
     public string ServiceAddress { get; init; } = $"http://localhost:{ServiceEndpoint.DebugPort}/";
 #else
@@ -46,7 +45,7 @@ public sealed record AppPreferences
 
     public void Validate()
     {
-        if (StartupTabId is null || StartupTabId.Length > 128 || !Enum.IsDefined(UpdateFrequency) || WindowLayoutVersion < 1 || !Enum.IsDefined(Theme) || !Enum.IsDefined(PinMetric) || TextScale is < 0.85 or > 1.5 || !double.IsFinite(TextScale)
+        if (StartupTabId is null || StartupTabId.Length > 128 || !Enum.IsDefined(UpdateFrequency) || !Enum.IsDefined(Theme) || !Enum.IsDefined(PinMetric) || TextScale is < 0.85 or > 1.5 || !double.IsFinite(TextScale)
             || WireViewPsuConnector is < 1 or > 2 || AsusPsuConnector is < 1 or > 2
             || !double.IsFinite(CoreTemperatureWarningC) || CoreTemperatureWarningC is < 30 or > 120
             || !double.IsFinite(MemoryTemperatureWarningC) || MemoryTemperatureWarningC is < 30 or > 120

@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using RTXLens.App.Themes;
+using RTXLens.App.Platform;
 using RTXLens.App.ViewModels.Appearance;
 using RTXLens.App.ViewModels.Preview;
 using RTXLens.App.ViewModels.Shell;
@@ -20,7 +21,7 @@ public sealed partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            var directory = Path.Combine(localAppData, "RTXLens", "Avalonia");
+            var directory = Path.Combine(localAppData, DesktopBuild.DataDirectoryName, "Avalonia");
             var appearance = new AppearanceViewModel(this, new AppearanceStore(Path.Combine(directory, "appearance.json")));
 
             if (desktop.Args?.Contains("--controls-preview", StringComparer.Ordinal) == true)
@@ -29,7 +30,8 @@ public sealed partial class App : Application
             }
             else
             {
-                var model = new ShellViewModel(new PreferencesStore(Path.Combine(directory, "preferences.json")), appearance);
+                var preferences = new PreferencesStore(Path.Combine(directory, "preferences.json"));
+                var model = new ShellViewModel(preferences, appearance);
                 var window = new ShellWindow(model, desktop.Args?.Contains("--minimized", StringComparer.Ordinal) == true);
                 window.Opened += async (_, _) => await model.StartAsync();
                 desktop.MainWindow = window;

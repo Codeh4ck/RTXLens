@@ -7,14 +7,16 @@ using RTXLens.Service.Configuration;
 
 namespace RTXLens.Service.Services;
 
+internal enum ShutdownOutcome { Accepted, Rejected, Unconfirmed, RetryableFailure }
+
 internal interface IWarningShutdown
 {
-    void Request();
+    ShutdownOutcome Request();
 }
 
 internal sealed class WindowsWarningShutdown : IWarningShutdown
 {
-    public void Request()
+    public ShutdownOutcome Request()
     {
         var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "shutdown.exe"))
         {
@@ -28,9 +30,19 @@ internal sealed class WindowsWarningShutdown : IWarningShutdown
         }
 
         using var process = Process.Start(start) ?? throw new InvalidOperationException("Could not start the Windows shutdown command.");
-        if (!process.WaitForExit(5000) || process.ExitCode != 0)
+        try
         {
-            throw new InvalidOperationException("Windows did not confirm the shutdown command.");
+            if (!process.WaitForExit(5000))
+            {
+                return ShutdownOutcome.Unconfirmed;
+            }
+
+            return process.ExitCode == 0 ? ShutdownOutcome.Accepted : ShutdownOutcome.Rejected;
+        }
+        catch (Exception error) when (error is InvalidOperationException or Win32Exception)
+        {
+            // The process already started. Its outcome cannot safely be retried.
+            return ShutdownOutcome.Unconfirmed;
         }
     }
 }
@@ -40,8 +52,10 @@ internal sealed class WarningShutdownCoordinator(RuntimeConfigurationFile config
     private readonly Lock _gate = new();
     private readonly Dictionary<string, Countdown> _countdowns = new(StringComparer.Ordinal);
     private readonly DateTimeOffset _boot = clock.GetUtcNow() - TimeSpan.FromMilliseconds(Environment.TickCount64);
-    private readonly HashSet<string> _failed = new(StringComparer.Ordinal);
     private bool _requested;
+    private bool _rejected;
+    private DateTimeOffset _retryAfter;
+    private int _retryDelaySeconds;
 
     private string ReasonPath => Path.Combine(Path.GetDirectoryName(configurationFile.Path)!, "last-warning-shutdown.json");
 
@@ -50,6 +64,13 @@ internal sealed class WarningShutdownCoordinator(RuntimeConfigurationFile config
         if (_requested)
         {
             return;
+        }
+
+        if (candidates.Count == 0)
+        {
+            _rejected = false;
+            _retryAfter = default;
+            _retryDelaySeconds = 0;
         }
 
         var remaining = new HashSet<string>(StringComparer.Ordinal);
@@ -73,18 +94,28 @@ internal sealed class WarningShutdownCoordinator(RuntimeConfigurationFile config
             timer = timer with { Last = warning.ObservedAt };
             _countdowns[warning.Key] = timer;
 
-            if (_failed.Contains(warning.Key) || warning.ObservedAt - timer.Start < TimeSpan.FromSeconds(warning.Profile.ShutdownAfterSeconds!.Value))
+            if (_rejected || warning.ObservedAt < _retryAfter
+                || warning.ObservedAt - timer.Start < TimeSpan.FromSeconds(warning.Profile.ShutdownAfterSeconds!.Value))
             {
                 continue;
             }
 
-            if (Request(warning))
+            var outcome = Request(warning);
+            if (outcome is ShutdownOutcome.Accepted or ShutdownOutcome.Unconfirmed)
             {
                 _requested = true;
                 return;
             }
 
-            _failed.Add(warning.Key);
+            if (outcome == ShutdownOutcome.Rejected)
+            {
+                _rejected = true;
+            }
+            else
+            {
+                _retryDelaySeconds = _retryDelaySeconds == 0 ? 5 : Math.Min(60, _retryDelaySeconds * 2);
+                _retryAfter = warning.ObservedAt.AddSeconds(_retryDelaySeconds);
+            }
         }
 
         foreach (var key in _countdowns.Keys.Where(key => !remaining.Contains(key)).ToArray())
@@ -92,11 +123,8 @@ internal sealed class WarningShutdownCoordinator(RuntimeConfigurationFile config
             var countdown = _countdowns[key];
             _countdowns.Remove(key);
 
-            if (!_failed.Remove(key))
-            {
-                logger.LogActivity(LogLevel.Information, "protection.shutdown-cancelled", DeviceWarningEvaluator.SourceLabel(countdown.Profile),
-                    "Shutdown countdown cancelled because the warning is no longer confirmed.");
-            }
+            logger.LogActivity(LogLevel.Information, "protection.shutdown-cancelled", DeviceWarningEvaluator.SourceLabel(countdown.Profile),
+                "Shutdown countdown ended because the warning is no longer confirmed.");
         }
     }
 
@@ -133,7 +161,7 @@ internal sealed class WarningShutdownCoordinator(RuntimeConfigurationFile config
         }
     }
 
-    private bool Request(WarningShutdownCandidate warning)
+    private ShutdownOutcome Request(WarningShutdownCandidate warning)
     {
         var reason = new WarningShutdownReason(Guid.NewGuid().ToString("N"), clock.GetUtcNow(), _boot,
             DeviceWarningEvaluator.SourceLabel(warning.Profile), warning.Profile.Name, warning.Definition.Title, warning.Observation.Detail);
@@ -152,9 +180,20 @@ internal sealed class WarningShutdownCoordinator(RuntimeConfigurationFile config
                 logger.LogActivity(LogLevel.Warning, "protection.shutdown-requested", reason.Source,
                     $"Requesting Windows shutdown for {reason.Warning}.", reason.ProfileName, eventViewer: true);
 
-                shutdown.Request();
+                var outcome = shutdown.Request();
+                if (outcome == ShutdownOutcome.Unconfirmed)
+                {
+                    logger.LogActivity(LogLevel.Error, "protection.shutdown-unconfirmed", reason.Source,
+                        "Windows did not confirm the shutdown outcome. Further requests are suspended.", reason.Warning, eventViewer: true);
+                }
+                else if (outcome == ShutdownOutcome.Rejected)
+                {
+                    logger.LogActivity(LogLevel.Error, "protection.shutdown-rejected", reason.Source,
+                        "Windows rejected the shutdown command.", reason.Warning, eventViewer: true);
+                    RemoveFailedReason();
+                }
 
-                return true;
+                return outcome;
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException or Win32Exception)
             {
@@ -163,18 +202,23 @@ internal sealed class WarningShutdownCoordinator(RuntimeConfigurationFile config
 
                 if (recorded)
                 {
-                    try
-                    {
-                        File.Delete(ReasonPath);
-                    }
-                    catch (Exception cleanupError) when (cleanupError is IOException or UnauthorizedAccessException)
-                    {
-                        logger.LogWarning(cleanupError, "Could not remove the failed warning shutdown reason");
-                    }
+                    RemoveFailedReason();
                 }
 
-                return false;
+                return ShutdownOutcome.RetryableFailure;
             }
+        }
+    }
+
+    private void RemoveFailedReason()
+    {
+        try
+        {
+            File.Delete(ReasonPath);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(error, "Could not remove the failed warning shutdown reason");
         }
     }
 

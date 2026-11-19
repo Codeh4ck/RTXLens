@@ -13,7 +13,7 @@ internal sealed record MobilePairingCredential(Guid DeviceId, string Token);
 
 internal sealed class MobilePairing(IMobileAccessStore store, TimeProvider clock, ILogger logger)
 {
-    private const int DeviceLimit = 16;
+    internal const int DeviceLimit = 16;
     private static readonly TimeSpan InviteLifetime = TimeSpan.FromMinutes(5);
     private readonly Lock _gate = new();
     private readonly Dictionary<Guid, PairedDevice> _devices = [];

@@ -1,13 +1,9 @@
 using System.Runtime.InteropServices;
 using RTXLens.App.Platform.Interop;
-#if !AVALONIA_DESKTOP
-using Microsoft.UI.Dispatching;
-using RTXLens.App.Platform.Windowing;
-#endif
 
 namespace RTXLens.App.Platform.Tray;
 
-internal sealed partial class TrayService : IDisposable
+internal sealed class TrayService : IDisposable
 {
     private const uint CallbackMessage = 0x800B;
     private readonly nint _window;
@@ -18,18 +14,10 @@ internal sealed partial class TrayService : IDisposable
     private readonly Action<bool> _minimizeChanged;
     private readonly nint _previous;
     private readonly uint _taskbarCreated;
-    private readonly uint _showMessage;
     private GCHandle _procedureHandle;
     private NotifyIconData _data;
     private bool _disposed;
     public bool IsAvailable { get; private set; }
-
-#if !AVALONIA_DESKTOP
-    public TrayService(nint window, DispatcherQueue dispatcher, Action show, Action settings, Action exit, Action<bool> minimizeChanged)
-        : this(window, action => dispatcher.TryEnqueue(() => action()), show, settings, exit, minimizeChanged)
-    {
-    }
-#endif
 
     public TrayService(nint window, Action<Action> dispatch, Action show, Action settings, Action exit, Action<bool> minimizeChanged)
     {
@@ -40,7 +28,6 @@ internal sealed partial class TrayService : IDisposable
         _exit = exit;
         _minimizeChanged = minimizeChanged;
         _taskbarCreated = NativeMethods.RegisterWindowMessageW("TaskbarCreated");
-        _showMessage = NativeMethods.RegisterWindowMessageW(DesktopBuild.ShowMessageName);
 
         WindowProcedure procedure = ProcessMessage;
 
@@ -108,37 +95,9 @@ internal sealed partial class TrayService : IDisposable
 
     private nint ProcessMessage(nint window, uint message, nuint wParam, nint lParam)
     {
-#if !AVALONIA_DESKTOP
-        if (message == NativeConstants.GetMinMaxInfo)
-        {
-            var result = NativeMethods.CallWindowProcW(_previous, window, message, wParam, lParam);
-            var limits = Marshal.PtrToStructure<MinMaxInfo>(lParam);
-            var scale = Math.Max(96, NativeMethods.GetDpiForWindow(window)) / 96d;
-            var maximum = WindowSizeLimits.GetMaximumPixels(window);
-
-            limits.MinTrackSize = new NativePoint
-            {
-                X = Math.Min(maximum.Width, (int)(WindowSizeLimits.MinimumWidth * scale)),
-                Y = Math.Min(maximum.Height, (int)(WindowSizeLimits.MinimumHeight * scale))
-            };
-
-            limits.MaxTrackSize = new NativePoint { X = maximum.Width, Y = maximum.Height };
-            limits.MaxSize = limits.MaxTrackSize;
-
-            Marshal.StructureToPtr(limits, lParam, false);
-
-            return result;
-        }
-
-#endif
         if (message == _taskbarCreated)
         {
             AddIcon();
-        }
-
-        if (message == _showMessage)
-        {
-            _dispatch(() => _show());
         }
 
         switch (message)

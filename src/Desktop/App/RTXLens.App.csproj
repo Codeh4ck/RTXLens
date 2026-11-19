@@ -6,27 +6,14 @@
         <ApplicationIcon>Assets/monitor.ico</ApplicationIcon>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-        <!-- Keep the WinUI source as a parity reference while the Avalonia views replace it. -->
-        <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
-        <DefineConstants>$(DefineConstants);AVALONIA_DESKTOP</DefineConstants>
     </PropertyGroup>
 
     <ItemGroup Condition="'$(EnableTelemetryDebug)' == 'true'">
         <ProjectReference Include="../Debugging/RTXLens.Debugging.csproj" />
-        <Compile Include="Views/Simulation/*.cs" />
     </ItemGroup>
 
     <ItemGroup>
-        <Compile Include="Program.cs;App.axaml.cs;Themes/**/*.cs;ViewModels/**/*.cs;Views/Preview/*.axaml.cs" />
-        <Compile Include="Views/Shell/*.cs;Views/Hardware/*.cs;Views/Settings/*.cs;Views/Performance/*.cs" />
-        <Compile Include="Views/Diagnostics/*.cs;Views/Configuration/*.cs;Views/Safeguard/*.cs" />
-        <Compile Include="Controls/ColumnHeader.cs;Controls/MetricDisplay.cs;Controls/SectionPanel.cs" />
-        <Compile Include="Controls/EditableList.cs;Controls/PinBar.cs;Controls/PinTrack.cs;Controls/ValidatedNumberInput.cs" />
-        <Compile Include="Msi/Afterburner/AfterburnerElevatedOperation.cs;Msi/Afterburner/AfterburnerProcessControl.cs" />
-        <Compile Include="Controls/ReadingText.cs;Controls/RangeMarkerTrack.cs" />
-        <Compile Include="Controls/Charts/**/*.cs" />
-        <Compile Include="Platform/DesktopBuild.cs;Platform/Interop/*.cs;Platform/Tray/TrayService.cs" />
-        <Compile Include="Platform/Startup/StartupRegistration.cs;Platform/Startup/SingleInstance.cs;Services/DesktopEventLog.cs" />
+        <Compile Remove="Views/Simulation/**/*.cs" Condition="'$(EnableTelemetryDebug)' != 'true'" />
         <Compile Include="../../../Installer/Actions/Startup/ElevatedStartupTask.cs" Link="Platform/Startup/ElevatedStartupTask.cs" />
         <InternalsVisibleTo Include="RTXLens.UI.Tests" />
         <AvaloniaResource Include="Assets/monitor.ico;Assets/Icons/*.svg" />

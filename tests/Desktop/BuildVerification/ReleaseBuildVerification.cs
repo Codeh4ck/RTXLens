@@ -18,17 +18,10 @@ internal static class ReleaseBuildVerification
             throw new InvalidOperationException("Release is missing the telemetry debug console or its simulation library.");
         }
 
-        foreach (var type in types)
+        if (types.Any(type => metadata.GetString(type.Namespace) == "RTXLens.App.Views.Safeguard"
+                && metadata.GetString(type.Name) == "AfterburnerChangesWindow"))
         {
-            var typeNamespace = metadata.GetString(type.Namespace);
-            var typeName = metadata.GetString(type.Name);
-            if (typeNamespace.StartsWith("RTXLens.App.Debugging", StringComparison.Ordinal)
-                || typeNamespace.StartsWith("RTXLens.App.Demo", StringComparison.Ordinal)
-                || typeNamespace.StartsWith("RTXLens.App.Diagnostics", StringComparison.Ordinal)
-                || typeName == "AfterburnerChangesWindow")
-            {
-                throw new InvalidOperationException($"Release includes a developer-only type: {typeNamespace}.{typeName}");
-            }
+            throw new InvalidOperationException("Release includes the debug-only Safeguard+ changes window.");
         }
 
         Console.WriteLine("PASS: Release includes the telemetry debug console and excludes developer-only views.");

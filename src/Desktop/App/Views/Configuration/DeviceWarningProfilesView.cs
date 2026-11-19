@@ -73,7 +73,7 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
         _enabled.Margin = new Thickness(0, 0, 12, 0);
         _enabled.VerticalAlignment = VerticalAlignment.Center;
 
-        _add = IconButton("Add warning profile", "add-action", async void () =>
+        _add = IconButton("Add warning profile", "add-action", async () =>
         {
             if (TopLevel.GetTopLevel(this) is Window owner &&
                 await RequestProfileNameAsync(owner, "New warning profile") is { } name)
@@ -85,7 +85,7 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
             }
         });
 
-        _delete = IconButton("Delete warning profile", "chart-clear", async void () =>
+        _delete = IconButton("Delete warning profile", "chart-clear", async () =>
         {
             if (_draft is { } profile && TopLevel.GetTopLevel(this) is Window owner
                 && await ConfirmAsync(owner, "Delete warning profile", $"Delete {profile.Name}?", "Delete"))
@@ -101,7 +101,7 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
             }
         });
 
-        _save = CommitButton("Save profile configuration", async void () => await RunAsync(SaveAsync));
+        _save = CommitButton("Save profile configuration", () => RunAsync(SaveAsync));
         _save.HorizontalAlignment = HorizontalAlignment.Right;
         _save.VerticalAlignment = VerticalAlignment.Bottom;
 
@@ -121,7 +121,7 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
 
         var advanced = Section("Notifications and shutdown", Stack(_overridePolicy, _policyFields, _shutdown, _shutdownFields));
 
-        var info = IconButton("How warning profiles work", "info-action", async void () =>
+        var info = IconButton("How warning profiles work", "info-action", async () =>
         {
             if (TopLevel.GetTopLevel(this) is Window owner)
             {

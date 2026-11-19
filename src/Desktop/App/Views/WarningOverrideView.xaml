@@ -1,8 +1,0 @@
-<UserControl x:Class="RTXLens.App.Views.WarningOverrideView"
-    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <StackPanel Spacing="14">
-        <CheckBox Content="Use global defaults" IsChecked="{x:Bind Model.UseDefaults, Mode=TwoWay}" />
-        <ContentControl x:Name="PolicyHost" HorizontalContentAlignment="Stretch" IsEnabled="{x:Bind Model.IsCustom, Mode=OneWay}" />
-    </StackPanel>
-</UserControl>
