@@ -41,15 +41,15 @@ internal sealed class SafeguardHistoryWindow : LensWindow
         _list.SelectionChanged += (_, _) => UpdateActions();
         _list.DoubleTapped += (_, _) => Inspect();
         _inspect = ActionButton("Inspect", "info-action", Inspect);
-        _delete = ActionButton("Delete selected", "chart-clear", async void () => await RunAsync(DeleteAsync));
+        _delete = ActionButton("Delete selected", "chart-clear", () => RunAsync(DeleteAsync));
         _retention = new ValidatedNumberInput("History retention", _storage.RetentionDays, 1, 365) { MinWidth = 115 };
-        var save = CommitButton("Save retention", async void () => await RunAsync(async () =>
+        var save = CommitButton("Save retention", () => RunAsync(async () =>
         {
             _storage.RetentionDays = (int)_retention.Read();
             await RefreshAsync();
             SetAlert(_alert, "History retention saved.", "success");
         }));
-        var refresh = ActionButton("Refresh", "refresh", async void () => await RunAsync(RefreshAsync));
+        var refresh = ActionButton("Refresh", "refresh", () => RunAsync(RefreshAsync));
         var actions = new WrapPanel
         {
             ItemSpacing = 8, LineSpacing = 8, Children = { Field("History retention (days)", _retention), save, refresh, _inspect, _delete }

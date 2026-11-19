@@ -2,9 +2,6 @@
     <PropertyGroup>
         <OutputName>RTXLens-$(InstallerVersion)-win-x64</OutputName>
         <OutputPath>bin/x64/$(Configuration)/</OutputPath>
-        <!-- WinUI's signed multilingual DLLs contain long language lists and modern LCIDs unknown to ICE03.
-             The installer tests validate this exception against the actual payload; all other ICEs remain enabled. -->
-        <SuppressIces>ICE03</SuppressIces>
         <DefineConstants>$(DefineConstants);InstallerVersion=$(InstallerVersion);PayloadDirectory=$(PayloadDirectory)</DefineConstants>
     </PropertyGroup>
     <ItemGroup>

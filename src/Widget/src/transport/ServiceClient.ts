@@ -11,12 +11,18 @@ export class ServiceClient {
     private socket: WebSocket | null = null;
     private controller = new AbortController();
     private reconnect: ReturnType<typeof setTimeout> | null = null;
+    private frameTimer: ReturnType<typeof setTimeout> | null = null;
+    private frameCheckAt = Infinity;
+    private lastProgressAt = 0;
+    private suspended = false;
     private generation = 0;
     private attempts = 0;
     private revision = -1;
     private metadataAt = 0;
     private metadataBusy = false;
     private limitAt = 0;
+    private limitAttemptDevice: string | null = null;
+    private limitAttemptRevision = -1;
     private limitBusy = false;
     private port = 0;
 
@@ -40,6 +46,8 @@ export class ServiceClient {
         this.attempts = 0;
         this.revision = -1;
         this.metadataAt = this.limitAt = 0;
+        this.limitAttemptDevice = null;
+        this.limitAttemptRevision = -1;
         this.metadataBusy = this.limitBusy = false;
         this.connect(this.generation);
         this.changed();
@@ -47,6 +55,7 @@ export class ServiceClient {
 
     stop(): void {
         this.generation++;
+        this.clearFrameCheck();
         this.controller.abort();
 
         if (this.reconnect !== null) {
@@ -62,6 +71,61 @@ export class ServiceClient {
 
         this.socket = null;
         this.port = 0;
+    }
+
+    setSuspended(suspended: boolean): void {
+        if (this.suspended === suspended) return;
+        this.suspended = suspended;
+        this.clearFrameCheck();
+        if (!suspended && this.socket) {
+            this.lastProgressAt = performance.now();
+            this.scheduleFrameCheck();
+        }
+    }
+
+    private clearFrameCheck(): void {
+        if (this.frameTimer !== null) clearTimeout(this.frameTimer);
+        this.frameTimer = null;
+        this.frameCheckAt = Infinity;
+    }
+
+    private silenceLimit(): number {
+        const config = this.store.configuration;
+        const revision = this.store.snapshot?.configurationRevision;
+        const interval = config?.configuration.monitoring?.streamIntervalMs;
+        // With missing or outdated metadata, allow the longest supported service interval.
+        const known = (revision === undefined || revision === config?.revision) &&
+            typeof interval === 'number' && interval >= 100 && interval <= 30000;
+        return Math.max(5000, 3 * (known ? interval : 30000));
+    }
+
+    private scheduleFrameCheck(): void {
+        const socket = this.socket;
+        if (!socket || this.suspended) return;
+
+        const due = this.lastProgressAt + this.silenceLimit();
+        // Frames usually move the deadline later. Let the pending check reschedule itself.
+        if (this.frameCheckAt <= due) return;
+        this.clearFrameCheck();
+        this.frameCheckAt = due;
+        this.frameTimer = setTimeout(() => {
+            this.frameTimer = null;
+            this.frameCheckAt = Infinity;
+            if (socket !== this.socket || this.suspended) return;
+            const now = performance.now();
+            const limit = this.silenceLimit();
+            if (now - due > limit) {
+                // The host may have slept with an open socket. Allow queued telemetry to arrive.
+                this.lastProgressAt = now;
+            }
+            if (now < this.lastProgressAt + limit) {
+                this.scheduleFrameCheck();
+                return;
+            }
+            socket.onclose = socket.onmessage = socket.onerror = socket.onopen = null;
+            socket.close(4000, 'Telemetry timed out');
+            this.disconnected(this.generation, 'No telemetry received. Reconnecting to the monitoring service.');
+        }, Math.max(0, Math.ceil(due - performance.now())));
     }
 
     private connect(generation: number): void {
@@ -80,13 +144,16 @@ export class ServiceClient {
         }
 
         this.socket = socket;
+        this.lastProgressAt = performance.now();
+        this.scheduleFrameCheck();
 
         let lastSequence = -1;
         socket.onopen = () => {
-            if (generation !== this.generation) {
+            if (generation !== this.generation || socket !== this.socket) {
                 return;
             }
 
+            this.lastProgressAt = performance.now();
             this.metadataAt = 0;
             void this.refreshMetadata(generation, true);
         };
@@ -112,10 +179,12 @@ export class ServiceClient {
 
                 const revisionChanged = snapshot.configurationRevision !== this.revision;
                 this.store.update(snapshot);
+                this.lastProgressAt = performance.now();
+                this.scheduleFrameCheck();
                 this.store.connection = 'live';
                 this.store.connectionMessage = 'Service connected';
                 void this.refreshMetadata(generation, revisionChanged);
-                void this.refreshWireLimit(generation, revisionChanged);
+                void this.refreshWireLimit(generation, snapshot.configurationRevision);
                 this.changed();
             } catch (error) {
                 this.store.connection = 'incompatible';
@@ -136,22 +205,23 @@ export class ServiceClient {
         void this.refreshMetadata(generation, true);
     }
 
-    private disconnected(generation: number): void {
+    private disconnected(generation: number, message = 'Service unavailable. Check that RTX Lens service is running.'): void {
         if (generation !== this.generation) {
             return;
         }
 
+        this.clearFrameCheck();
         this.socket = null;
 
         if (this.store.connection !== 'incompatible') {
             this.store.connection = this.store.snapshot ? 'reconnecting' : 'offline';
-            this.store.connectionMessage = 'Service unavailable. Check that RTX Lens service is running.';
+            this.store.connectionMessage = message;
         }
 
         this.changed();
 
         const delay = Math.min(15000, 500 * 2 ** Math.min(this.attempts++, 5));
-        this.reconnect = setTimeout(() => this.connect(generation), delay);
+        this.reconnect = setTimeout(() => this.connect(generation), delay * (0.75 + 0.25 * Math.random()));
     }
 
     private async refreshMetadata(generation: number, force: boolean): Promise<void> {
@@ -165,8 +235,7 @@ export class ServiceClient {
         const signal = this.controller.signal;
 
         try {
-            const results = await Promise.allSettled([
-                api.get('/health', signal),
+            const [catalog, configuration] = await Promise.allSettled([
                 api.get('/plugins', signal),
                 api.get('/configuration', signal)
             ]);
@@ -174,8 +243,6 @@ export class ServiceClient {
             if (generation !== this.generation) {
                 return;
             }
-
-            const catalog = results[1];
 
             if (catalog?.status === 'fulfilled' && catalog.value && typeof catalog.value === 'object') {
                 const value = catalog.value as {
@@ -198,8 +265,6 @@ export class ServiceClient {
                 }
             }
 
-            const configuration = results[2];
-
             if (configuration?.status === 'fulfilled' && configuration.value && typeof configuration.value === 'object') {
                 const value = configuration.value as ConfigurationSnapshot;
 
@@ -210,6 +275,7 @@ export class ServiceClient {
                 ) {
                     this.store.configuration = value;
                     this.revision = value.revision;
+                    this.scheduleFrameCheck();
                 }
             }
 
@@ -222,19 +288,21 @@ export class ServiceClient {
         }
     }
 
-    private async refreshWireLimit(generation: number, force: boolean): Promise<void> {
+    private async refreshWireLimit(generation: number, revision: number): Promise<void> {
         const device = this.store.device('wireview-pro2', '', Date.now());
 
         if (
             !device ||
             !this.api ||
             this.limitBusy ||
-            (!force && device === this.store.wireLimitDevice && Date.now() - this.limitAt < 30000)
+            (device === this.limitAttemptDevice && revision === this.limitAttemptRevision && Date.now() - this.limitAt < 30000)
         ) {
             return;
         }
 
         this.limitBusy = true;
+        this.limitAttemptDevice = device;
+        this.limitAttemptRevision = revision;
 
         if (device !== this.store.wireLimitDevice) {
             this.store.wireName = '';

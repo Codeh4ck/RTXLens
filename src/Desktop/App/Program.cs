@@ -16,7 +16,7 @@ internal static class Program
         {
             if (eventArgs.ExceptionObject is Exception error)
             {
-                WriteCrashReport(error);
+                DesktopErrorReports.Write(error, "Unhandled desktop exception", crash: true);
             }
         };
 
@@ -47,16 +47,4 @@ internal static class Program
             .StartWithClassicDesktopLifetime(args);
     }
 
-    private static void WriteCrashReport(Exception error)
-    {
-        try
-        {
-            var path = Path.Combine(Path.GetTempPath(), "rtxlens-error.txt");
-            File.WriteAllText(path, $"{DateTimeOffset.Now:O} · RTX Lens {typeof(Program).Assembly.GetName().Version}{Environment.NewLine}{error}");
-        }
-        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
-        {
-            System.Diagnostics.Debug.WriteLine(failure);
-        }
-    }
 }

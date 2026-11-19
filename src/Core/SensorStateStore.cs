@@ -10,19 +10,18 @@ namespace RTXLens.Core;
 public sealed class SensorStateStore
 {
     private readonly Lock _lock = new();
-    private readonly Dictionary<string, PluginStoreEntry> _entries;
+    private readonly SortedList<string, PluginStoreEntry> _entries = new(StringComparer.Ordinal);
 
     private long _sequence;
 
     public SensorStateStore(IEnumerable<ISensorPlugin> plugins)
     {
-        _entries = plugins.ToDictionary(p => p.Descriptor.Id,
-            p => new PluginStoreEntry(p.Descriptor, new PluginSample(PluginState.Starting, []), null), StringComparer.Ordinal);
-
-        foreach (var entry in _entries.Values)
+        foreach (var plugin in plugins)
         {
-            if (string.IsNullOrWhiteSpace(entry.Descriptor.Id) || entry.Descriptor.PollInterval <= TimeSpan.Zero ||
-                entry.Descriptor.StaleAfter < entry.Descriptor.PollInterval)
+            var entry = new PluginStoreEntry(plugin.Descriptor, new PluginSample(PluginState.Starting, []), null);
+            _entries.Add(entry.Descriptor.Id, entry);
+
+            if (string.IsNullOrWhiteSpace(entry.Descriptor.Id) || entry.Descriptor.PollInterval <= TimeSpan.Zero || entry.Descriptor.StaleAfter < entry.Descriptor.PollInterval)
             {
                 throw new ArgumentException("Plugin IDs and timing must be valid and unique.");
             }
@@ -120,33 +119,62 @@ public sealed class SensorStateStore
         }
     }
 
+    public PluginHealth[] GetPluginHealth(DateTimeOffset now)
+    {
+        lock (_lock)
+        {
+            return [.. _entries.Values.Select(entry => ProjectHealth(entry, now))];
+        }
+    }
+
+    private static PluginHealth ProjectHealth(PluginStoreEntry entry, DateTimeOffset now)
+    {
+        var state = entry.Sample.State;
+        if (state == PluginState.Ready && entry.LastSuccessAt is { } last && now - last > entry.Descriptor.StaleAfter)
+        {
+            state = PluginState.Stale;
+        }
+        return new PluginHealth(entry.Descriptor.Id, state, entry.LastSuccessAt, entry.Sample.Message);
+    }
+
     public SensorSnapshot Snapshot(DateTimeOffset now, IReadOnlyList<SensorSelection> selections)
     {
         lock (_lock)
         {
-            var readings = new List<SensorReading>();
+            var readings = new SensorReading[_entries.Values.Sum(entry => entry.Sample.Sensors.Length)];
+            var index = 0;
             var health = new List<PluginHealth>();
             var alerts = new List<SensorAlert>();
 
-            foreach (var entry in _entries.Values.OrderBy(x => x.Descriptor.Id, StringComparer.Ordinal))
+            foreach (var entry in _entries.Values)
             {
-                var expired = entry.LastSuccessAt is { } success && now - success > entry.Descriptor.StaleAfter;
-                var state = entry.Sample.State == PluginState.Ready && expired ? PluginState.Stale : entry.Sample.State;
+                var pluginHealth = ProjectHealth(entry, now);
+                health.Add(pluginHealth);
 
-                health.Add(new PluginHealth(entry.Descriptor.Id, state, entry.LastSuccessAt, entry.Sample.Message));
-                if (state == PluginState.Ready)
+                if (pluginHealth.State == PluginState.Ready)
                 {
                     alerts.AddRange(entry.Sample.Alerts ?? []);
                 }
 
-                readings.AddRange(from reading in entry.Sample.Sensors
-                    let quality = entry.Sample.State != PluginState.Ready ? ReadingQuality.Unavailable : now - reading.ObservedAt > entry.Descriptor.StaleAfter ? ReadingQuality.Stale : reading.Quality
-                    select reading with { Quality = quality });
+                foreach (var reading in entry.Sample.Sensors)
+                {
+                    var quality = entry.Sample.State != PluginState.Ready
+                        ? ReadingQuality.Unavailable
+                        : now - reading.ObservedAt > entry.Descriptor.StaleAfter ? ReadingQuality.Stale : reading.Quality;
+
+                    readings[index++] = quality == reading.Quality ? reading : reading with { Quality = quality };
+                }
             }
 
-            var byKey = readings.ToDictionary(x => x.Identity.Key, StringComparer.Ordinal);
+            ResolvedSelection[] resolved = [];
 
-            return new SensorSnapshot(1, ++_sequence, now, [.. readings], [.. health], [.. selections.Select(x => SourceResolver.Resolve(x, byKey))])
+            if (selections.Count > 0)
+            {
+                var byKey = readings.ToDictionary(reading => reading.Identity.Key, StringComparer.Ordinal);
+                resolved = [.. selections.Select(selection => SourceResolver.Resolve(selection, byKey))];
+            }
+
+            return new SensorSnapshot(1, ++_sequence, now, readings, [.. health], resolved)
             {
                 Alerts = [.. alerts]
             };

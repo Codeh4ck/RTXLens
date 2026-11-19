@@ -34,7 +34,7 @@ and desktop preferences (%LocalAppData%\RTXLens) are retained during upgrade and
 The widget is imported and removed separately in iCUE.
 Shared Microsoft redistributables are retained because other applications can use them.
 
-Offline package: .NET and Windows App SDK are bundled; a signed Microsoft Visual C++ redistributable is embedded.
+The offline package bundles the .NET runtime and includes a signed Microsoft Visual C++ redistributable.
 An unsigned development build is a release candidate, not a publicly signed release.
 See release.json for component versions, source commit, signing status and build timestamp.
 SHA256SUMS.txt verifies the extracted ZIP contents.

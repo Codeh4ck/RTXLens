@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <ItemGroup>
         <ProjectReference Include="../../../Common/Contracts/RTXLens.Contracts.csproj" />
+        <InternalsVisibleTo Include="RTXLens.Service" />
+        <InternalsVisibleTo Include="RTXLens.Tests" />
     </ItemGroup>
 </Project>

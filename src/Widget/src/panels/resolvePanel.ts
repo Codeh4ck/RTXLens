@@ -6,16 +6,15 @@ export function resolvePanel(slot: number, settings: Settings, store: TelemetryS
     const storedContent = settings.text(`panel${slot}`);
     const content = storedContent === 'asusStatus' ? 'nvidiaStatus' : storedContent;
     const nvidiaInstalled = store.catalog.some(plugin => plugin.id === 'generic-nvidia')
-        || store.snapshot?.plugins.some(plugin => plugin.pluginId === 'generic-nvidia') === true;
+        || store.health('generic-nvidia') !== undefined;
     const automatic = content.startsWith('auto');
     const available = (id: string) => {
         if (content !== 'autoPins') {
             return store.reporting(id, now);
         }
 
-        return store.snapshot?.sensors.some(
+        return store.readingsFor(id).some(
             (reading) =>
-                reading.identity.pluginId === id &&
                 ['GpuPin', 'PsuPin'].includes(reading.identity.component) &&
                 ['Current', 'Voltage', 'Power'].includes(reading.identity.metric) &&
                 store.valid(reading, now)

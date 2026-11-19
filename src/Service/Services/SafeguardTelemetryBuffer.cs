@@ -5,21 +5,33 @@ namespace RTXLens.Service.Services;
 
 internal sealed class SafeguardTelemetryBuffer
 {
-    private const int Capacity = 128;
+    private static readonly TimeSpan SampleInterval = TimeSpan.FromMilliseconds(100);
     internal static readonly TimeSpan MaximumCaptureAge = TimeSpan.FromSeconds(30);
     private readonly Lock _gate = new();
-    private readonly Queue<SafeguardTelemetry> _frames = new(Capacity);
+    private readonly LinkedList<SafeguardTelemetry> _frames = new();
+    private SafeguardTelemetry? _latest;
 
     public void Observe(SensorSnapshot snapshot)
     {
         lock (_gate)
         {
-            if (_frames.Count == Capacity)
+            var now = snapshot.Timestamp;
+            if (_latest is not null && now < _latest.CapturedAt)
             {
-                _frames.Dequeue();
+                _frames.Clear();
             }
 
-            _frames.Enqueue(new(snapshot.Timestamp, snapshot.Sensors) { SettingsProfile = snapshot.SettingsProfile });
+            _latest = new(now, snapshot.Sensors) { SettingsProfile = snapshot.SettingsProfile };
+            if (_frames.Last is not { } last || now - last.Value.CapturedAt >= SampleInterval)
+            {
+                _frames.AddLast(_latest);
+            }
+
+            // Keep one predecessor for a trigger between samples at the start of the window.
+            while (_frames.First?.Next is { } next && now - next.Value.CapturedAt >= MaximumCaptureAge)
+            {
+                _frames.RemoveFirst();
+            }
         }
     }
 
@@ -27,9 +39,9 @@ internal sealed class SafeguardTelemetryBuffer
     {
         lock (_gate)
         {
-            var frame = _frames.LastOrDefault(candidate => candidate.CapturedAt <= trigger
-                && trigger - candidate.CapturedAt <= MaximumCaptureAge);
-            return frame is null ? null : frame with
+            var frame = _latest is not null && _latest.CapturedAt <= trigger ? _latest
+                : _frames.LastOrDefault(candidate => candidate.CapturedAt <= trigger);
+            return frame is null || trigger - frame.CapturedAt > MaximumCaptureAge ? null : frame with
             {
                 Readings = [.. frame.Readings.Where(reading => reading.ObservedAt <= trigger)]
             };

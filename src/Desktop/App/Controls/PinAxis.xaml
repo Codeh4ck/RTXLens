@@ -1,9 +1,0 @@
-<UserControl x:Class="RTXLens.App.Controls.PinAxis"
-    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="using:RTXLens.App.Controls" Foreground="{ThemeResource MonitorMuted}">
-    <Grid Width="48" RowDefinitions="Auto,22,158,26,16">
-        <controls:StatusBadge x:Name="HeadroomSpacer" Text="0 A" ShowIndicator="False" Opacity="0" Margin="0,0,0,6" />
-        <Canvas x:Name="Ticks" Grid.Row="2" Height="158" />
-    </Grid>
-</UserControl>

@@ -93,14 +93,14 @@ internal sealed class MobilePairingWindow : LensWindow
         };
         Grid.SetColumn(guide, 1);
 
-        _reject = CreateDecisionButton("Reject", RejectIcon, "error", async void () =>
+        _reject = CreateDecisionButton("Reject", RejectIcon, "error", async () =>
         {
             if (_pending is { } pending)
             {
                 await resolve(MobileAccessOperation.Reject, pending.Id);
             }
         });
-        _approve = CreateDecisionButton("Approve", ApproveIcon, "success", async void () =>
+        _approve = CreateDecisionButton("Approve", ApproveIcon, "success", async () =>
         {
             if (_pending is { } pending)
             {
@@ -264,7 +264,7 @@ internal sealed class MobilePairingWindow : LensWindow
         return row;
     }
 
-    private static Button CreateDecisionButton(string label, Geometry geometry, string tone, Action action)
+    private static Button CreateDecisionButton(string label, Geometry geometry, string tone, Func<Task> action)
     {
         var icon = new PathIcon { Data = geometry, Width = 15, Height = 15 };
         icon[!TemplatedControl.ForegroundProperty] = new DynamicResourceExtension(tone == "success" ? "SuccessBrush" : "ErrorBrush");

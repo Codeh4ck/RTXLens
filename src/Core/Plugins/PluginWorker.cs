@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using RTXLens.Contracts.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using RTXLens.Contracts.Discovery;
 using RTXLens.Contracts.Enums;
@@ -245,6 +247,7 @@ internal sealed class PluginWorker
                 _pollCancellation = poll;
             }
 
+            var started = Stopwatch.GetTimestamp();
             try
             {
                 var sample = await _plugin.PollAsync(poll.Token);
@@ -264,6 +267,13 @@ internal sealed class PluginWorker
             }
             finally
             {
+                var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+                var tag = new KeyValuePair<string, object?>("plugin", _factory.Id);
+                TelemetryMetrics.PollDuration.Record(elapsed, tag);
+                if (elapsed > _settings.PollIntervalMs)
+                {
+                    TelemetryMetrics.PollOverruns.Add(1, tag);
+                }
                 lock (_cancellationLock)
                 {
                     _pollCancellation = null;

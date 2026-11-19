@@ -51,6 +51,26 @@
         <Setter Property="Spacing" Value="7" />
     </Style>
 
+    <Style Selector="Button.alert-dismiss">
+        <Setter Property="Foreground" Value="{DynamicResource IconBrush}" />
+    </Style>
+    <Style Selector="ContentControl.banner.warning Button.alert-dismiss">
+        <Setter Property="Foreground" Value="{DynamicResource WarningBrush}" />
+    </Style>
+    <Style Selector="ContentControl.banner.error Button.alert-dismiss">
+        <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}" />
+    </Style>
+    <Style Selector="ContentControl.banner.success Button.alert-dismiss">
+        <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+    </Style>
+    <Style Selector="Button.alert-dismiss:pointerover, Button.alert-dismiss:focus-visible, Button.alert-dismiss:pressed">
+        <Setter Property="BorderBrush" Value="{Binding Foreground, RelativeSource={RelativeSource Self}}" />
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.alert-dismiss:pressed">
+        <Setter Property="Opacity" Value="0.75" />
+    </Style>
+
     <Style Selector="StackPanel.button-content > Image, StackPanel.button-content > PathIcon, StackPanel.button-content > TextBlock">
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>

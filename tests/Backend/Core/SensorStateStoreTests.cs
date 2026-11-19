@@ -10,6 +10,9 @@ internal static class SensorStateStoreTests
 {
     public static void Run(TestRunner runner)
     {
+        runner.Run(ReusesUnchangedReadingsAcrossSnapshots);
+        runner.Run(NoSelectionSnapshotAllocationsScaleWithReferences);
+        runner.Run(TransitionToStalePreservesEarlierFrameAndChangesSelection);
         runner.Run(MarksExpiredReadingsAsStale);
         runner.Run(MarksExpiredPluginsAsStale);
         runner.Run(RemovesReadingsWhenADeviceDisconnects);
@@ -19,6 +22,59 @@ internal static class SensorStateStoreTests
         runner.Run(RejectsDuplicateSensorIdentities);
         runner.Run(RejectsUnitsThatDoNotMatchTheMetric);
         runner.Run(RejectsFutureTimestamps);
+    }
+
+    private static void ReusesUnchangedReadingsAcrossSnapshots()
+    {
+        var store = SensorTestData.CreatePopulatedStore();
+        var first = store.Snapshot(SensorTestData.Timestamp, []);
+        var next = store.Snapshot(SensorTestData.Timestamp.AddMilliseconds(100), []);
+        foreach (var reading in first.Sensors)
+        {
+            var unchanged = next.Sensors.Single(item => item.Identity == reading.Identity);
+            TestAssert.True(ReferenceEquals(reading, unchanged), "An unchanged immutable reading was copied.");
+        }
+    }
+
+    private static void NoSelectionSnapshotAllocationsScaleWithReferences()
+    {
+        const int frames = 32;
+        const int sensors = 256;
+        static long Measure(int count)
+        {
+            var store = SensorTestData.CreateStore();
+            var now = SensorTestData.Timestamp;
+            var readings = Enumerable.Range(0, count).Select(index => SensorTestData.CreatePowerReading(
+                SensorTestData.WireViewPower with { DeviceId = $"fixture-{index}" })).ToArray();
+            store.Update(SensorTestData.WireViewPower.PluginId, new PluginSample(PluginState.Ready, readings), now);
+            for (var i = 0; i < frames; i++) store.Snapshot(now, []);
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            for (var i = 0; i < frames; i++) store.Snapshot(now, []);
+            return GC.GetAllocatedBytesForCurrentThread() - before;
+        }
+
+        var extraBytesPerReading = (Measure(sensors) - Measure(1)) / (frames * (sensors - 1));
+        Console.WriteLine($"Snapshot allocation: {extraBytesPerReading} additional bytes per reading.");
+        // Allow several references per reading for growing lists and returning an independent array.
+        TestAssert.True(extraBytesPerReading <= 64,
+            $"A fresh snapshot with no selections allocated {extraBytesPerReading} extra bytes per additional reading (budget 64).");
+    }
+
+    private static void TransitionToStalePreservesEarlierFrameAndChangesSelection()
+    {
+        var store = SensorTestData.CreatePopulatedStore();
+        var now = SensorTestData.Timestamp;
+        var selection = SensorTestData.CreatePowerSelection();
+        var fresh = store.Snapshot(now, [selection]);
+        var later = now.AddMinutes(1);
+        store.Update(SensorTestData.AsusPower.PluginId, new PluginSample(PluginState.Ready,
+            [SensorTestData.CreatePowerReading(SensorTestData.AsusPower) with { ObservedAt = later }]), later);
+        var expired = store.Snapshot(later, [selection]);
+
+        TestAssert.Equal(ReadingQuality.Stale, expired.Sensors.Single(item => item.Identity == SensorTestData.WireViewPower).Quality);
+        TestAssert.Equal(SensorTestData.AsusPower.Key, expired.Selections.Single().SensorKey);
+        TestAssert.Equal(ReadingQuality.Valid, fresh.Sensors.Single(item => item.Identity == SensorTestData.WireViewPower).Quality);
+        TestAssert.Equal(SensorTestData.WireViewPower.Key, fresh.Selections.Single().SensorKey);
     }
 
     private static void MarksExpiredReadingsAsStale()

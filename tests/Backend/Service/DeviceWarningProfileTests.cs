@@ -31,6 +31,7 @@ internal static class DeviceWarningProfileTests
         runner.Run(ProfilesUseIndependentSourcesAndReminderPolicies);
         runner.Run(Uses5080ActivationAndRequiresFreshSustainedSamples);
         runner.Run(ShutdownRequiresContinuousWarningAndSurvivesReboot);
+        runner.Run(RetriesReasonPersistenceAndHonorsCommandOutcome);
         await runner.RunAsync(PersistsProfilesThroughLocalDesktopApiAsync);
     }
 
@@ -158,6 +159,47 @@ internal static class DeviceWarningProfileTests
         }
     }
 
+    private static void RetriesReasonPersistenceAndHonorsCommandOutcome()
+    {
+        foreach (var outcome in new[] { ShutdownOutcome.Accepted, ShutdownOutcome.Unconfirmed, ShutdownOutcome.Rejected })
+        {
+            var root = Directory.CreateTempSubdirectory();
+            try
+            {
+                var reason = Path.Combine(root.FullName, "last-warning-shutdown.json");
+                Directory.CreateDirectory(reason); // Make the atomic file replacement fail before any command can run.
+                var action = new FakeShutdown(reason, outcome);
+                var coordinator = new WarningShutdownCoordinator(new RuntimeConfigurationFile(Path.Combine(root.FullName, "settings.json")),
+                    new TestTimeProvider(), action, NullLogger<WarningShutdownCoordinator>.Instance);
+                var evaluator = new DeviceWarningEvaluator();
+                var profile = Msi with { ShutdownAfterSeconds = 2 };
+                var configuration = Configuration();
+
+                for (var seconds = 0; seconds <= 20; seconds++)
+                {
+                    var evaluation = evaluator.Evaluate(Frame(seconds, 0, 7, 0), configuration, [profile], SettingsProfile.Rtx5080);
+                    coordinator.Evaluate(evaluation.Shutdowns);
+                    if (seconds == 5)
+                    {
+                        TestAssert.Equal(0, action.Count);
+                        Directory.Delete(reason);
+                    }
+                    if (seconds == 6)
+                    {
+                        TestAssert.Equal(0, action.Count);
+                    }
+                }
+
+                TestAssert.Equal(1, action.Count);
+                TestAssert.Equal(outcome != ShutdownOutcome.Rejected, File.Exists(reason));
+            }
+            finally
+            {
+                root.Delete(recursive: true);
+            }
+        }
+    }
+
     private static async Task PersistsProfilesThroughLocalDesktopApiAsync()
     {
         await using var host = await MonitoringTestHost.StartWithInstalledPluginsDisabledAsync();
@@ -210,14 +252,15 @@ internal static class DeviceWarningProfileTests
                 SensorUnit.Amperes, value, now));
     }
 
-    private sealed class FakeShutdown(string reasonPath) : IWarningShutdown
+    private sealed class FakeShutdown(string reasonPath, ShutdownOutcome outcome = ShutdownOutcome.Accepted) : IWarningShutdown
     {
         public int Count { get; private set; }
 
-        public void Request()
+        public ShutdownOutcome Request()
         {
             TestAssert.True(File.Exists(reasonPath), "The reason must be saved before requesting Windows shutdown.");
             Count++;
+            return outcome;
         }
     }
 }

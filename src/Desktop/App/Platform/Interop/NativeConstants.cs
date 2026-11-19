@@ -4,7 +4,6 @@ internal static class NativeConstants
 {
     public const int WindowProcedureIndex = -4;
     public const uint WindowSize = 0x0005;
-    public const uint GetMinMaxInfo = 0x0024;
     public const uint ContextMenu = 0x007B;
     public const uint LeftDoubleClick = 0x0203;
     public const uint RightButtonUp = 0x0205;
@@ -31,6 +30,4 @@ internal static class NativeConstants
     public const uint CommandOpen = 100;
     public const uint CommandSettings = 101;
     public const uint CommandExit = 102;
-    public const int MinimizeWindow = 6;
-    public const int RestoreWindow = 9;
 }

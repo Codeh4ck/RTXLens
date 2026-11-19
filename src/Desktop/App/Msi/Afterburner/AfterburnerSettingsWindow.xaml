@@ -1,8 +1,0 @@
-<Window x:Class="RTXLens.App.Msi.Afterburner.AfterburnerSettingsWindow"
-    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="RTX Lens - Afterburner Safeguard+ Integration">
-    <Grid x:Name="Root" Background="{ThemeResource MonitorBackground}" Padding="12">
-        <ContentControl x:Name="IntegrationHost" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
-    </Grid>
-</Window>

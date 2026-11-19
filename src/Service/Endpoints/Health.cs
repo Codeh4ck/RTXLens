@@ -14,7 +14,7 @@ internal static class Health
             var current = configuration.Current;
 
             return Results.Json(new HealthResponse("running", lifetime.StartedAt,
-                    Math.Max(0, (now - lifetime.StartedAt).TotalSeconds), store.Snapshot(now, []).Plugins,
+                    Math.Max(0, (now - lifetime.StartedAt).TotalSeconds), store.GetPluginHealth(now),
                     current.Revision, current.LastError),
                 AppJsonContext.Default.HealthResponse);
         });

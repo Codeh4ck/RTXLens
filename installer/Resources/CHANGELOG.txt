@@ -1,3 +1,13 @@
+1.1.2 - More reliable live monitoring
+- The iCUE widget reconnects if live readings stop arriving and marks stale values even when no new data comes in
+- The widget skips unnecessary redraws when readings stay steady, while compact pages keep cycling
+- WireView Pro II spends less time scanning USB ports during normal monitoring and discards incomplete readings
+- Performance Chart keeps your current recording if an import fails, explains what went wrong and shows the sample count after a successful import
+- Saving settings now retries brief Windows file locks, and RTX Lens attempts to restore the previous configuration if new settings fail to activate
+- The Event Log recovers earlier entries after an interrupted write, and Safeguard+ checks for new activity with less disk access
+- Safeguard+ keeps the readings from just before an alarm even at fast sampling rates
+- A slow push notification delivery to one phone no longer holds up alerts to other paired phones
+
 1.1.1 - Mobile access
 - Add the RTX Lens mobile app for iOS and Android, with live GPU metrics, power and per-pin readings, and warning history.
 - Configure direct phone access in the desktop app and pair devices using a QR code.
@@ -102,7 +112,7 @@
 - Manual checks, 24-hour reminders and skip-version actions link to the matching GitHub release.
 - Desktop checks its own version and the running backend version through GET /version.
 - Offline checks do not interrupt live monitoring; updates and widget import remain manual.
-- Installer includes the required .NET, Windows App SDK and Visual C++ runtimes.
+- Installer includes the required desktop and service runtimes.
 - Run setup to upgrade an installer-managed installation while retaining settings.
 
 0.4.0 - Shared warning policies and coordinated component update
@@ -121,7 +131,7 @@
 - Add packaged OS detection tests, including evaluation on the build machine without executing an installation.
 
 0.3.0 - Initial Windows installer release candidate
-- Required local monitoring service with optional WinUI desktop app/configurator.
+- Required local monitoring service with optional desktop app/configurator.
 - Offline x64 setup, automatic delayed service start and recovery.
 - Modify, repair, upgrade rollback and uninstall support.
 - Configuration/preferences retained; installed startup entries cleaned on removal.

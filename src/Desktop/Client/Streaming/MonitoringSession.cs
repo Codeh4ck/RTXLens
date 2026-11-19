@@ -1,6 +1,7 @@
 using RTXLens.Client.Http;
 using RTXLens.Contracts.Configuration;
 using RTXLens.Contracts.Discovery;
+using RTXLens.Contracts.Diagnostics;
 using RTXLens.Contracts.Sensors;
 
 namespace RTXLens.Client.Streaming;
@@ -31,6 +32,7 @@ public sealed class MonitoringSession(IMonitoringApi api)
         while (!stop.IsCancellationRequested)
         {
             var connected = false;
+            var reconnectCause = "stream-ended";
             var disconnectMessage = "Service disconnected; reconnecting…";
             using var connection = CancellationTokenSource.CreateLinkedTokenSource(stop);
             lock (_connectionLock)
@@ -74,11 +76,17 @@ public sealed class MonitoringSession(IMonitoringApi api)
             }
             catch (OperationCanceledException) when (connection.IsCancellationRequested)
             {
-                // User reconnect or normal application shutdown.
+                reconnectCause = "requested";
+            }
+            catch (InvalidDataException error)
+            {
+                reconnectCause = "incompatible-data";
+                disconnectMessage = $"Incompatible service data. {error.Message} Retrying…";
             }
             catch (Exception exception) when (exception is HttpRequestException or MonitoringApiException or IOException
                 or System.Net.WebSockets.WebSocketException or System.Text.Json.JsonException or OperationCanceledException)
             {
+                reconnectCause = exception.GetType().Name;
                 disconnectMessage = exception.Message;
             }
             finally
@@ -92,6 +100,8 @@ public sealed class MonitoringSession(IMonitoringApi api)
                 StatusChanged?.Invoke(new ConnectionStatus(false, disconnectMessage));
             }
 
+            if (stop.IsCancellationRequested) break;
+            TelemetryMetrics.Reconnects.Add(1, new KeyValuePair<string, object?>("cause", reconnectCause));
             try
             {
                 await Task.Delay(delay + Random.Shared.Next(0, 200), stop);

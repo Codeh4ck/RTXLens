@@ -1,3 +1,4 @@
+using CommunityToolkit.Mvvm.Input;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -18,6 +19,7 @@ internal static class DesktopControls
     public const double NavigationInset = 7;
 
     private static readonly Dictionary<string, IImage> Icons = new(StringComparer.Ordinal);
+    private static readonly Geometry CloseIcon = Geometry.Parse("M0 1L1 0L5.5 4.5L10 0L11 1L6.5 5.5L11 10L10 11L5.5 6.5L1 11L0 10L4.5 5.5Z");
     private static readonly Geometry CheckIcon = Geometry.Parse("M 4,12 L 6,10 L 9,13 L 18,4 L 20,6 L 9,17 Z");
 
     public static void BindTo(StyledElement target, AvaloniaProperty property, object source, string path,
@@ -57,7 +59,16 @@ internal static class DesktopControls
     public static Button ActionButton(string text, string icon, Action action) =>
         ActionButton(text, new Image { Source = Icon(icon), Width = 15, Height = 15 }, action);
 
-    public static Button ActionButton(string text, Control icon, Action action)
+    public static Button ActionButton(string text, string icon, Func<Task> action) =>
+        ActionButton(text, new Image { Source = Icon(icon), Width = 15, Height = 15 }, action);
+
+    public static Button ActionButton(string text, Control icon, Func<Task> action) =>
+        WithCommand(CreateActionButton(text, icon), text, action);
+
+    public static Button ActionButton(string text, Control icon, Action action) =>
+        OnClick(CreateActionButton(text, icon), action);
+
+    private static Button CreateActionButton(string text, Control icon)
     {
         var button = new Button
         {
@@ -69,21 +80,31 @@ internal static class DesktopControls
         };
 
         Avalonia.Automation.AutomationProperties.SetName(button, text);
-        button.Click += (_, _) => action();
         return button;
     }
 
-    public static Button CommitButton(string text, Action action)
+    public static Button CommitButton(string text, Action action) => OnClick(CreateCommitButton(text), action);
+
+    public static Button CommitButton(string text, Func<Task> action) => WithCommand(CreateCommitButton(text), text, action);
+
+    private static Button CreateCommitButton(string text)
     {
         var icon = new PathIcon { Data = CheckIcon, Width = 15, Height = 15 };
         icon[!TemplatedControl.ForegroundProperty] = new DynamicResourceExtension("IconBrush");
 
-        var button = ActionButton(text, icon, action);
+        var button = CreateActionButton(text, icon);
         button.Classes.Add("primary-action");
         return button;
     }
 
-    public static Button IconButton(string name, string icon, Action action)
+    public static Button IconButton(string name, string icon, Action action) => OnClick(CreateIconButton(name, icon), action);
+
+    public static Button IconButton(string name, string icon, Func<Task> action) => WithCommand(CreateIconButton(name, icon), name, action);
+
+    private static Button CreateIconButton(string name, string icon) =>
+        CreateIconButton(name, new Image { Source = Icon(icon), Width = 16, Height = 16 });
+
+    private static Button CreateIconButton(string name, Control icon)
     {
         var button = new Button
         {
@@ -91,12 +112,49 @@ internal static class DesktopControls
             Width = 36,
             Height = 36,
             Padding = new Thickness(0),
-            Content = new Image { Source = Icon(icon), Width = 16, Height = 16 },
+            Content = icon,
             VerticalAlignment = VerticalAlignment.Center
         };
         Avalonia.Automation.AutomationProperties.SetName(button, name);
         ToolTip.SetTip(button, name);
+        return button;
+    }
+
+    private static Button OnClick(Button button, Action action)
+    {
         button.Click += (_, _) => action();
+        return button;
+    }
+
+    private static Button WithCommand(Button button, string label, Func<Task> action)
+    {
+        button.Command = new AsyncRelayCommand(async () =>
+        {
+            try
+            {
+                await action();
+            }
+            catch (OperationCanceledException canceled) when (canceled.CancellationToken.IsCancellationRequested)
+            {
+                // The view or its operation was canceled.
+            }
+            catch (Exception error)
+            {
+                var report = DesktopErrorReports.Write(error, label);
+                if (TopLevel.GetTopLevel(button) is Window { IsVisible: true } owner)
+                {
+                    var message = report is null ? error.Message : $"{error.Message}\n\nDiagnostic report: {report}";
+                    try
+                    {
+                        await ShowInformationAsync(owner, $"{label} failed", DialogText(message));
+                    }
+                    catch (Exception dialogError)
+                    {
+                        DesktopErrorReports.Write(dialogError, $"Showing failure for {label}");
+                    }
+                }
+            }
+        });
         return button;
     }
 
@@ -267,7 +325,8 @@ internal static class DesktopControls
                 return label;
             }
 
-            var close = IconButton("Dismiss alert", "cancel-action", dismiss);
+            var glyph = new PathIcon { Data = CloseIcon, Width = 11, Height = 11 };
+            var close = OnClick(CreateIconButton("Dismiss alert", glyph), dismiss);
             close.Classes.Add("alert-dismiss");
             close.Width = close.Height = 26;
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8, Children = { label, close } };

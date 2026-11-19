@@ -9,6 +9,7 @@ internal static class SensorStreamHubTests
     {
         runner.Run(KeepsTheNewestSnapshotForSlowClients);
         runner.Run(BoundsEachClientQueueToOneSnapshot);
+        runner.Run(CountsReplacementsOnlyForSubscribersThatMissAFrame);
         runner.Run(SendsTheCurrentSnapshotToNewSubscribers);
     }
 
@@ -39,6 +40,31 @@ internal static class SensorStreamHubTests
         var hasOlderFrame = subscription.Reader.TryRead(out _);
 
         TestAssert.False(hasOlderFrame, "Older frames must not accumulate behind the latest snapshot.");
+    }
+
+    private static void CountsReplacementsOnlyForSubscribersThatMissAFrame()
+    {
+        using var listener = new System.Diagnostics.Metrics.MeterListener();
+        long replaced = 0;
+        listener.InstrumentPublished = (instrument, source) =>
+        {
+            if (instrument.Meter.Name == "RTXLens.Telemetry" && instrument.Name == "rtxlens.stream.frames.replaced")
+            {
+                source.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((_, count, _, _) => replaced += count);
+        listener.Start();
+
+        using var hub = new SensorStreamHub();
+        using var fast = hub.Subscribe();
+        using var slow = hub.Subscribe();
+        hub.Publish([1]);
+        fast.Reader.TryRead(out _);
+        hub.Publish([2]);
+        TestAssert.Equal(1L, replaced);
+        hub.Publish([3]);
+        TestAssert.Equal(3L, replaced);
     }
 
     private static void SendsTheCurrentSnapshotToNewSubscribers()

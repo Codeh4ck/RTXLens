@@ -15,6 +15,7 @@ internal static class SafeguardEmailTests
     public static void Run(TestRunner runner)
     {
         runner.Run(CapturesOnlyRecentReadingsAtOrBeforeTheTrigger);
+        runner.Run(RetainsPreTriggerEvidenceAtFastStreamIntervals);
         runner.Run(BuildsEscapedHtmlAndPlainTextWithSensorSources);
         runner.Run(LabelsSimulationAndReportsMissingTelemetry);
         runner.Run(GroupsPinMetricsAndUsesTheSameChartsForTestEmail);
@@ -38,6 +39,25 @@ internal static class SafeguardEmailTests
         TestAssert.Equal(8.3, captured.Readings.Single().Value!.Value);
         TestAssert.True(buffer.CaptureAt(before.AddSeconds(-2)) is null, "A later snapshot cannot stand in for an earlier trigger.");
         TestAssert.True(buffer.CaptureAt(after.AddSeconds(31)) is null, "An old frame cannot stand in for a fresh trigger.");
+    }
+
+    private static void RetainsPreTriggerEvidenceAtFastStreamIntervals()
+    {
+        foreach (var interval in new[] { 10, 100, 1000 })
+        {
+            var buffer = new SafeguardTelemetryBuffer();
+            for (var elapsed = 0; elapsed <= 30000; elapsed += interval)
+            {
+                buffer.Observe(new(1, elapsed, Trigger.AddMilliseconds(elapsed), [], [], []));
+            }
+
+            TestAssert.Equal(Trigger, buffer.CaptureAt(Trigger)!.CapturedAt);
+            TestAssert.Equal(Trigger, buffer.CaptureAt(Trigger.AddMilliseconds(1))!.CapturedAt);
+            TestAssert.True(buffer.CaptureAt(Trigger.AddTicks(-1)) is null, "Capture must never choose a later frame.");
+
+            buffer.Observe(new(1, 31000, Trigger.AddMilliseconds(30000 + interval / 2), [], [], []));
+            TestAssert.Equal(Trigger, buffer.CaptureAt(Trigger.AddMilliseconds(interval / 2))!.CapturedAt);
+        }
     }
 
     private static void BuildsEscapedHtmlAndPlainTextWithSensorSources()

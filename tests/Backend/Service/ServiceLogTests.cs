@@ -1,4 +1,8 @@
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Net;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -19,9 +23,127 @@ internal static class ServiceLogTests
 {
     public static async Task RunAsync(TestRunner runner)
     {
+        if (OperatingSystem.IsWindows())
+        {
+            runner.Run(SizeRetentionDoesNotRewriteTheEntireJournalForEachNewEvent);
+        }
+        await runner.RunAsync(RestartRecoversAndPagesPastATruncatedTailAsync);
         await runner.RunAsync(StreamsOnlyApprovedEventsAndResumesAsync);
         await runner.RunAsync(KeepsHistoryAcrossRestartsAndAppliesRetentionAsync);
         await runner.RunAsync(ClearRemovesSavedEventsAndAdvancesStreamAsync);
+    }
+
+    private static void SizeRetentionDoesNotRewriteTheEntireJournalForEachNewEvent()
+    {
+        var root = Directory.CreateTempSubdirectory("RTXLens-retention-");
+        try
+        {
+            var clock = new TestTimeProvider();
+            using var input = new ActivityLoggerProvider(clock);
+            using var journal = new ServiceLogJournal(input, new RuntimeConfigurationFile(Path.Combine(root.FullName, "settings.json")),
+                new TestConfiguration(), clock, NullLogger<ServiceLogJournal>.Instance);
+            var logger = input.CreateLogger("Test");
+            var detail = new string('x', 1000);
+            void AddEvent() => logger.LogActivity(LogLevel.Information, "test.retention", "Test", "Retention workload.", detail);
+
+            for (var i = 0; i < 1000; i++)
+            {
+                AddEvent();
+            }
+            journal.PublishPending();
+            TestAssert.True(journal.ReadHistory(0, 1).FirstSequence > 1, "The fixture must reach the configured 1 MiB cap.");
+
+            // The runner executes tests serially. Measuring the process also covers file rotation and compaction.
+            using var process = Process.GetCurrentProcess();
+            var before = WrittenBytes(process.SafeHandle);
+            for (var i = 0; i < 12; i++)
+            {
+                AddEvent();
+                journal.PublishPending();
+            }
+            journal.PublishPending(flush: true);
+            var bytesWritten = WrittenBytes(process.SafeHandle) - before;
+            Console.WriteLine($"Journal writes for 12 appends at capacity: {bytesWritten} bytes.");
+
+            var newest = journal.ReadHistory(0, 2);
+            var older = journal.ReadHistory(newest.Entries[^1].Sequence, 2);
+            TestAssert.Equal(1012L, newest.Entries[0].Sequence);
+            TestAssert.Equal(1010L, older.Entries[0].Sequence);
+            TestAssert.True(bytesWritten < 2 * 1024 * 1024,
+                $"Twelve individual appends at the 1 MiB cap wrote {bytesWritten:N0} bytes; allow one compaction plus appends.");
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    private static ulong WrittenBytes(SafeProcessHandle process)
+    {
+        if (!GetProcessIoCounters(process, out var counters)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        return counters.WriteTransferCount;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
+    private static extern bool GetProcessIoCounters(SafeProcessHandle process, out IoCounters counters);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct IoCounters
+    {
+        public ulong ReadOperations, WriteOperations, OtherOperations;
+        public ulong ReadTransferCount, WriteTransferCount, OtherTransferCount;
+    }
+
+    private static async Task RestartRecoversAndPagesPastATruncatedTailAsync()
+    {
+        var root = Directory.CreateTempSubdirectory("RTXLens-journal-recovery-");
+        try
+        {
+            var clock = new TestTimeProvider();
+            var settings = new RuntimeConfigurationFile(Path.Combine(root.FullName, "settings.json"));
+            var logs = root.CreateSubdirectory("Logs");
+            var path = Path.Combine(logs.FullName, "events.jsonl");
+            var entries = Enumerable.Range(1, 3).Select(i => new ServiceLogEntry(i, clock.GetUtcNow(),
+                ServiceLogLevel.Information, "test.seed", "Test", "Persisted event.", null));
+            await File.WriteAllLinesAsync(path, entries.Select(e => JsonSerializer.Serialize(e, AppJsonContext.Default.ServiceLogEntry)));
+            await File.AppendAllTextAsync(path, "{\"sequence\":4,");
+
+            using (var input = new ActivityLoggerProvider(clock))
+            using (var journal = new ServiceLogJournal(input, settings, new TestConfiguration(), clock, NullLogger<ServiceLogJournal>.Instance))
+            {
+                await journal.StartAsync(default);
+                try
+                {
+                    var newest = journal.ReadHistory(0, 2);
+                    TestAssert.True(newest.Entries.Select(e => e.Sequence).SequenceEqual([3L, 2L]), "The last two complete records must survive.");
+                    TestAssert.Equal(1L, journal.ReadHistory(2, 2).Entries.Single().Sequence);
+                    input.CreateLogger("Test").LogActivity(LogLevel.Information, "test.recovered", "Test", "Recovered event.");
+                    journal.PublishPending();
+                }
+                finally
+                {
+                    await journal.StopAsync(default);
+                }
+            }
+
+            using var recoveredInput = new ActivityLoggerProvider(clock);
+            using var recovered = new ServiceLogJournal(recoveredInput, settings, new TestConfiguration(), clock, NullLogger<ServiceLogJournal>.Instance);
+            await recovered.StartAsync(default);
+            try
+            {
+                var entry = recovered.ReadHistory(0, 1).Entries.Single();
+                TestAssert.Equal(4L, entry.Sequence);
+                TestAssert.Equal("test.recovered", entry.Code);
+            }
+            finally
+            {
+                await recovered.StopAsync(default);
+            }
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
     }
 
     private static async Task StreamsOnlyApprovedEventsAndResumesAsync()

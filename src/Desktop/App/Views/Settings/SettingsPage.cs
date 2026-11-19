@@ -47,7 +47,7 @@ internal sealed class SettingsPage : UserControl
         _baseline = shell.Preferences;
         _savedPalette = _draftPalette = shell.Appearance.SelectedPalette;
 
-        _apply = CommitButton("Apply", async void () => await ApplyAsync());
+        _apply = CommitButton("Apply", ApplyAsync);
         _apply.IsEnabled = false;
         _feedback = Alert(dismiss: DismissFeedback);
         _feedback.Margin = new Thickness(0, 0, PageScrollbarGutter, 0);
@@ -280,7 +280,7 @@ internal sealed class SettingsPage : UserControl
         BindTo(status, TextBlock.TextProperty, updates, nameof(updates.Status));
         var checkedAt = new TextBlock();
         BindTo(checkedAt, TextBlock.TextProperty, updates, nameof(updates.LastChecked));
-        var check = ActionButton("Check now", "refresh", async void () => await updates.CheckAsync(true, _shell.StopToken));
+        var check = ActionButton("Check now", "refresh", () => updates.CheckAsync(true, _shell.StopToken));
         BindTo(check, IsEnabledProperty, updates, "!Checking");
 
         var notices = new ItemsControl
@@ -298,14 +298,14 @@ internal sealed class SettingsPage : UserControl
     private Control UpdateCard(UpdateNotice notice)
     {
         var release = ActionButton("View release", "chart-export",
-            async void () => await _shell.RunAsync(async () =>
+            () => _shell.RunAsync(async () =>
             {
                 if (TopLevel.GetTopLevel(this) is { } root && !await root.Launcher.LaunchUriAsync(new Uri(notice.ReleaseUrl)))
                 {
                     throw new IOException("The release page could not be opened.");
                 }
             }));
-        var notes = ActionButton("View release notes", "info-action", async void () =>
+        var notes = ActionButton("View release notes", "info-action", async () =>
         {
             if (TopLevel.GetTopLevel(this) is Window owner)
             {
@@ -321,9 +321,9 @@ internal sealed class SettingsPage : UserControl
             {
                 release, notes,
                 ActionButton("Remind me later", "timer",
-                    async void () => await _shell.RunAsync(() => _shell.Updates.DismissAsync(notice, false, _shell.StopToken))),
+                    () => _shell.RunAsync(() => _shell.Updates.DismissAsync(notice, false, _shell.StopToken))),
                 ActionButton("Skip this version", "chart-forward",
-                    async void () => await _shell.RunAsync(() => _shell.Updates.DismissAsync(notice, true, _shell.StopToken)))
+                    () => _shell.RunAsync(() => _shell.Updates.DismissAsync(notice, true, _shell.StopToken)))
             }
         };
         return Section(notice.Description, actions);

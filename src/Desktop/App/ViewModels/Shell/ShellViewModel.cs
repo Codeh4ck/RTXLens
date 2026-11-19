@@ -26,6 +26,7 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
     private string _liveConnection = "Connecting to monitoring service…";
     private MonitoringSession _session = null!;
     private CancellationTokenSource? _connectionStop;
+    private Task _connectionTask = Task.CompletedTask;
     private readonly CancellationTokenSource _stop = new();
     private readonly DispatcherTimer _displayTimer;
     private SensorSnapshot? _displayedSnapshot;
@@ -41,6 +42,10 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
         _createHttpClient = createHttpClient ?? (address => new HttpClient { BaseAddress = address, Timeout = TimeSpan.FromSeconds(8) });
         Appearance = appearance;
         Preferences = store.Load();
+        if (store.LastError is { } error)
+        {
+            OperationStatus = error;
+        }
 
         _configuration = new ConfigurationEditorViewModel(() => _liveApi);
         InitializeSettings();
@@ -51,17 +56,19 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     private void Connect(string address)
     {
-        _connectionStop?.Cancel();
-        _connectionStop?.Dispose();
+        StopConnection();
         _connectionStop = CancellationTokenSource.CreateLinkedTokenSource(StopToken);
-        _http?.Dispose();
         _http = _createHttpClient(new Uri(address));
         _liveApi = new MonitoringApiClient(_http);
         _liveCatalog = null;
         _liveConfiguration = null;
         RaiseApiChanged();
         Logs = new ServiceLogClient(_http);
-        var session = _session = new MonitoringSession(_liveApi);
+        var session = new MonitoringSession(_liveApi);
+        lock (_recordingModeLock)
+        {
+            _session = session;
+        }
 
         session.StatusChanged += status => Post(session, () =>
         {
@@ -93,7 +100,7 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
 
         session.CatalogReceived += catalog =>
         {
-            UpdateLiveRecorder(() => Recorder.SetCatalog(catalog));
+            UpdateLiveRecorder(session, () => Recorder.SetCatalog(catalog));
             Post(session, () =>
             {
                 _liveCatalog = catalog;
@@ -110,7 +117,7 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
 
         session.ConfigurationReceived += configuration =>
         {
-            UpdateLiveRecorder(() => Recorder.SetConfiguration(configuration.Configuration));
+            UpdateLiveRecorder(session, () => Recorder.SetConfiguration(configuration.Configuration));
             Post(session, () =>
             {
                 _liveConfiguration = configuration;
@@ -131,7 +138,7 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
             {
                 lock (_recordingModeLock)
                 {
-                    if (!IsSimulation)
+                    if (ReferenceEquals(_session, session) && !IsSimulation)
                     {
                         Recorder.Accept(snapshot);
                     }
@@ -147,11 +154,11 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void UpdateLiveRecorder(Action update)
+    private void UpdateLiveRecorder(MonitoringSession session, Action update)
     {
         lock (_recordingModeLock)
         {
-            if (!IsSimulation)
+            if (ReferenceEquals(_session, session) && !IsSimulation)
             {
                 update();
             }
@@ -226,7 +233,52 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
     {
         var session = _session;
         var token = _connectionStop!.Token;
-        _ = Task.Run(() => session.RunAsync(token), token);
+        _connectionTask = Task.Run(async () =>
+        {
+            try
+            {
+                await session.RunAsync(token);
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                // The session was replaced or the app is closing.
+            }
+            catch (Exception error)
+            {
+                Post(session, () =>
+                {
+                    _liveConnection = $"Monitoring stopped. {error.Message}";
+                    OperationStatus = _liveConnection;
+                    if (!IsSimulation)
+                    {
+                        Dashboard.Connection = _liveConnection;
+                    }
+                });
+            }
+        });
+    }
+
+    private void StopConnection()
+    {
+        if (_connectionStop is { } stop)
+        {
+            stop.Cancel();
+            _ = ReleaseConnectionAsync(_connectionTask, stop, _http);
+            _connectionStop = null;
+        }
+    }
+
+    private static async Task ReleaseConnectionAsync(Task connection, CancellationTokenSource stop, HttpClient client)
+    {
+        try
+        {
+            await connection.ConfigureAwait(false);
+        }
+        finally
+        {
+            stop.Dispose();
+            client.Dispose();
+        }
     }
 
     public void SetVisible(bool visible)
@@ -357,10 +409,9 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
         StopSimulation();
 #endif
         _stop.Cancel();
-        _connectionStop?.Dispose();
+        StopConnection();
         _updateTimer.Stop();
         Updates.Cancel();
         _updateHttp.Dispose();
-        _http.Dispose();
     }
 }

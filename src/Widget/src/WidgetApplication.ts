@@ -42,7 +42,7 @@ export class WidgetApplication {
     private frame = 0;
     private active = 0;
     private lastPageAt = Date.now();
-    private timer: ReturnType<typeof setInterval>;
+    private renderTimer: ReturnType<typeof setTimeout> | null = null;
     private observer: ResizeObserver;
     private nodes: Record<string, HTMLElement> = {};
     private destroyed = false;
@@ -51,6 +51,13 @@ export class WidgetApplication {
     private openRelease: (url: string) => boolean;
     private updateInstance: string;
     private visibilityChanged = (): void => {
+        this.client.setSuspended(document.hidden);
+        if (document.hidden) {
+            this.cancelRenderTimer();
+            cancelAnimationFrame(this.frame);
+            this.frame = 0;
+            return;
+        }
         this.requestRender();
         void this.updates.check();
     };
@@ -97,22 +104,7 @@ export class WidgetApplication {
 
         this.observer.observe(root);
         document.addEventListener('visibilitychange', this.visibilityChanged);
-        this.timer = setInterval(() => {
-            if (document.hidden) {
-                return;
-            }
-
-            if (
-                !this.flyout.open &&
-                this.settings.enabled('autoPage') &&
-                this.capacity() < this.assigned().length &&
-                Date.now() - this.lastPageAt >= this.settings.number('pageSeconds') * 1000
-            ) {
-                this.page(1);
-            }
-
-            this.requestRender();
-        }, 500);
+        this.client.setSuspended(document.hidden);
 
         window.addEventListener('pagehide', () => this.destroy(), { once: true });
     }
@@ -141,6 +133,8 @@ export class WidgetApplication {
 
     updateSettings(read: (name: string) => unknown, defaultTemperatureUnit: string, updatesReady = true): void {
         const oldPage = this.settings.text('smallPanel');
+        const oldAutoPage = this.settings.enabled('autoPage');
+        const oldPageSeconds = this.settings.number('pageSeconds');
         const oldPeak = this.settings.enabled('showPeak');
         const oldPreview = this.settings.text('warningPreview');
         this.settings.update(read);
@@ -149,6 +143,11 @@ export class WidgetApplication {
 
         if (oldPage !== this.settings.text('smallPanel')) {
             this.active = this.settings.number('smallPanel') - 1;
+        }
+
+        if (oldAutoPage !== this.settings.enabled('autoPage') || oldPageSeconds !== this.settings.number('pageSeconds')
+            || oldPage !== this.settings.text('smallPanel')) {
+            this.lastPageAt = Date.now();
         }
 
         if (oldPeak !== this.settings.enabled('showPeak')) {
@@ -218,12 +217,10 @@ export class WidgetApplication {
         return Math.min(cssCapacity, configured);
     }
 
-    private page(direction: number): void {
-        const assigned = this.assigned();
+    private advancePage(direction: number, assigned: number[]): void {
         const index = assigned.indexOf(this.active);
         this.active = assigned[(index + direction + assigned.length) % assigned.length] ?? 0;
         this.lastPageAt = Date.now();
-        this.requestRender();
     }
 
     private changeMetric(slot: number, metric: string): void {
@@ -244,8 +241,21 @@ export class WidgetApplication {
 
         this.frame = requestAnimationFrame(() => {
             this.frame = 0;
-            this.render();
+            if (document.hidden || this.destroyed) return;
+            this.store.nextFreshnessChange = Infinity;
+            const pageAt = this.render(Date.now());
+            this.cancelRenderTimer();
+            const next = Math.min(this.store.nextFreshnessChange, pageAt);
+            if (Number.isFinite(next)) {
+                const delay = Math.max(0, Math.min(next - Date.now(), 2147483647));
+                this.renderTimer = setTimeout(() => this.requestRender(), delay);
+            }
         });
+    }
+
+    private cancelRenderTimer(): void {
+        if (this.renderTimer !== null) clearTimeout(this.renderTimer);
+        this.renderTimer = null;
     }
 
     private renderSafeguard(): boolean {
@@ -283,8 +293,7 @@ export class WidgetApplication {
         return true;
     }
 
-    private render(): void {
-        const now = Date.now();
+    private render(now: number): number {
         const notices = this.warnings.present(now);
         this.root.dataset.connection = this.store.connection;
 
@@ -299,7 +308,7 @@ export class WidgetApplication {
             : undefined;
 
         if (this.renderSafeguard()) {
-            return;
+            return Infinity;
         }
 
         const newWarning = this.warningTracker.update(deliverable, this.settings.enabled('showAlerts'));
@@ -324,7 +333,7 @@ export class WidgetApplication {
 
         // Keep the socket and alert tracking active while a flyout is open, but stop dashboard work.
         if (this.flyout.open) {
-            return;
+            return Infinity;
         }
 
         setText(this.nodes['service-alert']!, notices.map((notice) => `${notice.title}: ${notice.detail}`).join(' · '));
@@ -336,8 +345,13 @@ export class WidgetApplication {
             this.active = assigned[0] ?? 0;
         }
 
-        const activeIndex = assigned.indexOf(this.active);
         const visibleCount = Math.min(this.capacity(), assigned.length);
+        const autoPage = visibleCount < assigned.length && this.settings.enabled('autoPage');
+        const pageInterval = this.settings.number('pageSeconds') * 1000;
+        if (autoPage && now >= this.lastPageAt + pageInterval) {
+            this.advancePage(1, assigned);
+        }
+        const activeIndex = assigned.indexOf(this.active);
 
         for (let index = 0; index < this.views.length; index++) {
             const element = document.getElementById(`panel${index + 1}`)!;
@@ -382,7 +396,10 @@ export class WidgetApplication {
                         this.requestRender();
                     },
                     (panel, metric) => this.changeMetric(panel, metric),
-                    (direction) => this.page(direction)
+                    (direction) => {
+                        this.advancePage(direction, this.assigned());
+                        this.requestRender();
+                    }
                 );
 
                 this.viewKeys[index] = key;
@@ -396,12 +413,13 @@ export class WidgetApplication {
             'aria-label',
             `${this.store.connection === 'live' ? 'Telemetry connected' : this.store.connectionMessage}. Double tap or press Enter to view backend configuration.`
         );
+        return autoPage ? this.lastPageAt + pageInterval : Infinity;
     }
 
     private destroy(): void {
         this.destroyed = true;
         this.client.stop();
-        clearInterval(this.timer);
+        this.cancelRenderTimer();
         clearInterval(this.updateTimer);
         this.updates.stop();
 

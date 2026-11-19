@@ -44,7 +44,7 @@ internal sealed class AfterburnerConnectorEditor : UserControl
             SelectedIndex = _binding is null ? -1 : SafeguardScripts.All.ToList().FindIndex(script => script.Id == _binding.ScriptId),
             PlaceholderText = "Select a bundled script"
         };
-        var configure = ActionButton("Configure", "settings-action", async void () => await ConfigureAsync());
+        var configure = ActionButton("Configure", "settings-action", ConfigureAsync);
         var scriptRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8, Children = { _scripts, configure } };
         Grid.SetColumn(configure, 1);
         var simulation = Alert("Validation only. Simulation sends a real email without changing GPU settings or shutting down Windows.", "warning");

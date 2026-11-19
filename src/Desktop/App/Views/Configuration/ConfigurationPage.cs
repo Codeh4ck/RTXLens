@@ -56,10 +56,10 @@ internal sealed class ConfigurationPage : UserControl
         Watch(feedback, _editor, UpdateMessage, nameof(_editor.MessageTone));
         Watch(feedback, _editor, UpdateMessage, nameof(_editor.HasExternalChanges));
 
-        var reload = ActionButton("Reload", "refresh", async void () => await _editor.ReloadAsync(shell.StopToken));
+        var reload = ActionButton("Reload", "refresh", () => _editor.ReloadAsync(shell.StopToken));
         BindTo(reload, IsEnabledProperty, _editor, "!IsBusy");
 
-        var apply = CommitButton("Apply", async void () =>
+        var apply = CommitButton("Apply", async () =>
         {
             var previous = _editor.CurrentConfiguration;
             await _editor.ApplyAsync(shell.StopToken);
@@ -358,17 +358,7 @@ internal sealed class ConfigurationPage : UserControl
     private StackPanel DeviceActions(PluginSettingsEditorViewModel plugin, ToggleSwitch enabled, ComboBox device, string kind)
     {
         var refreshButton = IconButton($"Refresh {kind} list", "refresh",
-            async void () =>
-            {
-                try
-                {
-                    await _shell.RunAsync(() => _shell.RefreshDeviceListAsync(plugin));
-                }
-                catch (Exception)
-                {
-                    // ignored
-                }
-            });
+            () => _shell.RunAsync(() => _shell.RefreshDeviceListAsync(plugin)));
 
         Watch(refreshButton, plugin, UpdateRefreshAvailability, nameof(plugin.Enabled));
         Watch(refreshButton, _editor, UpdateRefreshAvailability, nameof(_editor.CanEdit));
@@ -410,20 +400,13 @@ internal sealed class ConfigurationPage : UserControl
 
         BindTo(duty, IsVisibleProperty, msi, nameof(msi.IsManual));
 
-        var curve = ActionButton("Edit fan curve", "fan-action", async void () =>
+        var curve = ActionButton("Edit fan curve", "fan-action", async () =>
         {
-            try
+            if (TopLevel.GetTopLevel(this) is Window owner)
             {
-                if (TopLevel.GetTopLevel(this) is Window owner)
-                {
-                    var window = new FanCurveWindow(msi, _shell);
-                    _shell.TrackToolWindow(window, "msi-fan-curve", owner);
-                    await window.ShowDialog(owner);
-                }
-            }
-            catch (Exception )
-            {
-                // ignored
+                var window = new FanCurveWindow(msi, _shell);
+                _shell.TrackToolWindow(window, "msi-fan-curve", owner);
+                await window.ShowDialog(owner);
             }
         });
 
@@ -550,28 +533,21 @@ internal sealed class ConfigurationPage : UserControl
 
         var header = Section("Connector sources", group);
 
-        header.HeaderActions = IconButton("How source selections work", "info-action", async void () =>
+        header.HeaderActions = IconButton("How source selections work", "info-action", async () =>
         {
-            try
+            if (TopLevel.GetTopLevel(this) is Window owner)
             {
-                if (TopLevel.GetTopLevel(this) is Window owner)
-                {
-                    await ShowInformationAsync(owner, "Source selections", UsageGuide(
-                        "Source selections control which readings feed the connector power, total current, and voltage summaries. "
-                        + "Each metric has its own priority list.",
-                        "Choose a connector profile. For each metric, use the arrows to move your preferred source to the top. "
-                        + "Use Add source or the trash icon to change the list.",
-                        "Enable fallback to use the next available reading when your preferred source is unavailable. "
-                        + "With fallback off, the metric uses only the first source.",
-                        "If you use MSI PSU current, choose the connector feeding your GPU. Automatic uses the detected active connector "
-                        + "when only one is reporting current.",
-                        "Select Apply at the top of Configuration. For example, put WireView Pro II first for voltage and Nvidia first for power "
-                        + "to use those two readings together."));
-                }
-            }
-            catch (Exception)
-            {
-                // ignored
+                await ShowInformationAsync(owner, "Source selections", UsageGuide(
+                    "Source selections control which readings feed the connector power, total current, and voltage summaries. "
+                    + "Each metric has its own priority list.",
+                    "Choose a connector profile. For each metric, use the arrows to move your preferred source to the top. "
+                    + "Use Add source or the trash icon to change the list.",
+                    "Enable fallback to use the next available reading when your preferred source is unavailable. "
+                    + "With fallback off, the metric uses only the first source.",
+                    "If you use MSI PSU current, choose the connector feeding your GPU. Automatic uses the detected active connector "
+                    + "when only one is reporting current.",
+                    "Select Apply at the top of Configuration. For example, put WireView Pro II first for voltage and Nvidia first for power "
+                    + "to use those two readings together."));
             }
         });
 
@@ -699,7 +675,7 @@ internal sealed class ConfigurationPage : UserControl
 
     private Control CreateMaintenance()
     {
-        var restart = ActionButton("Restart backend service", "refresh", async void () =>
+        var restart = ActionButton("Restart backend service", "refresh", async () =>
         {
             if (TopLevel.GetTopLevel(this) is Window owner && await ConfirmAsync(owner, "Restart backend service",
                     "Restart the backend service and all enabled plugins?", "Restart"))
@@ -741,7 +717,7 @@ internal sealed class ConfigurationPage : UserControl
     }
 
     private Button HelpButton(string name, string title, string introduction, params string[] steps) =>
-        IconButton(name, "info-action", async void () =>
+        IconButton(name, "info-action", async () =>
         {
             if (TopLevel.GetTopLevel(this) is Window owner)
             {

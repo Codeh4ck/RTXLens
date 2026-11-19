@@ -32,6 +32,8 @@ internal static class AvaloniaControlsTests
         var runner = new TestRunner();
         runner.Run(() => RunPreviewChecks(screenshotDirectory));
         runner.Run(SavedAppearanceRoundTrips);
+        runner.Run(PendingActionsDisableTheButtonAndRecoverAfterCancellation);
+        runner.Run(ErrorReportsRetainSeparateCrashAndActionHistories);
         runner.Run(EditableListVirtualizesRows);
         Application.Current!.RequestedThemeVariant = ThemeVariant.Dark;
         runner.Run(AvaloniaDashboardTests.UpdatesRealHardwareViewsFromFixtureFrames);
@@ -47,6 +49,7 @@ internal static class AvaloniaControlsTests
         runner.Run(() => AvaloniaDashboardTests.MatchesEventTableAndDialogLayouts(screenshotDirectory));
         runner.Run(() => AvaloniaDashboardTests.FanCurveKeepsActionsVisible(screenshotDirectory));
         runner.Run(AvaloniaDashboardTests.FanCurveRestoreStagesAutomaticMode);
+        runner.Run(AvaloniaDashboardTests.EventLogRecoversAfterAnInvalidStreamPage);
         runner.Run(AvaloniaDashboardTests.SecondInstanceQueuesActivationDuringStartup);
         runner.Run(AvaloniaDashboardTests.SafeguardReportDisplaysPinCharts);
         runner.Run(() => AvaloniaDashboardTests.SafeguardLoadsAndReloadsConnectors(screenshotDirectory));
@@ -60,6 +63,75 @@ internal static class AvaloniaControlsTests
         runner.PrintSummary();
 
         return runner.FailedCount == 0 ? 0 : 1;
+    }
+
+    internal static void PumpUntil(Func<bool> ready)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(3);
+        while (!ready() && DateTime.UtcNow < deadline)
+        {
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(1);
+        }
+
+        TestAssert.True(ready(), "The UI operation did not complete.");
+    }
+
+    internal static void InvokeButton(Button button)
+    {
+        var peer = new Avalonia.Automation.Peers.ButtonAutomationPeer(button);
+        ((Avalonia.Automation.Provider.IInvokeProvider)peer).Invoke();
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    private static void PendingActionsDisableTheButtonAndRecoverAfterCancellation()
+    {
+        var completion = new TaskCompletionSource();
+        var calls = 0;
+        var button = RTXLens.App.Views.Shell.DesktopControls.CommitButton("Apply", () =>
+        {
+            calls++;
+            return completion.Task;
+        });
+        var window = new Window { Content = button };
+        window.Show();
+        try
+        {
+            InvokeButton(button);
+            TestAssert.Equal(1, calls);
+            TestAssert.False(button.IsEffectivelyEnabled, "A pending action must disable its button.");
+            TestAssert.False(button.Command!.CanExecute(null), "A second invocation must be unavailable.");
+            completion.SetCanceled(new CancellationToken(canceled: true));
+            Dispatcher.UIThread.RunJobs();
+            TestAssert.True(button.IsEffectivelyEnabled, "Cancellation must release the button.");
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    private static void ErrorReportsRetainSeparateCrashAndActionHistories()
+    {
+        var directory = Directory.CreateTempSubdirectory("rtxlens-diagnostics-");
+        try
+        {
+            var error = new InvalidOperationException("fixture failure");
+            var crash = RTXLens.App.DesktopErrorReports.Write(error, "startup", crash: true, directory: directory.FullName);
+            for (var i = 0; i < RTXLens.App.DesktopErrorReports.RetainedPerKind + 2; i++)
+            {
+                RTXLens.App.DesktopErrorReports.Write(error, $"action {i}", directory: directory.FullName);
+            }
+            var actions = directory.GetFiles("action-*.txt").OrderBy(item => item.Name, StringComparer.Ordinal).ToArray();
+            TestAssert.Equal(RTXLens.App.DesktopErrorReports.RetainedPerKind, actions.Length);
+            TestAssert.True(File.Exists(crash) && File.ReadAllText(crash!).Contains("startup"), "Action reports must preserve the crash report.");
+            var latest = File.ReadAllText(actions[^1].FullName);
+            TestAssert.True(latest.Contains("fixture failure") && latest.Contains("RTX Lens"), "Reports must identify the build and error.");
+        }
+        finally
+        {
+            directory.Delete(true);
+        }
     }
 
     private static void RunPreviewChecks(string? screenshotDirectory)

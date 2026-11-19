@@ -23,7 +23,7 @@ internal sealed class SafeguardExecutionReportWindow : LensWindow
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
         var status = Alert();
-        var export = ActionButton("Export HTML report", "chart-export", async void () =>
+        var export = ActionButton("Export HTML report", "chart-export", async () =>
         {
             try
             {

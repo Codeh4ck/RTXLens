@@ -15,11 +15,6 @@
     <PackageVersion Include="MailKit" Version="4.18.2" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.14" />
     <PackageVersion Include="LibreHardwareMonitorLib" Version="0.9.6" />
-    <PackageVersion Include="Microsoft.WindowsAppSDK.WinUI" Version="2.6.5" />
-    <PackageVersion Include="Microsoft.WindowsAppSDK.Foundation" Version="2.6.5" />
-    <PackageVersion Include="Microsoft.WindowsAppSDK.Runtime" Version="2.6.5" />
-    <PackageVersion Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="2.6.5" />
-    <PackageVersion Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2957" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.14" />
     <PackageVersion Include="System.IO.Ports" Version="10.0.14" />
     <PackageVersion Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" />

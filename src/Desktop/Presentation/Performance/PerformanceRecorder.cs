@@ -7,6 +7,8 @@ namespace RTXLens.Presentation.Performance;
 
 public sealed partial class PerformanceRecorder(TimeProvider? timeProvider = null, int maximumSamples = 2_000_000)
 {
+    public const string ImportedStatus = "Imported recording.";
+
     private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
     private readonly Lock _gate = new();
     private readonly Dictionary<string, TraceState> _traces = new(StringComparer.Ordinal);
@@ -383,7 +385,7 @@ public sealed partial class PerformanceRecorder(TimeProvider? timeProvider = nul
             _startedAt = session.StartedAt;
             _duration = session.DurationSeconds;
             _sampleCount = session.SampleCount;
-            _status = "Imported recording.";
+            _status = ImportedStatus;
         }
 
         Changed?.Invoke();

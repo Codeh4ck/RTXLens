@@ -10,7 +10,7 @@ internal static class PluginEndpoints
     public static void MapPluginEndpoints(this IEndpointRouteBuilder endpoints) => endpoints.MapGet("/plugins",
         (PluginRuntimeManager runtime, SensorStateStore store, IRuntimeConfiguration configuration, TimeProvider clock) =>
         {
-            var health = store.Snapshot(clock.GetUtcNow(), []).Plugins.ToDictionary(plugin => plugin.PluginId);
+            var health = store.GetPluginHealth(clock.GetUtcNow()).ToDictionary(plugin => plugin.PluginId);
             var settings = configuration.Current.Configuration.Plugins;
 
             var plugins = runtime.Definitions.Select(definition =>

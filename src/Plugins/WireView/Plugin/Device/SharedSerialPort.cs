@@ -3,7 +3,7 @@ using System.IO.Ports;
 namespace RTXLens.Plugins.WireView.Device;
 
 internal sealed class SharedSerialPort(string portName, int baudRate, Parity parity, int dataBits, StopBits stopBits)
-    : SerialPort(portName, baudRate, parity, dataBits, stopBits)
+    : SerialPort(portName, baudRate, parity, dataBits, stopBits), IWireViewPort
 {
     private readonly Mutex _mutex = new(false, "Global\\Access_USB_Sensors");
     private bool _hasMutex;
@@ -34,6 +34,7 @@ internal sealed class SharedSerialPort(string portName, int baudRate, Parity par
 
             base.Open();
             _hasMutex = true;
+
             return true;
         }
         catch
@@ -70,16 +71,18 @@ internal sealed class SharedSerialPort(string portName, int baudRate, Parity par
     {
         try
         {
-            if (disposing)
+            if (!disposing)
             {
-                try
-                {
-                    Close();
-                }
-                finally
-                {
-                    _mutex.Dispose();
-                }
+                return;
+            }
+
+            try
+            {
+                Close();
+            }
+            finally
+            {
+                _mutex.Dispose();
             }
         }
         finally

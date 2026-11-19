@@ -28,7 +28,7 @@ internal static class DeviceRefreshTests
             var asus = editor.Plugins.Single(plugin => plugin.IsAsus).Asus;
             asus.Devices.CollectionChanged += (_, _) =>
             {
-                // WinUI writes null when Clear removes the current item, before SetDevices finishes.
+                // Clearing the collection can reset the bound selection before SetDevices finishes.
                 asus.SelectedDevice = null!;
                 if (asus.Devices.Count > 0)
                 {

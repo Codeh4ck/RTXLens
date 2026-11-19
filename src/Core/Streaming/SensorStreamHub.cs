@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using RTXLens.Contracts.Diagnostics;
 
 namespace RTXLens.Core.Streaming;
 
@@ -29,7 +30,7 @@ public sealed class SensorStreamHub : IDisposable
         var channel = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(1)
         {
             FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true, SingleWriter = false, AllowSynchronousContinuations = false
-        });
+        }, static _ => TelemetryMetrics.FramesReplaced.Add(1));
 
         lock (_lock)
         {

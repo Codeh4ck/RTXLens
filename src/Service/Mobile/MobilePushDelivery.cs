@@ -13,12 +13,14 @@ internal sealed class MobilePushDelivery(MobilePairing pairing, ExpoMobilePushPr
     ILogger<MobilePushDelivery> logger) : BackgroundService
 {
     private static readonly TimeSpan AlertLifetime = TimeSpan.FromMinutes(5);
-    private readonly Channel<PendingAlert> _alerts = Bounded<PendingAlert>(128);
+    private readonly Channel<RecipientQueue> _newRecipients = Bounded<RecipientQueue>(MobilePairing.DeviceLimit);
+    private readonly Dictionary<Guid, RecipientQueue> _recipients = new();
     private readonly Channel<PendingReceipt> _receipts = Bounded<PendingReceipt>(256);
     private readonly Lock _gate = new();
     private string? _instanceId;
     private long _sequence;
     private DateTimeOffset _nextTest;
+    private long _missedReceipts;
 
     public void Observe(WarningSnapshot snapshot)
     {
@@ -73,7 +75,9 @@ internal sealed class MobilePushDelivery(MobilePairing pairing, ExpoMobilePushPr
     }
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        Task.WhenAll(DeliverAsync(stoppingToken), CheckReceiptsAsync(stoppingToken));
+        Task.WhenAll(Parallel.ForEachAsync(_newRecipients.Reader.ReadAllAsync(stoppingToken),
+            new ParallelOptions { MaxDegreeOfParallelism = MobilePairing.DeviceLimit, CancellationToken = stoppingToken },
+            DeliverToRecipientAsync), CheckReceiptsAsync(stoppingToken));
 
     private bool Enqueue(MobilePushAlert alert, MobilePushTarget[] targets, DateTimeOffset? startedAt = null)
     {
@@ -85,30 +89,57 @@ internal sealed class MobilePushDelivery(MobilePairing pairing, ExpoMobilePushPr
         }
 
         var title = alert.Title.Length <= 160 ? alert.Title : alert.Title[..160];
-        if (_alerts.Writer.TryWrite(new PendingAlert(alert with { Title = title }, targets, expiresAt)))
+        alert = alert with { Title = title };
+        var queued = 0;
+        var missed = 0;
+        lock (_gate)
         {
-            return true;
-        }
+            foreach (var target in targets)
+            {
+                if (target.Revoked.IsCancellationRequested) continue;
+                if (!_recipients.TryGetValue(target.Id, out var recipient))
+                {
+                    recipient = new RecipientQueue(target.Id, target.Revoked, Bounded<PendingAlert>(128));
+                    if (!_newRecipients.Writer.TryWrite(recipient))
+                    {
+                        missed++;
+                        continue;
+                    }
+                    _recipients.Add(target.Id, recipient);
+                }
 
-        logger.LogActivity(LogLevel.Warning, "mobile.push-queue-full", "Mobile access", "The mobile notification queue is full.");
-        return false;
+                if (recipient.Alerts.Writer.TryWrite(new PendingAlert(alert, target, expiresAt))) queued++;
+                else missed++;
+            }
+        }
+        if (missed > 0)
+        {
+            logger.LogActivity(LogLevel.Warning, "mobile.push-queue-full", "Mobile access",
+                "The mobile notification queue is full.", $"Skipped recipients: {missed}.");
+        }
+        return queued > 0;
     }
 
-    private async Task DeliverAsync(CancellationToken stoppingToken)
+    private async ValueTask DeliverToRecipientAsync(RecipientQueue recipient, CancellationToken stoppingToken)
     {
-        await foreach (var pending in _alerts.Reader.ReadAllAsync(stoppingToken))
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, recipient.Revoked);
+        try
         {
-            foreach (var target in pending.Targets)
+            await foreach (var pending in recipient.Alerts.Reader.ReadAllAsync(cancellation.Token))
             {
-                using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, target.Revoked);
-                try
-                {
-                    await SendAsync(pending, target, cancellation.Token);
-                }
-                catch (OperationCanceledException) when (target.Revoked.IsCancellationRequested)
-                {
-                    // A revoked pairing cannot receive new notifications.
-                }
+                await SendAsync(pending, pending.Target, cancellation.Token);
+            }
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            // Revocation drops this recipient's pending notifications.
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                _recipients.Remove(recipient.Id);
+                recipient.Alerts.Writer.TryComplete();
             }
         }
     }
@@ -132,7 +163,7 @@ internal sealed class MobilePushDelivery(MobilePairing pairing, ExpoMobilePushPr
             var result = await provider.SendAsync(target.Token, alert, cancellationToken);
             if (result is { Outcome: MobilePushOutcome.Accepted, TicketId: { } ticketId })
             {
-                _receipts.Writer.TryWrite(new PendingReceipt(target, ticketId, clock.GetUtcNow().AddMinutes(15)));
+                QueueReceipt(new PendingReceipt(target, ticketId, clock.GetUtcNow().AddMinutes(15)));
                 logger.LogActivity(LogLevel.Information, "mobile.push-accepted", "Mobile access", "Expo accepted a mobile notification.");
                 return;
             }
@@ -143,6 +174,28 @@ internal sealed class MobilePushDelivery(MobilePairing pairing, ExpoMobilePushPr
             }
 
             await Task.Delay(TimeSpan.FromSeconds(2 << attempt), clock, cancellationToken);
+        }
+    }
+
+    private void QueueReceipt(PendingReceipt receipt)
+    {
+        lock (_gate)
+        {
+            if (!_receipts.Writer.TryWrite(receipt))
+            {
+                _missedReceipts++;
+                if ((_missedReceipts & (_missedReceipts - 1)) == 0)
+                {
+                    logger.LogActivity(LogLevel.Warning, "mobile.push-receipt-queue-full", "Mobile access",
+                        "The mobile receipt queue is full.", $"Skipped checks since saturation: {_missedReceipts}.");
+                }
+            }
+            else if (_missedReceipts > 0)
+            {
+                logger.LogActivity(LogLevel.Information, "mobile.push-receipt-queue-recovered", "Mobile access",
+                    "The mobile receipt queue has space again.", $"Skipped checks: {_missedReceipts}.");
+                _missedReceipts = 0;
+            }
         }
     }
 
@@ -190,6 +243,7 @@ internal sealed class MobilePushDelivery(MobilePairing pairing, ExpoMobilePushPr
     private static Channel<T> Bounded<T>(int capacity) =>
         Channel.CreateBounded<T>(new BoundedChannelOptions(capacity) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
 
-    private sealed record PendingAlert(MobilePushAlert Alert, MobilePushTarget[] Targets, DateTimeOffset ExpiresAt);
+    private sealed record RecipientQueue(Guid Id, CancellationToken Revoked, Channel<PendingAlert> Alerts);
+    private sealed record PendingAlert(MobilePushAlert Alert, MobilePushTarget Target, DateTimeOffset ExpiresAt);
     private sealed record PendingReceipt(MobilePushTarget Target, string TicketId, DateTimeOffset CheckAt);
 }

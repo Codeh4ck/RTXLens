@@ -7,10 +7,12 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Threading.Channels;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using RTXLens.Contracts.Enums;
 using RTXLens.Contracts.Sensors;
 using RTXLens.Contracts.Warnings;
+using RTXLens.Service.Diagnostics;
 using RTXLens.Service.Mobile;
 using RTXLens.Service.Services;
 using RTXLens.Tests.Infrastructure;
@@ -34,9 +36,112 @@ internal static class MobileAccessTests
         await runner.RunAsync(NetworkSetupFailureKeepsTheListenerAvailableAsync);
         await runner.RunAsync(PairedPhoneReadsPersistedWarningHistoryAsync);
         await runner.RunAsync(PairedPhoneReceivesOnlyNewWarningNotificationsAsync);
+        await runner.RunAsync(BlockedRecipientDoesNotHoldUpAnotherPhoneAsync);
+        await runner.RunAsync(FullReceiptQueueReportsMissedChecksAsync);
         runner.Run(ExpiredInviteCannotBeUsed);
         runner.Run(CertificateRenewalKeepsThePublicKey);
         await runner.RunAsync(NoIpRetriesAndSuspendsRejectedCredentialsAsync);
+    }
+
+    private static MobilePairing CreatePushPairing(params string[] tokens)
+    {
+        var store = new TestStore();
+        store.Save(MobileAccessData.Empty with
+        {
+            Settings = new MobileAccessSettings(Enabled: true),
+            Devices = tokens.Select(token => new MobileDeviceCredential(Guid.NewGuid(), token, new byte[32], token)).ToArray()
+        });
+        var pairing = new MobilePairing(store, TimeProvider.System, NullLogger.Instance);
+        pairing.Load();
+        pairing.SetListening(true);
+        return pairing;
+    }
+
+    private static async Task BlockedRecipientDoesNotHoldUpAnotherPhoneAsync()
+    {
+        var pairing = CreatePushPairing("ExpoPushToken[phone_one]", "ExpoPushToken[phone_two]");
+        var blockedToken = pairing.GetPushTargets()[0].Token;
+        var blocked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var fast = Channel.CreateUnbounded<string>();
+        var slow = Channel.CreateUnbounded<string>();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var handler = new RecordingPushHandler(async (message, ct) =>
+        {
+            using var body = JsonDocument.Parse(message);
+            var title = body.RootElement.GetProperty("title").GetString()!;
+            if (body.RootElement.GetProperty("to").GetString() == blockedToken)
+            {
+                blocked.TrySetResult();
+                await release.Task.WaitAsync(ct);
+                await slow.Writer.WriteAsync(title, ct);
+            }
+            else
+            {
+                await fast.Writer.WriteAsync(title, ct);
+            }
+        });
+        using var client = new HttpClient(handler);
+        using var delivery = new MobilePushDelivery(pairing, new ExpoMobilePushProvider(client), TimeProvider.System,
+            NullLogger<MobilePushDelivery>.Instance);
+        await delivery.StartAsync(default);
+        try
+        {
+            delivery.SendSimulation("first");
+            await blocked.Task.WaitAsync(timeout.Token);
+            delivery.SendSimulation("second");
+            TestAssert.Equal("Simulation · first", await fast.Reader.ReadAsync(timeout.Token));
+            TestAssert.Equal("Simulation · second", await fast.Reader.ReadAsync(timeout.Token));
+            release.TrySetResult();
+            TestAssert.Equal("Simulation · first", await slow.Reader.ReadAsync(timeout.Token));
+            TestAssert.Equal("Simulation · second", await slow.Reader.ReadAsync(timeout.Token));
+        }
+        finally
+        {
+            release.TrySetResult();
+            await delivery.StopAsync(default);
+        }
+    }
+
+    private static async Task FullReceiptQueueReportsMissedChecksAsync()
+    {
+        var pairing = CreatePushPairing("ExpoPushToken[receipt_test]");
+        using var input = new ActivityLoggerProvider(TimeProvider.System);
+        using var logs = LoggerFactory.Create(builder => builder.AddProvider(input));
+        using var handler = new RecordingPushHandler();
+        using var client = new HttpClient(handler);
+        using var delivery = new MobilePushDelivery(pairing, new ExpoMobilePushProvider(client), TimeProvider.System,
+            logs.CreateLogger<MobilePushDelivery>());
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var receiptWarning = false;
+        await delivery.StartAsync(default);
+        try
+        {
+            // One receipt can be waiting on its due time while another 256 occupy the queue.
+            for (var i = 0; i < 260; i++)
+            {
+                delivery.SendSimulation("queue pressure");
+                while (true)
+                {
+                    var record = await input.Reader.ReadAsync(timeout.Token);
+                    receiptWarning |= IsReceiptWarning(record);
+                    if (record.Entry.Code == "mobile.push-accepted") break;
+                }
+            }
+        }
+        finally
+        {
+            await delivery.StopAsync(default);
+        }
+        while (input.Reader.TryRead(out var record))
+        {
+            receiptWarning |= IsReceiptWarning(record);
+        }
+        TestAssert.True(receiptWarning, "260 accepted pushes filled the receipt queue without reporting a missed check.");
+
+        static bool IsReceiptWarning(ActivityRecord record) => record.Level >= LogLevel.Warning &&
+            (record.Entry.Code.Contains("receipt", StringComparison.OrdinalIgnoreCase)
+             || record.Entry.Message.Contains("receipt", StringComparison.OrdinalIgnoreCase));
     }
 
     private static async Task PairedPhoneReceivesOnlyNewWarningNotificationsAsync()
@@ -656,15 +761,20 @@ internal static class MobileAccessTests
         return ((IPEndPoint)listener.LocalEndpoint).Port;
     }
 
-    private sealed class RecordingPushHandler : HttpMessageHandler
+    private sealed class RecordingPushHandler(Func<string, CancellationToken, Task>? onSend = null) : HttpMessageHandler
     {
         public Channel<string> Messages { get; } = Channel.CreateUnbounded<string>();
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             TestAssert.Equal("https://exp.host/--/api/v2/push/send", request.RequestUri?.AbsoluteUri);
-            await Messages.Writer.WriteAsync(await request.Content!.ReadAsStringAsync(cancellationToken), cancellationToken);
-            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("""{"data":{"status":"ok","id":"test-ticket"}}""") };
+            var message = await request.Content!.ReadAsStringAsync(cancellationToken);
+            if (onSend is not null) await onSend(message, cancellationToken);
+            await Messages.Writer.WriteAsync(message, cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(new { data = new { status = "ok", id = Guid.NewGuid().ToString("N") } })
+            };
         }
     }
 

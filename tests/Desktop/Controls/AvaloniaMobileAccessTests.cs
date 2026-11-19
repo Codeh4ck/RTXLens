@@ -154,8 +154,7 @@ internal static class AvaloniaMobileAccessTests
         {
             var button = FindButton(root, label);
             TestAssert.True(button.IsEnabled, $"{label} should be available.");
-            button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            Dispatcher.UIThread.RunJobs();
+            AvaloniaControlsTests.InvokeButton(button);
         }
     }
 }

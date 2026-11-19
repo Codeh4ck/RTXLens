@@ -21,10 +21,91 @@ internal static class AvaloniaChartsTests
     public static void Run(TestRunner runner, string? screenshotDirectory)
     {
         runner.Run(CurveEditsRespectOptions);
+        runner.Run(InvalidImportsKeepTheOpenRecording);
+        runner.Run(DismissIconFollowsAlertTone);
         runner.Run(ViewportFollowsLatestAndClampsNavigation);
         runner.Run(SeriesGeometryPreservesGapsAndPeaks);
         runner.Run(PerformanceHoverReadsSamplesOmittedFromThePlot);
         runner.Run(() => PreviewRespondsToPointer(screenshotDirectory));
+    }
+
+    private static void InvalidImportsKeepTheOpenRecording()
+    {
+        var recorder = new PerformanceRecorder();
+        recorder.Import(PerformanceRecordingTests.Fixture());
+        var original = recorder.CompletedSession();
+        var page = new PerformancePage(recorder);
+        var window = new Window { Content = page };
+        window.Show();
+        try
+        {
+            Check(new MemoryStream("<html></html>"u8.ToArray()), "The HTML file does not contain an RTX Lens recording.");
+            Check(new MemoryStream("{"u8.ToArray()), "The recording file contains invalid data.");
+            Check(new MemoryStream("""{"schemaVersion":99}"""u8.ToArray()), "This recording file version is unsupported.");
+            Check(new OversizedStream(), "The recording exceeds the supported file size.");
+            var warning = FindWarning();
+            AvaloniaControlsTests.InvokeButton(warning.GetVisualDescendants().OfType<Button>().Single());
+            TestAssert.False(warning.IsVisible, "Dismissing the import warning must hide it.");
+
+            var recording = System.Text.Encoding.UTF8.GetBytes(PerformanceRecordingFile.Serialize(original));
+            var import = page.ImportAsync(() => Task.FromResult<Stream?>(new MemoryStream(recording)));
+            AvaloniaControlsTests.PumpUntil(() => import.IsCompleted);
+            import.GetAwaiter().GetResult();
+            TestAssert.True(warning.IsVisible && warning.Classes.Contains("success"), "A valid import must replace the warning with success.");
+            TestAssert.Equal($"Imported recording · {original.SampleCount:N0} samples", warning.Content as string);
+            AvaloniaControlsTests.InvokeButton(warning.GetVisualDescendants().OfType<Button>().Single());
+            TestAssert.False(warning.IsVisible, "The import success banner should dismiss.");
+        }
+        finally
+        {
+            window.Close();
+        }
+
+        ContentControl FindWarning() => page.GetVisualDescendants().OfType<ContentControl>()
+            .Single(control => control.Classes.Contains("banner") && control.Classes.Contains("warning"));
+
+        void Check(Stream stream, string message)
+        {
+            var task = page.ImportAsync(() => Task.FromResult<Stream?>(stream));
+            TestAssert.True(SpinWait.SpinUntil(() =>
+            {
+                Dispatcher.UIThread.RunJobs();
+                return task.IsCompleted;
+            }, TimeSpan.FromSeconds(5)), "The import dialog must finish.");
+            task.GetAwaiter().GetResult();
+            var warning = FindWarning();
+            TestAssert.True(warning.IsVisible, "Show the import warning banner.");
+            TestAssert.Equal(message, warning.Content as string);
+            TestAssert.Equal(original.SessionId, recorder.CompletedSession().SessionId);
+            TestAssert.Equal(original.SampleCount, recorder.CompletedSession().SampleCount);
+        }
+    }
+
+    private static void DismissIconFollowsAlertTone()
+    {
+        var alert = RTXLens.App.Views.Shell.DesktopControls.Alert("Test alert", "warning", () => { });
+        var window = new Window { Content = alert };
+        window.Show();
+        try
+        {
+            foreach (var tone in new[] { "warning", "error", "success" })
+            {
+                RTXLens.App.Views.Shell.DesktopControls.SetAlert(alert, "Test alert", tone);
+                Dispatcher.UIThread.RunJobs();
+                var close = alert.GetVisualDescendants().OfType<Button>().Single();
+                var glyph = (PathIcon)close.Content!;
+                TestAssert.Equal(((ISolidColorBrush)alert.Foreground!).Color, ((ISolidColorBrush)glyph.Foreground!).Color);
+            }
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    private sealed class OversizedStream : MemoryStream
+    {
+        public override long Length => PerformanceRecordingFile.MaximumFileBytes + 1L;
     }
 
     private static void CurveEditsRespectOptions()
