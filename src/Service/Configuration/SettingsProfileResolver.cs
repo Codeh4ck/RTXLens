@@ -58,8 +58,10 @@ internal sealed partial class SettingsProfileResolver(SettingsProfileStore profi
             .Select(reading => reading.Identity)
             .ToArray();
 
-        var nvidiaReadings = snapshot.Sensors.Where(reading => reading.Identity.PluginId == "generic-nvidia"
-            && reading.Quality == ReadingQuality.Valid).Select(reading => reading.Identity.DeviceId).ToHashSet(StringComparer.Ordinal);
+        var nvidiaReadings = snapshot.Sensors
+            .Where(reading => reading.Identity.PluginId == "generic-nvidia" && reading.Quality == ReadingQuality.Valid)
+            .Select(reading => reading.Identity.DeviceId)
+            .ToHashSet(StringComparer.Ordinal);
 
         var msiReporting = snapshot.Plugins.Any(plugin => plugin is { PluginId: "msi-psu", State: PluginState.Ready })
             && snapshot.Sensors.Any(reading => reading is { Identity: { PluginId: "msi-psu", Component: SensorComponent.PsuPin, Metric: SensorMetric.Current }, Quality: ReadingQuality.Valid });
@@ -88,7 +90,14 @@ internal sealed partial class SettingsProfileResolver(SettingsProfileStore profi
         var sourceProfile = configuration.Monitoring.ConnectorProfiles.Profiles.FirstOrDefault(profile => profile.Id == configuration.Monitoring.ConnectorProfiles.ActiveProfileId);
 
         var wireViewAssigned = devices.Length == 1 || sourceProfile?.Metrics.Any(metric => metric.PreferredPlugins.FirstOrDefault() == "wireview-pro2") == true;
-        var wireViewIds = connectorReadings.Where(identity => identity.PluginId == "wireview-pro2").Select(identity => identity.DeviceId).Distinct().Take(2).ToArray();
+
+        var wireViewIds = connectorReadings
+            .Where(identity => identity.PluginId == "wireview-pro2")
+            .Select(identity => identity.DeviceId)
+            .Distinct()
+            .Take(2)
+            .ToArray();
+
         var wireView = wireViewAssigned && wireViewIds.Length == 1 ? wireViewIds[0] : null;
 
         if (wireView is null && !msiReporting && !nvidiaReadings.Contains(gpu.Id) && !connectorReadings.Any(identity => identity.PluginId is "asus-astral" or "generic-nvidia" && identity.DeviceId == gpu.Id))
