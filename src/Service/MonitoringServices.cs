@@ -26,7 +26,6 @@ public static class MonitoringServices
         services.AddSingleton(_ => new SensorStateStore([]));
         services.AddSingleton<SensorStreamHub>();
         services.AddSingleton<PluginRuntimeManager>();
-        services.AddHostedService(provider => provider.GetRequiredService<PluginRuntimeManager>());
         services.AddSingleton<ActivityLoggerProvider>();
         services.AddSingleton<ILoggerProvider>(provider => provider.GetRequiredService<ActivityLoggerProvider>());
         services.AddLogging(logging => logging.AddFilter<ActivityLoggerProvider>(null, LogLevel.Information));
@@ -40,6 +39,8 @@ public static class MonitoringServices
         var debugProfiles = debugInstance ? Path.Combine(Path.GetDirectoryName(configurationPath)!, "profiles") : null;
 
         services.AddSingleton(provider => new SettingsProfileStore(configuration, provider.GetRequiredService<ILogger<SettingsProfileStore>>(), debugProfiles));
+        services.AddSingleton<ProfileGpuDiscovery>();
+        services.AddHostedService(provider => provider.GetRequiredService<ProfileGpuDiscovery>());
         services.AddSingleton<SettingsProfileResolver>();
         services.AddSingleton<DeviceWarningProfileStore>();
         services.AddSingleton<IWarningShutdown, WindowsWarningShutdown>();

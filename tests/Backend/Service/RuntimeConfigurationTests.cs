@@ -198,8 +198,6 @@ internal static class RuntimeConfigurationTests
         var settings = original.Configuration.Plugins[PluginId] with { Enabled = false };
         var directory = Path.GetDirectoryName(host.ConfigurationPath)!;
         var pattern = Path.GetFileName(host.ConfigurationPath) + ".*.tmp";
-        Task<HttpResponseMessage> Save() => host.Client.PutAsJsonAsync($"/plugins/{PluginId}/settings", settings);
-        FileStream HoldFile() => File.Open(host.ConfigurationPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
 
         using (HoldFile())
         using (var rejected = await Save().WaitAsync(TimeSpan.FromSeconds(5)))
@@ -220,6 +218,11 @@ internal static class RuntimeConfigurationTests
         TestAssert.Equal(original.Revision + 1, (await host.GetConfigurationAsync()).Revision);
         TestAssert.False(RuntimeJson.Deserialize(await File.ReadAllTextAsync(host.ConfigurationPath)).Plugins[PluginId].Enabled,
             "A successful retry must persist the requested settings.");
+        return;
+
+        Task<HttpResponseMessage> Save() => host.Client.PutAsJsonAsync($"/plugins/{PluginId}/settings", settings);
+
+        FileStream HoldFile() => File.Open(host.ConfigurationPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
     }
 
     private static async Task RollsBackAnActivationFailureAsync()

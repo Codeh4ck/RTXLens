@@ -40,6 +40,14 @@ internal static class SensorStateStoreTests
     {
         const int frames = 32;
         const int sensors = 256;
+
+        var extraBytesPerReading = (Measure(sensors) - Measure(1)) / (frames * (sensors - 1));
+        Console.WriteLine($"Snapshot allocation: {extraBytesPerReading} additional bytes per reading.");
+        // Allow several references per reading for growing lists and returning an independent array.
+        TestAssert.True(extraBytesPerReading <= 64,
+            $"A fresh snapshot with no selections allocated {extraBytesPerReading} extra bytes per additional reading (budget 64).");
+        return;
+
         static long Measure(int count)
         {
             var store = SensorTestData.CreateStore();
@@ -47,17 +55,19 @@ internal static class SensorStateStoreTests
             var readings = Enumerable.Range(0, count).Select(index => SensorTestData.CreatePowerReading(
                 SensorTestData.WireViewPower with { DeviceId = $"fixture-{index}" })).ToArray();
             store.Update(SensorTestData.WireViewPower.PluginId, new PluginSample(PluginState.Ready, readings), now);
-            for (var i = 0; i < frames; i++) store.Snapshot(now, []);
+            for (var i = 0; i < frames; i++)
+            {
+                store.Snapshot(now, []);
+            }
+
             var before = GC.GetAllocatedBytesForCurrentThread();
-            for (var i = 0; i < frames; i++) store.Snapshot(now, []);
+            for (var i = 0; i < frames; i++)
+            {
+                store.Snapshot(now, []);
+            }
+
             return GC.GetAllocatedBytesForCurrentThread() - before;
         }
-
-        var extraBytesPerReading = (Measure(sensors) - Measure(1)) / (frames * (sensors - 1));
-        Console.WriteLine($"Snapshot allocation: {extraBytesPerReading} additional bytes per reading.");
-        // Allow several references per reading for growing lists and returning an independent array.
-        TestAssert.True(extraBytesPerReading <= 64,
-            $"A fresh snapshot with no selections allocated {extraBytesPerReading} extra bytes per additional reading (budget 64).");
     }
 
     private static void TransitionToStalePreservesEarlierFrameAndChangesSelection()

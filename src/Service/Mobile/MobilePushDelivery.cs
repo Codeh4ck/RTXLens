@@ -96,7 +96,11 @@ internal sealed class MobilePushDelivery(MobilePairing pairing, ExpoMobilePushPr
         {
             foreach (var target in targets)
             {
-                if (target.Revoked.IsCancellationRequested) continue;
+                if (target.Revoked.IsCancellationRequested)
+                {
+                    continue;
+                }
+
                 if (!_recipients.TryGetValue(target.Id, out var recipient))
                 {
                     recipient = new RecipientQueue(target.Id, target.Revoked, Bounded<PendingAlert>(128));
@@ -108,8 +112,14 @@ internal sealed class MobilePushDelivery(MobilePairing pairing, ExpoMobilePushPr
                     _recipients.Add(target.Id, recipient);
                 }
 
-                if (recipient.Alerts.Writer.TryWrite(new PendingAlert(alert, target, expiresAt))) queued++;
-                else missed++;
+                if (recipient.Alerts.Writer.TryWrite(new PendingAlert(alert, target, expiresAt)))
+                {
+                    queued++;
+                }
+                else
+                {
+                    missed++;
+                }
             }
         }
         if (missed > 0)

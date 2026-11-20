@@ -69,6 +69,9 @@ internal sealed class MonitoringTestHost : IAsyncDisposable
     }
 
     public static Task<MonitoringTestHost> StartWithTestPluginsAsync() => StartAsync(registerTestPlugins: true);
+    public static Task<MonitoringTestHost> StartWithFactoriesAsync(params ISensorPluginFactory[] factories) =>
+        StartAsync(false, factories: factories);
+
     public static Task<MonitoringTestHost> StartWithoutPluginsAsync() => StartAsync(registerTestPlugins: false);
     public static Task<MonitoringTestHost> StartWithMsiAsync(MsiTestState state) => StartAsync(false, msi: state);
     public static Task<MonitoringTestHost> StartWithMsiHardwareAsync() => StartAsync(false, useMsiHardware: true);
@@ -83,8 +86,8 @@ internal sealed class MonitoringTestHost : IAsyncDisposable
             ["Plugins:msi-psu:Enabled"] = "false"
         });
 
-    public static Task<MonitoringTestHost> StartWithWireViewAsync(WireViewTestState device, int initialPollMs = 1000) =>
-        StartAsync(registerTestPlugins: false, device, initialPollMs);
+    public static Task<MonitoringTestHost> StartWithWireViewAsync(WireViewTestState device, int initialPollMs = 1000, INvidiaHardwareSource? profileGpu = null) =>
+        StartAsync(registerTestPlugins: false, device, initialPollMs, profileGpu: profileGpu);
 
     public static Task<MonitoringTestHost> StartWithAsusAsync(AsusTestState device, WireViewTestState? wireView = null,
         ServiceConfiguration? existingConfiguration = null, Dictionary<string, string?>? bootstrapOverrides = null) =>
@@ -180,7 +183,7 @@ internal sealed class MonitoringTestHost : IAsyncDisposable
     private static async Task<MonitoringTestHost> StartAsync(bool registerTestPlugins, WireViewTestState? device = null,
         int initialPollMs = 1000, AsusTestState? asus = null, ServiceConfiguration? existingConfiguration = null,
         Dictionary<string, string?>? bootstrapOverrides = null, bool useInstalledFactories = false, MsiTestState? msi = null,
-        bool useMsiHardware = false, string? bootstrapFile = null)
+        bool useMsiHardware = false, string? bootstrapFile = null, ISensorPluginFactory[]? factories = null, INvidiaHardwareSource? profileGpu = null)
     {
         var builder = WebApplication.CreateSlimBuilder();
         // Test hosts use only explicit settings and requested fixtures, never inherited
@@ -235,6 +238,12 @@ internal sealed class MonitoringTestHost : IAsyncDisposable
         builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy.AllowAnyOrigin()));
         builder.Services.AddSingleton<IServiceRestart, TestServiceRestart>();
 
+        if (profileGpu is not null)
+        {
+            builder.Services.AddSingleton(profileGpu);
+            builder.Services.AddSingleton<NvidiaTelemetryReader>();
+        }
+
         if (useMsiHardware)
         {
             builder.Services.AddMsiPlugin();
@@ -257,6 +266,11 @@ internal sealed class MonitoringTestHost : IAsyncDisposable
             builder.Services.AddWireViewPlugin();
             builder.Services.AddAsusPlugin();
             builder.Services.AddMsiPlugin();
+        }
+
+        foreach (var factory in factories ?? [])
+        {
+            builder.Services.AddSingleton(factory);
         }
 
         if (registerTestPlugins)

@@ -4,26 +4,22 @@ using RTXLens.Contracts.Enums;
 using RTXLens.Contracts.Sensors;
 using RTXLens.Hardware.Nvidia;
 using RTXLens.Core.Configuration;
-using RTXLens.Core.Diagnostics;
 using RTXLens.Plugins.Asus.Configuration;
 using RTXLens.Plugins.GenericNvidia.Configuration;
 
 namespace RTXLens.Service.Configuration;
 
-internal sealed partial class SettingsProfileResolver(SettingsProfileStore profiles, ActiveSettingsProfileState state,
-    IServiceProvider services, ILogger<SettingsProfileResolver> logger)
+internal sealed partial class SettingsProfileResolver(SettingsProfileStore profiles, ActiveSettingsProfileState state)
 {
-    private DateTimeOffset _lastDiscoveryFailure;
-    private bool _discoveryFailed;
     private SettingsProfile? _automatic;
 
     public SettingsProfile? Automatic => Volatile.Read(ref _automatic);
 
     public SettingsProfileCatalog Catalog() => profiles.Catalog(Automatic);
 
-    public ActiveSettingsProfile? Resolve(SensorSnapshot snapshot, ServiceConfiguration configuration)
+    public ActiveSettingsProfile? Resolve(SensorSnapshot snapshot, ServiceConfiguration configuration, NvidiaDevice[] devices)
     {
-        var automatic = ResolveAutomatic(snapshot, configuration);
+        var automatic = ResolveAutomatic(snapshot, configuration, devices);
         Volatile.Write(ref _automatic, automatic?.Profile);
 
         var (_, selected) = profiles.Selection();
@@ -51,7 +47,7 @@ internal sealed partial class SettingsProfileResolver(SettingsProfileStore profi
         return effective;
     }
 
-    private ActiveSettingsProfile? ResolveAutomatic(SensorSnapshot snapshot, ServiceConfiguration configuration)
+    private static ActiveSettingsProfile? ResolveAutomatic(SensorSnapshot snapshot, ServiceConfiguration configuration, NvidiaDevice[] devices)
     {
         var connectorReadings = snapshot.Sensors
             .Where(reading =>
@@ -68,33 +64,8 @@ internal sealed partial class SettingsProfileResolver(SettingsProfileStore profi
         var msiReporting = snapshot.Plugins.Any(plugin => plugin is { PluginId: "msi-psu", State: PluginState.Ready })
             && snapshot.Sensors.Any(reading => reading is { Identity: { PluginId: "msi-psu", Component: SensorComponent.PsuPin, Metric: SensorMetric.Current }, Quality: ReadingQuality.Valid });
 
-        if ((connectorReadings.Length == 0 && nvidiaReadings.Count == 0 && !msiReporting) || snapshot.Timestamp - _lastDiscoveryFailure < TimeSpan.FromSeconds(5))
+        if (devices.Length == 0 || (connectorReadings.Length == 0 && nvidiaReadings.Count == 0 && !msiReporting))
         {
-            return null;
-        }
-
-        NvidiaDevice[] devices;
-        try
-        {
-            devices = services.GetService<NvidiaTelemetryReader>()?.GetDevices() ?? [];
-
-            if (_discoveryFailed)
-            {
-                _discoveryFailed = false;
-                logger.LogActivity(LogLevel.Information, "gpu.profile-detection-recovered", "NVIDIA",
-                    "GPU detection for chart profiles recovered.");
-            }
-        }
-        catch (Exception error)
-        {
-            _lastDiscoveryFailure = snapshot.Timestamp;
-
-            if (!_discoveryFailed)
-            {
-                _discoveryFailed = true;
-                logger.LogActivity(LogLevel.Warning, "gpu.profile-detection-failed", "NVIDIA",
-                    "Could not identify the GPU for chart profiles. The service will retry.", eventViewer: true, exception: error);
-            }
             return null;
         }
 
@@ -120,8 +91,7 @@ internal sealed partial class SettingsProfileResolver(SettingsProfileStore profi
         var wireViewIds = connectorReadings.Where(identity => identity.PluginId == "wireview-pro2").Select(identity => identity.DeviceId).Distinct().Take(2).ToArray();
         var wireView = wireViewAssigned && wireViewIds.Length == 1 ? wireViewIds[0] : null;
 
-        if (wireView is null && !msiReporting && !nvidiaReadings.Contains(gpu.Id) && !connectorReadings.Any(identity =>
-                identity.PluginId is "asus-astral" or "generic-nvidia" && identity.DeviceId == gpu.Id))
+        if (wireView is null && !msiReporting && !nvidiaReadings.Contains(gpu.Id) && !connectorReadings.Any(identity => identity.PluginId is "asus-astral" or "generic-nvidia" && identity.DeviceId == gpu.Id))
         {
             return null;
         }

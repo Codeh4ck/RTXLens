@@ -100,7 +100,11 @@ public sealed class MonitoringSession(IMonitoringApi api)
                 StatusChanged?.Invoke(new ConnectionStatus(false, disconnectMessage));
             }
 
-            if (stop.IsCancellationRequested) break;
+            if (stop.IsCancellationRequested)
+            {
+                break;
+            }
+
             TelemetryMetrics.Reconnects.Add(1, new KeyValuePair<string, object?>("cause", reconnectCause));
             try
             {

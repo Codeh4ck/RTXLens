@@ -360,7 +360,10 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
             await DeliverAlarmAsync(storage, id, now, token);
         }
 
-        if (now < _nextMailCleanup) return;
+        if (now < _nextMailCleanup)
+        {
+            return;
+        }
 
         foreach (var id in storage.Ids("results"))
         {

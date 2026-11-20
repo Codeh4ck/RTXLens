@@ -5,7 +5,7 @@ using RTXLens.Contracts.Configuration;
 
 namespace RTXLens.Tests.TestDoubles;
 
-internal sealed class TestSensorPlugin(string pluginId, TestPluginBehavior behavior = TestPluginBehavior.PublishReadings) : ISensorPlugin
+internal sealed class TestSensorPlugin(string pluginId, TestPluginBehavior behavior = TestPluginBehavior.PublishReadings, Action? beforePoll = null) : ISensorPlugin
 {
     public PluginDescriptor Descriptor { get; private set; } = new(pluginId, pluginId, TimeSpan.FromMilliseconds(100), TimeSpan.FromSeconds(5));
 
@@ -18,6 +18,7 @@ internal sealed class TestSensorPlugin(string pluginId, TestPluginBehavior behav
 
     public async ValueTask<PluginSample> PollAsync(CancellationToken cancellationToken)
     {
+        beforePoll?.Invoke();
         switch (behavior)
         {
             case TestPluginBehavior.WaitForCancellation:

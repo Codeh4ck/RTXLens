@@ -9,7 +9,13 @@ internal sealed class TestNvidiaHardwareSource : INvidiaHardwareSource
     public int Reads { get; private set; }
     public int Resets { get; private set; }
 
-    public NvidiaDevice[] Discover() => Devices;
+    public Action? BeforeDiscovery { get; init; }
+
+    public NvidiaDevice[] Discover()
+    {
+        BeforeDiscovery?.Invoke();
+        return Devices;
+    }
 
     public NvidiaSensor[] Read(NvidiaDevice device)
     {

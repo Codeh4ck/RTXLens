@@ -4,18 +4,18 @@ namespace RTXLens.Service.Services;
 
 internal sealed class HardwarePresenceTracker
 {
-    private readonly Dictionary<string, int> _absences = new(StringComparer.Ordinal);
+    private int _absences;
 
-    public PluginSettings? Observe(string id, PluginSettings settings, bool? present)
+    public PluginSettings? Observe(PluginSettings settings, bool? present)
     {
         if (present is null || settings is { Enabled: false, AutomaticallyDisabled: false })
         {
-            _absences.Remove(id);
+            _absences = 0;
             return null;
         }
 
-        _absences[id] = present.Value ? 0 : _absences.GetValueOrDefault(id) + 1;
-        return present.Value && settings.AutomaticallyDisabled || !present.Value && settings.Enabled && _absences[id] >= 2
+        _absences = present.Value ? 0 : _absences + 1;
+        return (present.Value && settings.AutomaticallyDisabled) || (!present.Value && settings.Enabled && _absences >= 2)
             ? settings with { Enabled = present.Value, AutomaticallyDisabled = !present.Value } : null;
     }
 }

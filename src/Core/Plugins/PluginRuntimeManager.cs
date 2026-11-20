@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using RTXLens.Contracts.Discovery;
@@ -7,7 +6,7 @@ using RTXLens.Warnings;
 
 namespace RTXLens.Core.Plugins;
 
-public sealed class PluginRuntimeManager : IHostedService, IAsyncDisposable
+public sealed class PluginRuntimeManager : IAsyncDisposable
 {
     private readonly Dictionary<string, PluginWorker> _workers;
     private readonly ISensorPluginFactory[] _factories;
@@ -84,14 +83,12 @@ public sealed class PluginRuntimeManager : IHostedService, IAsyncDisposable
         }
     }
 
-    public Task StartAsync(CancellationToken cancellationToken)
+    public void Start(ServiceConfiguration configuration)
     {
-        foreach (var worker in _workers.Values)
+        foreach (var (id, settings) in configuration.Plugins)
         {
-            worker.Start();
+            _workers[id].Start(settings);
         }
-
-        return Task.CompletedTask;
     }
 
     public async Task ApplyAsync(ServiceConfiguration configuration, CancellationToken cancellationToken)

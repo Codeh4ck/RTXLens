@@ -36,7 +36,10 @@ internal static class WireViewPanelTests
         var changes = 0;
         panel.PropertyChanged += (_, args) =>
         {
-            if (args.PropertyName == nameof(panel.ShowClearFaults)) changes++;
+            if (args.PropertyName == nameof(panel.ShowClearFaults))
+            {
+                changes++;
+            }
         };
         var (_, logged) = Create(0, 0x04);
         panel.Apply(logged, new AppPreferences(), logged.Timestamp);

@@ -15,7 +15,7 @@ namespace RTXLens.Service.Services;
 
 internal sealed class SnapshotBroadcastService(IRuntimeConfiguration configuration, TimeProvider clock,
     SensorStateStore store, SensorStreamHub hub, RTXLens.Core.Plugins.PluginRuntimeManager runtime,
-    SettingsProfileResolver profiles, DeviceWarningProfileStore warningProfiles, WarningShutdownCoordinator shutdown,
+    ProfileGpuDiscovery gpuDiscovery, SettingsProfileResolver profiles, DeviceWarningProfileStore warningProfiles, WarningShutdownCoordinator shutdown,
     SafeguardJournalService safeguard, MonitoringActivity activity, MobileAccessService? mobileAccess = null) : BackgroundService
 {
     private readonly DeviceWarningEvaluator _profileWarnings = new();
@@ -41,7 +41,7 @@ internal sealed class SnapshotBroadcastService(IRuntimeConfiguration configurati
                 var snapshot = store.Snapshot(now, settings.Selections) with { ConfigurationRevision = current.Revision };
 
                 snapshot = activity.ResolveConnectorSources(snapshot, current.Configuration);
-                snapshot = snapshot with { SettingsProfile = profiles.Resolve(snapshot, current.Configuration) };
+                snapshot = snapshot with { SettingsProfile = profiles.Resolve(snapshot, current.Configuration, snapshot.Sensors.Length == 0 ? [] : gpuDiscovery.GetCachedDevices()) };
 
                 safeguard.Observe(snapshot);
 
@@ -58,6 +58,7 @@ internal sealed class SnapshotBroadcastService(IRuntimeConfiguration configurati
                 });
 
                 TelemetryMetrics.SnapshotDuration.Record(Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+
                 activity.Observe(snapshot, settings.ConnectorProfiles);
                 mobileAccess?.ObserveWarnings(snapshot);
 
