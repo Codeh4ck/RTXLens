@@ -26,7 +26,7 @@ var runner = new TestRunner();
 RTXLens.UI.Tests.Performance.PerformanceRecordingTests.Run(runner);
 TelemetryTests.Run(runner);
 HardwarePanelTests.Run(runner);
-WireViewPanelTests.Run(runner);
+await WireViewPanelTests.RunAsync(runner);
 WarningDeliveryTests.Run(runner);
 MsiPanelTests.Run(runner);
 PsuComparisonTests.Run(runner);

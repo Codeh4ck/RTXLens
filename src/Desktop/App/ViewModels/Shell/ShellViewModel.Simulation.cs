@@ -4,7 +4,6 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using RTXLens.App.Platform;
 using RTXLens.App.Views.Simulation;
-using RTXLens.Client.Http;
 using RTXLens.Client.Mobile;
 using RTXLens.Contracts.Mobile;
 using RTXLens.Contracts.Monitoring;
@@ -39,6 +38,7 @@ internal sealed partial class ShellViewModel
     {
         var session = new DebugSession();
         session.ReceiveSnapshot(_session.Latest);
+
         if (_liveCatalog is { } catalog)
         {
             session.ReceiveCatalog(catalog);
@@ -51,6 +51,7 @@ internal sealed partial class ShellViewModel
 
         _simulationTimer.Tick += (_, _) => PublishSimulation();
         session.Changed += SimulationChanged;
+
         return session;
     }
 
@@ -69,12 +70,15 @@ internal sealed partial class ShellViewModel
 
         var window = new DebugConsoleWindow(Simulation);
         TrackToolWindow(window, "debug-console", owner, besideOwner: true);
+
         _debugConsole = window;
+
         window.Closed += (_, _) =>
         {
             _debugConsole = null;
             Simulation.ResetAll();
         };
+
         window.Show(owner);
     }
 
@@ -87,7 +91,10 @@ internal sealed partial class ShellViewModel
 
         if (Simulation.Enabled != IsSimulation)
         {
+            Dashboard.Panels.FirstOrDefault(panel => panel.IsWireView)?.MarkDisconnected(Preferences);
+
             var api = Simulation.Enabled ? new DebugMonitoringApi(Simulation, TimeProvider.System) : null;
+
             lock (_recordingModeLock)
             {
                 Volatile.Write(ref _simulationApi, api);
@@ -101,15 +108,18 @@ internal sealed partial class ShellViewModel
                 _simulationWarnings = new WarningTransitionTracker();
                 _simulationRevision = -1;
                 Dashboard.Connection = "DEBUG SIMULATION ACTIVE";
+
                 _simulationTimer.Start();
                 PublishSimulation();
             }
             else
             {
                 _simulationTimer.Stop();
+
                 _simulatedSnapshot = null;
                 _simulationConfiguration = null;
                 Dashboard.Connection = _liveConnection;
+
                 if (_liveCatalog is { } catalog)
                 {
                     Recorder.SetCatalog(catalog);
@@ -138,6 +148,7 @@ internal sealed partial class ShellViewModel
 
             RaiseApiChanged();
             OnPropertyChanged(nameof(Configuration));
+
             if (ShowConfiguration)
             {
                 _ = RefreshDeviceListsAsync();
@@ -146,6 +157,7 @@ internal sealed partial class ShellViewModel
         else if (Simulation.Enabled)
         {
             PublishSimulation();
+
             if (structural)
             {
                 OnPropertyChanged(nameof(CanOpenWireViewSettings));
@@ -165,12 +177,14 @@ internal sealed partial class ShellViewModel
         {
             var now = DateTimeOffset.UtcNow;
             Simulation.ReceiveSnapshot(_session.Latest);
+
             var frame = Simulation.Compose(now);
             _simulatedSnapshot = frame.Snapshot;
 
             if (_simulationRevision != frame.Configuration.Revision)
             {
                 _simulationRevision = frame.Configuration.Revision;
+
                 Recorder.SetCatalog(frame.Catalog);
                 Recorder.SetConfiguration(frame.Configuration.Configuration);
                 Dashboard.SetCatalog(frame.Catalog);
@@ -181,13 +195,15 @@ internal sealed partial class ShellViewModel
 
             Recorder.Accept(frame.Snapshot);
             RefreshPresentation(force: true);
+
             foreach (var warning in _simulationWarnings.Evaluate(frame.Snapshot, now, Preferences))
             {
                 Simulation.ReportNotification(warning.Title, warning.Message);
                 WarningRaised?.Invoke(warning with { Title = "DEBUG · " + warning.Title });
+
                 if (DesktopBuild.IsDebug && OperatingSystem.IsWindows()
-                    && Uri.TryCreate(Preferences.ServiceAddress, UriKind.Absolute, out var address)
-                    && address.IsLoopback && address.Port == ServiceEndpoint.DebugPort)
+                                         && Uri.TryCreate(Preferences.ServiceAddress, UriKind.Absolute, out var address)
+                                         && address is { IsLoopback: true, Port: ServiceEndpoint.DebugPort })
                 {
                     _ = PublishMobileSimulationWarningAsync(warning);
                 }
@@ -208,6 +224,7 @@ internal sealed partial class ShellViewModel
         {
             var response = await new MobileAccessClient(debug: true).SendAsync(
                 new MobileAccessRequest(MobileAccessOperation.PublishSimulationWarning, SimulationWarning: message), StopToken);
+
             if (!response.Success)
             {
                 System.Diagnostics.Debug.WriteLine($"Mobile simulation warning could not be sent: {response.Error}");

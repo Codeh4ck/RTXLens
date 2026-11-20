@@ -11,7 +11,7 @@ namespace RTXLens.UI.Tests.Telemetry;
 
 internal static class WireViewPanelTests
 {
-    public static void Run(TestRunner runner)
+    public static async Task RunAsync(TestRunner runner)
     {
         runner.Run(ClearFaultActionTracksCapabilitiesFaultsAndConnection);
         runner.Run(GroupsTemperaturesAndPutsCableRatingFirst);
@@ -19,6 +19,8 @@ internal static class WireViewPanelTests
         runner.Run(FaultRecoveryAndDisconnectClearWarnings);
         runner.Run(MissingFaultReadingsRemainUnavailable);
         runner.Run(FormatsDeviceSettingsAndClearsThemAfterDeviceLoss);
+        await runner.RunAsync(LoadsHeadroomAfterTransientFailureAsync);
+        await runner.RunAsync(IgnoresSupersededDeviceReadsAsync);
     }
 
     private static void ClearFaultActionTracksCapabilitiesFaultsAndConnection()
@@ -138,6 +140,58 @@ internal static class WireViewPanelTests
         TestAssert.True(panel.DeviceConfigurationStatus.Contains("unavailable", StringComparison.Ordinal), "The settings window must explain that the device is unavailable.");
     }
 
+    private static async Task LoadsHeadroomAfterTransientFailureAsync()
+    {
+        var (panel, frame) = Create(0, 0);
+        var prefs = new AppPreferences();
+        var pin = frame.Sensors[0].Identity with { Component = SensorComponent.GpuPin, Metric = SensorMetric.Current, Channel = 1 };
+        frame = frame with { Sensors = [new SensorReading(pin, SensorUnit.Amperes, 6, frame.Timestamp)] };
+        panel.Apply(frame, prefs, frame.Timestamp);
+        var reads = 0;
+        var response = new TaskCompletionSource<DeviceConfig>();
+        Task<DeviceConfig> Read(CancellationToken _) => ++reads == 1
+            ? Task.FromException<DeviceConfig>(new HttpRequestException("Device starting"))
+            : response.Task;
+
+        await panel.EnsureDeviceConfigurationAsync(Read, frame.Timestamp, default);
+        await panel.EnsureDeviceConfigurationAsync(Read, frame.Timestamp.AddSeconds(1), default);
+        TestAssert.Equal(1, reads);
+        var retryTime = frame.Timestamp.AddSeconds(20);
+        var retry = panel.EnsureDeviceConfigurationAsync(Read, retryTime, default);
+        await panel.EnsureDeviceConfigurationAsync(Read, retryTime, default);
+        response.SetResult(new DeviceConfig { WireOcpFaultThresholdA = 9 });
+        await retry;
+        await panel.EnsureDeviceConfigurationAsync(Read, retryTime, default);
+        panel.Apply(frame, prefs, frame.Timestamp);
+        TestAssert.Equal(2, reads);
+        TestAssert.Equal("+3 A", panel.Pins[0].Headroom);
+
+        panel.MarkDisconnected(prefs);
+        panel.Apply(frame, prefs, frame.Timestamp);
+        TestAssert.Equal("—", panel.Pins[0].Headroom);
+    }
+
+    private static async Task IgnoresSupersededDeviceReadsAsync()
+    {
+        var (panel, frame) = Create(0, 0);
+        var prefs = new AppPreferences();
+        panel.Apply(frame, prefs, frame.Timestamp);
+        var original = new TaskCompletionSource<DeviceConfig>();
+        var firstRead = panel.EnsureDeviceConfigurationAsync(_ => original.Task, frame.Timestamp, default);
+        panel.MarkDisconnected(prefs);
+        panel.Apply(frame, prefs, frame.Timestamp);
+        var current = new TaskCompletionSource<DeviceConfig>();
+        var secondRead = panel.EnsureDeviceConfigurationAsync(_ => current.Task, frame.Timestamp, default);
+
+        original.SetResult(new DeviceConfig { WireOcpFaultThresholdA = 8 });
+        await firstRead;
+        TestAssert.True(panel.DeviceConfiguration is null, "A response from before reconnect must be ignored.");
+        panel.SetDeviceConfiguration(new DeviceConfig { WireOcpFaultThresholdA = 10 });
+        current.SetResult(new DeviceConfig { WireOcpFaultThresholdA = 9 });
+        await secondRead;
+        TestAssert.Equal(10d, panel.DeviceConfiguration!.WireOcpFaultThresholdA);
+    }
+
     private static MetricViewModel Metric(HardwarePanelViewModel panel, string label) => panel.Metrics.Single(metric => metric.Label == label);
 
     private static (HardwarePanelViewModel Panel, SensorSnapshot Frame) Create(ushort status, ushort log)
@@ -156,7 +210,7 @@ internal static class WireViewPanelTests
                 Reading(SensorComponent.MonitorBoard, SensorMetric.FaultStatus, status),
                 Reading(SensorComponent.MonitorBoard, SensorMetric.FaultLog, log)]
         };
-        return (new HardwarePanelViewModel(UiTestData.Plugin with { Id = "wireview-pro2" }), frame);
+        return (new HardwarePanelViewModel(UiTestData.Plugin with { Id = "wireview-pro2", Capabilities = [PluginCapability.Telemetry, PluginCapability.DeviceConfigurationRead] }), frame);
 
         SensorReading Reading(SensorComponent component, SensorMetric metric, double value, int? channel = null) =>
             new(identity with { Component = component, Metric = metric, Channel = channel }, SensorUnits.For(metric), value, frame.Timestamp);

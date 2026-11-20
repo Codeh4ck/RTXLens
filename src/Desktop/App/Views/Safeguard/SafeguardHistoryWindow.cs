@@ -98,8 +98,7 @@ internal sealed class SafeguardHistoryWindow : LensWindow
         SetAlert(_alert, _rows.Length == 0 ? "No executions within the retention period." : null);
     }
 
-    private void Inspect()
-    {
+    private void Inspect() =>
         _ = RunAsync(async () =>
         {
             if (Selected() is not [var row])
@@ -118,7 +117,6 @@ internal sealed class SafeguardHistoryWindow : LensWindow
             _shell.TrackToolWindow(window, "safeguard-execution", this);
             window.Show(this);
         });
-    }
 
     private SafeguardReport? ReadReport(Guid id)
     {

@@ -1174,6 +1174,10 @@ internal static class AvaloniaDashboardTests
             TestAssert.True(shell.IsSimulation && !ReferenceEquals(shell.Api, live), "Simulation should replace the live API.");
             TestAssert.True(!ReferenceEquals(shell.Configuration, liveEditor), "Simulation should use a separate configuration draft.");
 
+            var panel = shell.Dashboard.Panels.Single(item => item.IsWireView);
+            TestAssert.True(panel.DeviceConfiguration is not null, "The first reporting frame should load the WireView limit before opening Device settings.");
+            shell.RefreshPresentation(force: true);
+            TestAssert.True(panel.Pins[0].Current is not null && panel.Pins[0].Headroom != "—", "Headroom should be available on the dashboard.");
             var config = shell.Api.GetWireViewConfigurationAsync(default).GetAwaiter().GetResult();
             var editor = new WireViewSettingsEditor(config);
             var window = new Window { Content = editor.Content };

@@ -329,8 +329,7 @@ internal sealed class WireViewSettingsEditor
         return mask;
     }
 
-    private static void AddTableHeading(Grid table, string text, int row, int column)
-    {
+    private static void AddTableHeading(Grid table, string text, int row, int column) =>
         PlaceCell(table, new TextBlock
         {
             Text = text,
@@ -339,7 +338,6 @@ internal sealed class WireViewSettingsEditor
             TextAlignment = column == 0 ? TextAlignment.Left : TextAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center
         }, row, column);
-    }
 
     private static int AddRow(Grid grid)
     {

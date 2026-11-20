@@ -25,10 +25,7 @@ internal static class SettingsProfileTests
         runner.Run(SavesNamedProfilesAndRestoresThemAfterRestart);
     }
 
-    public static async Task RunEndpointsAsync(TestRunner runner)
-    {
-        await runner.RunAsync(LoadsAndAppliesSettingsProfilesThroughTheDesktopClientAsync);
-    }
+    public static async Task RunEndpointsAsync(TestRunner runner) => await runner.RunAsync(LoadsAndAppliesSettingsProfilesThroughTheDesktopClientAsync);
 
     private static async Task LoadsAndAppliesSettingsProfilesThroughTheDesktopClientAsync()
     {

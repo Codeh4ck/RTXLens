@@ -9,7 +9,10 @@ internal sealed partial class ControlsPreviewWindow : LensWindow
 {
     private ChartsPreviewWindow? _chartsPreview;
 
-    public ControlsPreviewWindow() => InitializeComponent();
+    public ControlsPreviewWindow()
+    {
+        InitializeComponent();
+    }
 
     private void OpenCharts(object? sender, RoutedEventArgs e)
     {

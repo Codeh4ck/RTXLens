@@ -38,20 +38,37 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
     private bool _started;
     private bool _disposed;
 
+    public ServiceLogClient Logs { get; private set; } = null!;
+    public AppearanceViewModel Appearance { get; }
+    public CancellationToken StopToken => _stop.Token;
+    public AppPreferences Preferences { get; private set; }
+    public bool ShowHardware { get; set; } = true;
+    public bool ShowConfiguration { get; set; }
+    public bool ShowFanCurve { get; set; }
+
+    [ObservableProperty]
+    public partial string OperationStatus { get; private set; } = "Live monitoring";
+
+    [ObservableProperty]
+    public partial bool IsBusy { get; private set; }
+
     public ShellViewModel(PreferencesStore store, AppearanceViewModel appearance, Func<Uri, HttpClient>? createHttpClient = null)
     {
         _store = store;
         _createHttpClient = createHttpClient ?? (address => new HttpClient { BaseAddress = address, Timeout = TimeSpan.FromSeconds(8) });
         Appearance = appearance;
         Preferences = store.Load();
+
         if (store.LastError is { } error)
         {
             OperationStatus = error;
         }
 
         _configuration = new ConfigurationEditorViewModel(() => _liveApi);
+
         InitializeSettings();
         Connect(Preferences.ServiceAddress);
+
         _displayTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
         _displayTimer.Tick += (_, _) => RefreshPresentation();
     }
@@ -59,14 +76,18 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
     private void Connect(string address)
     {
         StopConnection();
+
         _connectionStop = CancellationTokenSource.CreateLinkedTokenSource(StopToken);
         _http = _createHttpClient(new Uri(address));
         _liveApi = new MonitoringApiClient(_http);
         _liveCatalog = null;
         _liveConfiguration = null;
+
         RaiseApiChanged();
+
         Logs = new ServiceLogClient(_http);
         var session = new MonitoringSession(_liveApi);
+
         lock (_recordingModeLock)
         {
             _session = session;
@@ -77,12 +98,14 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
             var newlyConnected = status.Connected && !_connected;
             _connected = status.Connected;
             _liveConnection = status.Message;
+
             if (IsSimulation)
             {
                 return;
             }
 
             Dashboard.Connection = status.Message;
+
             if (!status.Connected)
             {
                 _displayedSnapshot = null;
@@ -91,6 +114,7 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
             else if (newlyConnected)
             {
                 _ = Updates.RefreshServiceAsync(StopToken);
+
                 if (ShowConfiguration)
                 {
                     _ = RefreshDeviceListsAsync();
@@ -103,6 +127,7 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
         session.CatalogReceived += catalog =>
         {
             UpdateLiveRecorder(session, () => Recorder.SetCatalog(catalog));
+
             Post(session, () =>
             {
                 _liveCatalog = catalog;
@@ -120,6 +145,7 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
         session.ConfigurationReceived += configuration =>
         {
             UpdateLiveRecorder(session, () => Recorder.SetConfiguration(configuration.Configuration));
+
             Post(session, () =>
             {
                 _liveConfiguration = configuration;
@@ -197,19 +223,6 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsSimulation));
         OnPropertyChanged(nameof(CanOpenWireViewSettings));
     }
-    public ServiceLogClient Logs { get; private set; } = null!;
-    public AppearanceViewModel Appearance { get; }
-    public CancellationToken StopToken => _stop.Token;
-    public AppPreferences Preferences { get; private set; }
-    public bool ShowHardware { get; set; } = true;
-    public bool ShowConfiguration { get; set; }
-    public bool ShowFanCurve { get; set; }
-
-    [ObservableProperty]
-    public partial string OperationStatus { get; private set; } = "Live monitoring";
-
-    [ObservableProperty]
-    public partial bool IsBusy { get; private set; }
 
     public async Task StartAsync()
     {
@@ -220,13 +233,16 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
 
         _started = true;
         _displayTimer.Start();
+
         StartConnection();
+
         if (OperatingSystem.IsWindows())
         {
             _ = LoadSafeguardHistoryAsync();
         }
 
         await Appearance.LoadAsync(Preferences.Theme);
+
         _updateTimer.Start();
         _ = Updates.CheckAsync(false, StopToken);
     }
@@ -235,6 +251,7 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
     {
         var session = _session;
         var token = _connectionStop!.Token;
+
         _connectionTask = Task.Run(async () =>
         {
             try
@@ -257,7 +274,7 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
                     }
                 });
             }
-        });
+        }, token);
     }
 
     private void StopConnection()
@@ -265,6 +282,7 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
         if (_connectionStop is { } stop)
         {
             stop.Cancel();
+
             _ = ReleaseConnectionAsync(_connectionTask, stop, _http);
             _connectionStop = null;
         }
@@ -322,9 +340,17 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
 
         _displayedSnapshot = snapshot;
         _nextFreshnessCheck = now.AddSeconds(1);
+
         var detailPanelId = ShowFanCurve ? MsiIdentity.Id : Dashboard.SelectedPanel?.Id;
-        var updateDetails = ShowFanCurve || ShowHardware && detailPanelId is not null;
+        var updateDetails = ShowFanCurve || (ShowHardware && detailPanelId is not null);
+
         Dashboard.Apply(snapshot, Preferences, now, updateDetails, detailPanelId);
+
+        if (Dashboard.Panels.FirstOrDefault(panel => panel.IsWireView) is { IsReporting: true, CanReadDevice: true, DeviceConfiguration: null } wireView
+            && CanOpenWireViewSettings && _connectionStop is { } connection)
+        {
+            _ = wireView.EnsureDeviceConfigurationAsync(Api.GetWireViewConfigurationAsync, now, connection.Token);
+        }
 
         if (ShowConfiguration)
         {
@@ -341,6 +367,7 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
     public void SetPreferences(AppPreferences preferences)
     {
         Preferences = preferences;
+
         Updates.Configure(preferences.AutomaticallyCheckForUpdates, preferences.UpdateFrequency);
         Appearance.SetTheme(preferences.Theme);
         ApplyVisualPreferences(preferences);
@@ -387,8 +414,7 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void Post(MonitoringSession session, Action update)
-    {
+    private void Post(MonitoringSession session, Action update) =>
         Dispatcher.UIThread.Post(() =>
         {
             if (!_disposed && ReferenceEquals(_session, session))
@@ -396,7 +422,6 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
                 update();
             }
         });
-    }
 
     public void Dispose()
     {
@@ -407,12 +432,15 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
 
         _disposed = true;
         _displayTimer.Stop();
+
 #if TELEMETRY_DEBUG
         StopSimulation();
 #endif
         _stop.Cancel();
         StopConnection();
+        
         _updateTimer.Stop();
+
         Updates.Cancel();
         _updateHttp.Dispose();
     }

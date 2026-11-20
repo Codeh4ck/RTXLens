@@ -365,14 +365,12 @@ internal sealed class SettingsPage : UserControl
         return Setting(title, toggle);
     }
 
-    private void TrackPreference<T>(Func<AppPreferences, T> read, Func<T> input, Func<AppPreferences, T, AppPreferences> update)
-    {
+    private void TrackPreference<T>(Func<AppPreferences, T> read, Func<T> input, Func<AppPreferences, T, AppPreferences> update) =>
         _preferenceEdits.Add(current =>
         {
             var value = input();
             return EqualityComparer<T>.Default.Equals(read(_baseline), value) ? current : update(current, value);
         });
-    }
 
     private AppPreferences BuildPreferences(AppPreferences current)
     {

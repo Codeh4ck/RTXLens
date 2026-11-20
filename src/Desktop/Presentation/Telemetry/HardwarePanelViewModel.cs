@@ -19,6 +19,8 @@ public sealed class HardwarePanelViewModel : ObservableObject
     private DateTimeOffset? _lastSuccess;
     private int _staleAfterMs = 5000;
     private double? _pinLimit;
+    private object? _pendingDeviceRead;
+    private DateTimeOffset _retryDeviceReadAt;
     private int _psuConnector = 1;
     private string[] _genericKeys = [];
     private PluginCapability[] _capabilities;
@@ -277,12 +279,9 @@ public sealed class HardwarePanelViewModel : ObservableObject
                 pin.ClearPeakHistory();
             }
 
-            DeviceConfiguration = null;
-            DeviceDetails.Clear();
-            SetDeviceConfigurationStatus("Read settings from the connected device.");
             if (IsWireView)
             {
-                _pinLimit = null;
+                ClearDeviceConfiguration("Read settings from the connected device.");
             }
 
             _deviceId = deviceId;
@@ -452,8 +451,58 @@ public sealed class HardwarePanelViewModel : ObservableObject
         }
     }
 
+    public async Task EnsureDeviceConfigurationAsync(Func<CancellationToken, Task<DeviceConfig>> read, DateTimeOffset now, CancellationToken token)
+    {
+        if (!IsReporting || !CanReadDevice || DeviceConfiguration is not null || _pendingDeviceRead is not null || now < _retryDeviceReadAt)
+        {
+            return;
+        }
+
+        var request = new object();
+        _pendingDeviceRead = request;
+        try
+        {
+            var config = await read(token);
+            if (_pendingDeviceRead == request && !token.IsCancellationRequested)
+            {
+                SetDeviceConfiguration(config);
+            }
+        }
+        catch (Exception error) when (error is HttpRequestException or RTXLens.Client.Http.MonitoringApiException or IOException
+            or InvalidDataException or System.Text.Json.JsonException or OperationCanceledException)
+        {
+            if (_pendingDeviceRead == request && !token.IsCancellationRequested)
+            {
+                _retryDeviceReadAt = now.AddSeconds(15);
+                SetDeviceConfigurationStatus($"Could not read device settings. Retrying automatically. {error.Message}");
+            }
+        }
+        finally
+        {
+            if (_pendingDeviceRead == request)
+            {
+                _pendingDeviceRead = null;
+            }
+        }
+    }
+
+    private void ClearDeviceConfiguration(string status)
+    {
+        _pendingDeviceRead = null;
+        _retryDeviceReadAt = default;
+        _pinLimit = null;
+        DeviceConfiguration = null;
+        if (DeviceDetails.Count > 0)
+        {
+            DeviceDetails.Clear();
+        }
+        SetDeviceConfigurationStatus(status);
+    }
+
     public void SetDeviceConfiguration(DeviceConfig config, string? status = null)
     {
+        // A refresh or apply in Device settings supersedes an outstanding automatic read.
+        _pendingDeviceRead = null;
         DeviceConfiguration = config;
         _pinLimit = config.WireOcpFaultThresholdA;
         DeviceDetails.Clear();
@@ -510,12 +559,7 @@ public sealed class HardwarePanelViewModel : ObservableObject
 
         if (IsWireView)
         {
-            DeviceConfiguration = null;
-            if (DeviceDetails.Count > 0)
-            {
-                DeviceDetails.Clear();
-            }
-            SetDeviceConfigurationStatus("Device unavailable. Refresh after reconnecting.");
+            ClearDeviceConfiguration("Device unavailable. Refresh after reconnecting.");
         }
 
         ShowPsuComparison = false;

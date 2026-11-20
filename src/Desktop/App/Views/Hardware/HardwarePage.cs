@@ -128,7 +128,7 @@ internal sealed class HardwarePage : UserControl
 
         if (panel.IsWireView)
         {
-            var settings = ActionButton("Device settings", "settings", () =>
+            var settings = ActionButton("Device settings", "settings-action", () =>
             {
                 if (TopLevel.GetTopLevel(actions) is Window owner)
                 {

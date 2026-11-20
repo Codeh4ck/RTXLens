@@ -43,6 +43,7 @@ internal sealed partial class ShellWindow : LensWindow
         Height = model.Preferences.RememberWindowSize ? model.Preferences.WindowHeight : AppPreferences.DefaultWindowHeight;
 
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
+
         var saved = model.Preferences.WindowPlacements?.GetValueOrDefault("main");
         if (model.Preferences.RememberWindowPosition && saved is { X: { } x, Y: { } y })
         {
@@ -58,6 +59,7 @@ internal sealed partial class ShellWindow : LensWindow
         {
             var compact = args.NewSize.Width < 960;
             Header.RowSpacing = compact ? 6 : 0;
+
             Grid.SetRow(WebsiteLinks, compact ? 1 : 0);
             Grid.SetColumn(WebsiteLinks, compact ? 0 : 1);
             Grid.SetColumnSpan(WebsiteLinks, compact ? 3 : 1);
@@ -65,16 +67,20 @@ internal sealed partial class ShellWindow : LensWindow
 
         model.Dashboard.ReportingPanels.CollectionChanged += OnReportingPanelsChanged;
         model.PropertyChanged += OnShellChanged;
+
         Opened += (_, _) =>
         {
             ClampWindowToScreen();
             CaptureWindowPlacement();
             InitializeWindowsIntegration(startMinimized || model.Preferences.StartMinimized);
         };
+
         Closing += OnClosing;
         Closed += OnClosed;
+
         PositionChanged += (_, _) => CaptureWindowPlacement();
         Resized += (_, _) => CaptureWindowPlacement();
+
         PropertyChanged += (_, args) =>
         {
             if (args.Property == WindowStateProperty)
@@ -110,8 +116,7 @@ internal sealed partial class ShellWindow : LensWindow
 #if TELEMETRY_DEBUG
     private void OnDebugShortcut(object? sender, KeyEventArgs args)
     {
-        const KeyModifiers modifiers = KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift;
-        if (args is { Key: Key.F11, KeyModifiers: modifiers })
+        if (args is { Key: Key.F11, KeyModifiers: KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Shift })
         {
             _model.RevealDebugConsole();
             args.Handled = true;
@@ -176,8 +181,10 @@ internal sealed partial class ShellWindow : LensWindow
             }
 
             CaptureWindowPlacement();
+
             await _model.SaveMainPlacementAsync(_normalSize, _normalPosition);
             _placementSaved = true;
+
             Close();
         }
         finally
@@ -190,11 +197,15 @@ internal sealed partial class ShellWindow : LensWindow
     private void OnClosed(object? sender, EventArgs args)
     {
         _closed = true;
+
         _model.Dashboard.ReportingPanels.CollectionChanged -= OnReportingPanelsChanged;
         _model.PropertyChanged -= OnShellChanged;
+
         PageHost.Content = null;
+
         _model.WarningRaised -= OnWarningRaised;
         _model.WarningShutdownAvailable -= ShowWarningShutdown;
+
         _tray?.Dispose();
         _model.Dispose();
     }
@@ -235,10 +246,7 @@ internal sealed partial class ShellWindow : LensWindow
 
     private void OpenSettings(object? sender, RoutedEventArgs args) => Navigate(Page.Settings);
 
-    private async void OpenSupport(object? sender, RoutedEventArgs args)
-    {
-        await _model.RunAsync(() => Launcher.LaunchUriAsync(new Uri("https://rtxlens.com/support")));
-    }
+    private async void OpenSupport(object? sender, RoutedEventArgs args) => await _model.RunAsync(() => Launcher.LaunchUriAsync(new Uri("https://rtxlens.com/support")));
 
     private async void OpenReleaseNotes(object? sender, RoutedEventArgs args)
     {
@@ -248,8 +256,10 @@ internal sealed partial class ShellWindow : LensWindow
         }
 
         var label = link.Content;
+
         link.Content = "Loading release notes…";
         link.IsEnabled = false;
+
         try
         {
             await ReleaseNotesWindow.ShowAsync(this, _model.StopToken);
@@ -290,6 +300,7 @@ internal sealed partial class ShellWindow : LensWindow
         _model.Dashboard.SelectedPanel = panel;
         PerformanceTab.IsChecked = page == Page.Performance;
         EventLogTab.IsChecked = page == Page.EventLog;
+
         _model.RefreshPresentation(force: true);
 
         PageHost.Content = page switch
