@@ -1,3 +1,4 @@
+using RTXLens.Contracts.Monitoring;
 using System.Reflection;
 using RTXLens.Contracts.Updates;
 
@@ -6,7 +7,7 @@ namespace RTXLens.Service.Endpoints;
 internal static class VersionEndpoint
 {
     public static void MapVersionEndpoint(this IEndpointRouteBuilder app) =>
-        app.MapGet("/version", () =>
+        app.MapGet("/" + ServiceRoutes.Version, () =>
         {
             var assembly = typeof(VersionEndpoint).Assembly;
             var version = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0]

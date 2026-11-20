@@ -1,3 +1,7 @@
+using RTXLens.Plugins.GenericNvidia.Contracts;
+using RTXLens.Plugins.Msi.Contracts;
+using RTXLens.Plugins.WireView.Contracts;
+using RTXLens.Plugins.Asus.Contracts;
 using RTXLens.Contracts.Configuration;
 using RTXLens.Contracts.Discovery;
 using RTXLens.Contracts.Enums;
@@ -15,10 +19,10 @@ public sealed partial class PerformanceRecorder(TimeProvider? timeProvider = nul
     private Dictionary<string, PluginSettings> _settings = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _sourceNames = new(StringComparer.Ordinal)
     {
-        ["asus-astral"] = "ROG Astral",
-        ["wireview-pro2"] = "WireView Pro II",
-        ["msi-psu"] = "MSI PSU",
-        ["generic-nvidia"] = "NVIDIA"
+        [AsusIdentity.Id] = "ROG Astral",
+        [WireViewIdentity.Id] = "WireView Pro II",
+        [MsiIdentity.Id] = "MSI PSU",
+        [NvidiaIdentity.Id] = "NVIDIA"
     };
     private string _sessionId = Guid.NewGuid().ToString("N");
     private DateTimeOffset? _startedAt;

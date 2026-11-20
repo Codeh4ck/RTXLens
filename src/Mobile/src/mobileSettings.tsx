@@ -1,16 +1,18 @@
+import { mobileProtocol } from './mobileProtocol.ts';
 import { useColors } from './appearance';
 import * as SecureStore from 'expo-secure-store';
 import { createContext, useEffect, useRef, useState } from 'react';
 import { Switch, Text, TextInput, View } from 'react-native';
 
 import { sessionResult } from './connection';
+import type { useLockScreenNotifications } from './lockScreenNotifications';
 import {
   allowsWarning, decodeDisplayPreferences, decodeNotificationPreferences, defaultDisplayPreferences, defaultNotificationPreferences,
   warningCategories, type DisplayPreferences, type NotificationPreferences, type TemperatureUnit,
 } from './mobilePreferences';
 import { readAddress, type PairedComputer } from './protocol';
 import { transport } from './transport';
-import { Button, Card, Notice, Selection, useStyles } from './ui';
+import { Button, Card, Notice, PanelList, Selection, useStyles } from './ui';
 
 const notificationKey = 'rtxlens.notification-preferences';
 const temperatureKey = 'rtxlens.temperature-unit';
@@ -150,15 +152,17 @@ export function TestRemoteAccess({ computer, wifi }: { computer: PairedComputer;
 
     try {
       const { remoteAddress, publicKeyFingerprint, token } = computer;
-      const reply = await transport.get(remoteAddress, publicKeyFingerprint, '/session', token);
+      const reply = await transport.get(remoteAddress, publicKeyFingerprint, mobileProtocol.Session, token);
       const status = sessionResult(reply);
       const message = {
-        connect: 'The PC is reachable through its remote address.',
+        connect: reply.status === 204 ? 'The PC accepted this pairing through its remote address.'
+          : 'The remote address responded. Connect to check the readings stream.',
         revoked: 'The PC no longer authorizes this phone. Pair it again in Mobile Access.',
         'changed-key': 'The PC’s key did not match at its remote address. Check the saved address and pairing.',
+        'local-network-denied': 'Allow Local Network access for RTX Lens in iPhone Settings and try again.',
         retry: 'Could not reach the PC through its remote address.',
       }[status];
-      setResult({ success: status === 'connect', message });
+      setResult({ success: reply.status === 204 && status === 'connect', message });
     } catch {
       setResult({ success: false, message: 'Could not reach the PC through its remote address.' });
     } finally {
@@ -186,8 +190,16 @@ const filters = [
   { category: warningCategories.other, label: 'Other warnings' },
 ] as const;
 
-export function NotificationPreferencesCard({ value, syncRequired, canSync, save }: {
-  value: NotificationPreferences; syncRequired: boolean; canSync: boolean;
+export function NotificationSettings({ permission, permissionError, onEnable, onSystemSettings, push, paired, live, value, preferencesError, save }: {
+  permission: 'granted' | 'available' | 'blocked';
+  permissionError: string | null;
+  onEnable: () => void;
+  onSystemSettings: () => void;
+  push: ReturnType<typeof useLockScreenNotifications>;
+  paired: boolean;
+  live: boolean;
+  value?: NotificationPreferences;
+  preferencesError: string | null;
   save: (value: NotificationPreferences) => Promise<void>;
 }) {
   const styles = useStyles();
@@ -211,25 +223,59 @@ export function NotificationPreferencesCard({ value, syncRequired, canSync, save
     }
   }
 
+  const systemStatus = permission === 'granted' ? 'Allowed' : permission === 'blocked' ? 'Blocked' : 'Off';
+  const lockScreenStatus = push.busy ? 'Updating…' : !push.enabled ? 'Off' : permission === 'blocked' ? 'Blocked by system'
+    : push.ready ? 'Registered with PC' : live ? 'Waiting for registration' : 'Waiting for connection';
+
   return (
-    <Card title="Notification preferences" icon="warnings">
-      <Text style={styles.heading}>Warning filters</Text>
-      {filters.map(({ category, label }) => (
-        <View key={category} style={styles.row}>
-          <Text style={[styles.text, { flex: 1 }]}>{label}</Text>
-          <Switch accessibilityLabel={label} value={allowsWarning(value, category)} disabled={saving}
-            trackColor={{ true: colors.accentSurface, false: colors.line }}
-            onValueChange={on => void apply({
-              ...value, categories: on ? value.categories | category : value.categories & ~category,
-            })} />
+    <Card title="Notifications" icon="warnings">
+      <PanelList>
+        <View style={{ gap: 8, paddingBottom: 10 }}>
+          <View style={[styles.row, { justifyContent: 'space-between' }]}>
+            <Text style={styles.heading}>While the app is open</Text>
+            <Text style={[styles.caption, permission === 'granted' && { color: colors.accent }]}>{systemStatus}</Text>
+          </View>
+          <Text style={styles.caption}>Show system alerts for PC warnings while RTX Lens is open and connected.</Text>
+          {permissionError && <Notice>{permissionError}</Notice>}
+          {permission === 'blocked' && <Button icon="settings" label="Open system settings" onPress={onSystemSettings} />}
+          {permission === 'available' && <Button icon="warnings" label="Allow notifications" onPress={onEnable} />}
         </View>
-      ))}
-      <Text style={styles.heading}>Lock-screen privacy</Text>
-      <Selection options={[{ id: 'title', label: 'Show warning title' }, { id: 'generic', label: 'Hide warning title' }]}
-        selected={value.showTitle ? 'title' : 'generic'}
-        onSelect={mode => { if (!saving) void apply({ ...value, showTitle: mode === 'title' }); }} />
-      {syncRequired && !canSync && <Text style={styles.caption}>Connect to your PC to apply these settings to lock-screen delivery.</Text>}
+        {push.available && <View style={{ gap: 8, paddingTop: 10, paddingBottom: 10 }}>
+          <View style={[styles.row, { justifyContent: 'space-between' }]}>
+            <Text style={styles.heading}>Lock-screen alerts</Text>
+            <Text style={[styles.caption, push.ready && permission === 'granted' && { color: colors.accent }]}>{lockScreenStatus}</Text>
+          </View>
+          <Text style={styles.caption}>{!paired ? 'Pair your PC to set up lock-screen alerts.'
+            : 'Receive PC warnings while RTX Lens is closed, through Expo and your phone’s push service.'}</Text>
+          {push.error && <Notice>{push.error}</Notice>}
+          {push.enabled && !push.ready && live && permission === 'granted' && !preferencesError &&
+            <Button icon="refresh" label="Retry registration" disabled={push.busy} onPress={() => void push.set(true)} />}
+          {paired && <Button icon="warnings" label={push.enabled ? 'Turn off lock-screen alerts' : 'Enable lock-screen alerts'}
+            disabled={!live || push.busy || (!push.enabled && (permission === 'blocked' || !value || !!preferencesError))}
+            onPress={() => void push.set(!push.enabled, !push.enabled)} />}
+          {paired && !live && <Text style={styles.caption}>Connect to your PC to change lock-screen delivery.</Text>}
+        </View>}
+      </PanelList>
+      {value && <>
+        <Text style={styles.heading}>Warning filters</Text>
+        {filters.map(({ category, label }) => (
+          <View key={category} style={styles.row}>
+            <Text style={[styles.text, { flex: 1 }]}>{label}</Text>
+            <Switch accessibilityLabel={label} value={allowsWarning(value, category)} disabled={saving}
+              trackColor={{ true: colors.accentSurface, false: colors.line }}
+              onValueChange={on => void apply({
+                ...value, categories: on ? value.categories | category : value.categories & ~category,
+              })} />
+          </View>
+        ))}
+        <Text style={styles.heading}>Lock-screen privacy</Text>
+        <Selection options={[{ id: 'title', label: 'Show warning title' }, { id: 'generic', label: 'Hide warning title' }]}
+          selected={value.showTitle ? 'title' : 'generic'}
+          onSelect={mode => { if (!saving) void apply({ ...value, showTitle: mode === 'title' }); }} />
+        {push.enabled && !live && <Text style={styles.caption}>Filter and privacy changes sync when your PC reconnects.</Text>}
+      </>}
       {error && <Notice>{error}</Notice>}
+      {!error && preferencesError && <Notice>{preferencesError}</Notice>}
     </Card>
   );
 }

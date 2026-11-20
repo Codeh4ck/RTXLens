@@ -1,3 +1,7 @@
+using RTXLens.Plugins.GenericNvidia.Contracts;
+using RTXLens.Plugins.Msi.Contracts;
+using RTXLens.Plugins.WireView.Contracts;
+using RTXLens.Plugins.Asus.Contracts;
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using RTXLens.Contracts.Discovery;
@@ -38,10 +42,10 @@ public sealed class ConnectorProfilesEditorViewModel : EditableObject
             var choices = ids.Select(id => new ConnectorPluginChoice(id,
                 id switch
                 {
-                    "generic-nvidia" => "Nvidia",
-                    "wireview-pro2" => "WireView Pro II",
-                    "asus-astral" => "ROG Astral",
-                    "msi-psu" => "MSI PSU",
+                    NvidiaIdentity.Id => NvidiaIdentity.PluginName,
+                    WireViewIdentity.Id => WireViewIdentity.DisplayName,
+                    AsusIdentity.Id => AsusIdentity.DisplayName,
+                    MsiIdentity.Id => MsiIdentity.DisplayName,
                     _ => catalog?.Plugins.FirstOrDefault(plugin => plugin.Id == id)?.Name ?? id
                 })).ToArray();
 

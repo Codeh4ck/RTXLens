@@ -270,6 +270,29 @@ internal static class AvaloniaDashboardTests
             }
         }
 
+        var applyWindow = new FanCurveWindow(editor, shell);
+        applyWindow.Show();
+        try
+        {
+            Dispatcher.UIThread.RunJobs();
+            var firstDuty = applyWindow.GetVisualDescendants().OfType<NumericUpDown>()
+                .First(input => AutomationProperties.GetName(input) == "Duty (%)");
+            firstDuty.SetCurrentValue(NumericUpDown.ValueProperty, 35m);
+            var done = applyWindow.GetVisualDescendants().OfType<Button>().Single(button => AutomationProperties.GetName(button) == "Done");
+            done.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            TestAssert.True(!applyWindow.IsVisible, "Done should close the curve editor after validating the draft.");
+            TestAssert.Equal(35d, editor.CurvePoints[0].DutyPercent);
+        }
+        finally
+        {
+            if (applyWindow.IsVisible)
+            {
+                applyWindow.Close();
+            }
+        }
+
+        return;
+
         void AssertReadoutRow()
         {
             var readouts = window.GetVisualDescendants().OfType<MetricDisplay>().ToArray();
@@ -291,27 +314,6 @@ internal static class AvaloniaDashboardTests
             }
 
             TestAssert.True(rightEdge <= window.ClientSize.Width, "The readout row should fit inside the window.");
-        }
-
-        var applyWindow = new FanCurveWindow(editor, shell);
-        applyWindow.Show();
-        try
-        {
-            Dispatcher.UIThread.RunJobs();
-            var firstDuty = applyWindow.GetVisualDescendants().OfType<NumericUpDown>()
-                .First(input => AutomationProperties.GetName(input) == "Duty (%)");
-            firstDuty.SetCurrentValue(NumericUpDown.ValueProperty, 35m);
-            var done = applyWindow.GetVisualDescendants().OfType<Button>().Single(button => AutomationProperties.GetName(button) == "Done");
-            done.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            TestAssert.True(!applyWindow.IsVisible, "Done should close the curve editor after validating the draft.");
-            TestAssert.Equal(35d, editor.CurvePoints[0].DutyPercent);
-        }
-        finally
-        {
-            if (applyWindow.IsVisible)
-            {
-                applyWindow.Close();
-            }
         }
     }
 

@@ -1,3 +1,4 @@
+using RTXLens.Plugins.GenericNvidia.Contracts;
 using System.Runtime.CompilerServices;
 using RTXLens.Client.Http;
 using RTXLens.Contracts.Configuration;
@@ -51,7 +52,7 @@ public sealed class DebugMonitoringApi(DebugSession session, TimeProvider clock)
     }
 
     public Task<RTXLens.Plugins.GenericNvidia.Contracts.Devices.NvidiaDeviceInfo[]> GetNvidiaDevicesAsync(CancellationToken token) =>
-        Task.FromResult<RTXLens.Plugins.GenericNvidia.Contracts.Devices.NvidiaDeviceInfo[]>([new(session.Plugins.Single(plugin => plugin.Id == "generic-nvidia").DeviceId, "DEBUG GeForce RTX GPU", "debug-nvidia")]);
+        Task.FromResult<RTXLens.Plugins.GenericNvidia.Contracts.Devices.NvidiaDeviceInfo[]>([new(session.Plugins.Single(plugin => plugin.Id == NvidiaIdentity.Id).DeviceId, "DEBUG GeForce RTX GPU", "debug-nvidia")]);
 
     public Task<AsusDeviceInfo[]> GetAsusDevicesAsync(CancellationToken token) => Task.FromResult<AsusDeviceInfo[]>([new AsusDeviceInfo(session.Plugins[1].DeviceId, "DEBUG ROG Astral")]);
     public Task<MsiDeviceInfo[]> GetMsiDevicesAsync(CancellationToken token) => Task.FromResult<MsiDeviceInfo[]>([new MsiDeviceInfo(session.Plugins[2].DeviceId, "DEBUG MPG TS PSU")]);

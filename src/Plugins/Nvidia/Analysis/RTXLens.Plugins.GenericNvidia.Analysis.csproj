@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <ItemGroup>
         <ProjectReference Include="../../../Common/Warnings/RTXLens.Warnings.csproj" />
+        <ProjectReference Include="../../Asus/Contracts/RTXLens.Plugins.Asus.Contracts.csproj" />
         <ProjectReference Include="../Contracts/RTXLens.Plugins.GenericNvidia.Contracts.csproj" />
     </ItemGroup>
 </Project>

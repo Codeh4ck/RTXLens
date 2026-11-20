@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using RTXLens.Contracts.Configuration;
 using RTXLens.Contracts.Enums;
@@ -12,7 +11,6 @@ using RTXLens.Service.Configuration;
 
 using RTXLens.Tests.Fixtures;
 using RTXLens.Tests.Infrastructure;
-using RTXLens.Tests.TestDoubles;
 
 
 namespace RTXLens.Tests.Service;
@@ -121,13 +119,11 @@ internal static class SettingsProfileTests
 
     private static ActiveSettingsProfile Resolve(string name, SensorSnapshot snapshot, ServiceConfiguration? configuration = null)
     {
-        var hardware = new TestNvidiaHardwareSource { Devices = [new("gpu0", "/gpu-nvidia/0", name)] };
-        using var services = new ServiceCollection()
-            .AddSingleton(_ => new NvidiaTelemetryReader(hardware, TimeProvider.System)).BuildServiceProvider();
+        NvidiaDevice[] devices = [new("gpu0", "/gpu-nvidia/0", name)];
         var store = new SettingsProfileStore(StoreConfiguration(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))),
             NullLogger<SettingsProfileStore>.Instance);
-        var resolver = new SettingsProfileResolver(store, new ActiveSettingsProfileState(), services, NullLogger<SettingsProfileResolver>.Instance);
-        return resolver.Resolve(snapshot, configuration ?? WarningTestData.Configuration())
+        var resolver = new SettingsProfileResolver(store, new ActiveSettingsProfileState(), TestHardwareCatalog.Installed);
+        return resolver.Resolve(snapshot, configuration ?? WarningTestData.Configuration(), devices)
             ?? throw new InvalidOperationException("The configured GPU was not recognized.");
     }
 

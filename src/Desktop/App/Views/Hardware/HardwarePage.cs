@@ -1,3 +1,4 @@
+using RTXLens.Presentation.Settings;
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
@@ -26,10 +27,10 @@ internal sealed class HardwarePage : UserControl
         if (panel.IsMsi)
         {
             body.Children.Add(AdaptiveCards(width => width >= 1100 ? 4 : 2,
-                Readout("PSU TEMPERATURE", "vtemp", panel.Msi.Temperature, nameof(MetricViewModel.Value), tile: true),
-                Readout("PSU FAN", "vfan", panel.Msi.FanSpeed, nameof(MetricViewModel.Value), tile: true),
-                Readout("FAN MODE", "vfan", panel.Msi.FanMode, nameof(MetricViewModel.Value), tile: true),
-                Readout("REQUESTED FAN DUTY", "vfan", panel.Msi.FanDuty, nameof(MetricViewModel.Value), tile: true)));
+                Readout("PSU TEMPERATURE", DesktopIcons.Temperature, panel.Msi.Temperature, nameof(MetricViewModel.Value), tile: true),
+                Readout("PSU FAN", DesktopIcons.Fan, panel.Msi.FanSpeed, nameof(MetricViewModel.Value), tile: true),
+                Readout("FAN MODE", DesktopIcons.Fan, panel.Msi.FanMode, nameof(MetricViewModel.Value), tile: true),
+                Readout("REQUESTED FAN DUTY", DesktopIcons.Fan, panel.Msi.FanDuty, nameof(MetricViewModel.Value), tile: true)));
 
             body.Children.Add(Columns([.. panel.Msi.Connectors.Select(CreateMsiConnector)]));
         }
@@ -152,7 +153,7 @@ internal sealed class HardwarePage : UserControl
             void UpdateSettings() => settings.IsVisible = panel is { CanReadDevice: true, IsReporting: true }
                                                           && shell.CanOpenWireViewSettings;
 
-            var clear = ActionButton("Clear faults", "chart-clear", async () =>
+            var clear = ActionButton("Clear faults", DesktopIcons.ChartClear, async () =>
             {
                 if (TopLevel.GetTopLevel(actions) is not Window owner)
                 {
@@ -354,7 +355,7 @@ internal sealed class HardwarePage : UserControl
         var title = Caption(label);
         title.FontSize = 10;
         var value = new ReadingText { FontSize = fontSize, FontWeight = FontWeight.SemiBold };
-        value[!ReadingText.UnitBrushProperty] = new DynamicResourceExtension("MutedTextBrush");
+        value[!ReadingText.UnitBrushProperty] = new DynamicResourceExtension(DesktopBrushes.MutedText);
         BindTo(value, ReadingText.ReadingProperty, source, path);
 
         var body = new StackPanel { Spacing = 4, Children = { title, value } };
@@ -458,7 +459,7 @@ internal sealed class HardwarePage : UserControl
             ticks.Margin = new Thickness(0, PinBar.ReadingHeight + (pin.ShowHeadroom ? PinBar.HeadroomHeight : 0), 0, 0);
             ticks.Children.Clear();
             var axis = new Rectangle { Width = 1, Height = PinBar.PlotHeight };
-            axis[!Shape.FillProperty] = new DynamicResourceExtension("MutedTextBrush");
+            axis[!Shape.FillProperty] = new DynamicResourceExtension(DesktopBrushes.MutedText);
             Canvas.SetLeft(axis, 42);
             ticks.Children.Add(axis);
 
@@ -475,7 +476,7 @@ internal sealed class HardwarePage : UserControl
                 Canvas.SetTop(label, offset - 7);
 
                 var tick = new Rectangle { Width = 5, Height = 1 };
-                tick[!Shape.FillProperty] = new DynamicResourceExtension("MutedTextBrush");
+                tick[!Shape.FillProperty] = new DynamicResourceExtension(DesktopBrushes.MutedText);
                 Canvas.SetLeft(tick, 42);
                 Canvas.SetTop(tick, offset);
 

@@ -11,6 +11,9 @@
         <PackageReference Include="WixToolset.Dtf.CustomAction" GeneratePathProperty="true" />
         <Content Include="CustomAction.config" />
         <Reference Include="System.ServiceProcess" />
+        <Compile Include="../../src/Plugins/Msi/Contracts/AfterburnerFiles.cs" Link="Configuration/AfterburnerFiles.cs" />
+        <Compile Include="../../src/Plugins/Msi/Contracts/AfterburnerKeys.cs" Link="Configuration/AfterburnerKeys.cs" />
+        <Compile Include="../../src/Common/Contracts/Monitoring/WindowsServiceIdentity.cs" Link="Configuration/WindowsServiceIdentity.cs" />
         <Reference Include="Microsoft.CSharp" />
         <Compile Include="../../src/Common/Contracts/Security/ProtectedInstallationFile.cs" Link="Validation/ProtectedInstallationFile.cs" />
         <Reference Include="System.Runtime.Serialization" />

@@ -89,6 +89,11 @@ try
             Invoke-ReleaseCommand npm.cmd @('ci')
         }
 
+        if (-not $SkipChecks)
+        {
+            Invoke-ReleaseCommand node @('../../scripts/sync-client-contracts.mjs', '--check')
+        }
+
         $widgetBuild = @('run', 'build')
 
         if ($SkipChecks)

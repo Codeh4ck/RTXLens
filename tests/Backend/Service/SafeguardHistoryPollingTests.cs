@@ -118,7 +118,11 @@ internal static class SafeguardHistoryPollingTests
 
         public T? Read<T>(string area, Guid id) where T : class
         {
-            if (area == "history") HistoryReads[id] = HistoryReads.GetValueOrDefault(id) + 1;
+            if (area == "history")
+            {
+                HistoryReads[id] = HistoryReads.GetValueOrDefault(id) + 1;
+            }
+
             var path = Location(area, id);
             return File.Exists(path) ? JsonSerializer.Deserialize<T>(File.ReadAllText(path)) : null;
         }
@@ -134,7 +138,10 @@ internal static class SafeguardHistoryPollingTests
         public void Delete(string area, Guid id)
         {
             var path = Location(area, id);
-            if (File.Exists(path)) File.Delete(path);
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
         }
 
         public void DeleteExecutionHistory(Guid id) => Delete("history", id);

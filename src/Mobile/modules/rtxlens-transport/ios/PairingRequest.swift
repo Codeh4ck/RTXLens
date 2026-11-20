@@ -14,16 +14,16 @@ final class PinnedHttpRequest {
 
     init(endpoint: PinnedEndpoint, path: String, json: String? = nil, token: String? = nil, queue: DispatchQueue) throws {
         let body = Data((json ?? "").utf8)
-        let registration = path == "/notification-registration/v2"
+        let registration = path == MobileRoutes.registrationV2
         if let token {
-            let validPath = path == "/session" || path == "/incidents"
+            let validPath = path == MobileRoutes.session || path == MobileRoutes.incidents
                 || path.range(of: #"^/incidents\?before=[0-9]{1,19}\.[a-fA-F0-9]{32}\.(warning|safeguard)$"#, options: .regularExpression) != nil
                 || path.range(of: #"^/incidents/(warning|safeguard)/[a-fA-F0-9-]{36}$"#, options: .regularExpression) != nil
             guard (registration ? json != nil && body.count <= 1024 : validPath && json == nil),
                   path.utf8.allSatisfy({ (33...126).contains($0) }), isMobileToken(token) else {
                 throw TransportError.invalidEndpoint
             }
-        } else if !["/pairing", "/pairing/complete"].contains(path) || json == nil || body.count > 1024 {
+        } else if ![MobileRoutes.pairing, MobileRoutes.completePairing].contains(path) || json == nil || body.count > 1024 {
             throw TransportError.invalidEndpoint
         }
 
@@ -66,7 +66,12 @@ final class PinnedHttpRequest {
         }
         connection.start(queue: queue)
         queue.asyncAfter(deadline: .now() + 12) { [weak self] in
-            self?.finish(.failure(TransportError.timeout))
+            guard let self else { return }
+            if case .localNetworkDenied? = self.connection.currentPath?.unsatisfiedReason {
+                self.finish(.failure(TransportError.localNetworkDenied))
+            } else {
+                self.finish(.failure(TransportError.timeout))
+            }
         }
     }
 

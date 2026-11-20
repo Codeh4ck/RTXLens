@@ -4,7 +4,11 @@ namespace RTXLens.Contracts.Configuration;
 
 public sealed record SettingsProfile
 {
-    public string Id { get; init; } = "rtx-5090";
+    public const string AutomaticId = "auto";
+    public const string Rtx5080Id = "rtx-5080";
+    public const string Rtx5090Id = "rtx-5090";
+
+    public string Id { get; init; } = Rtx5090Id;
     public string Name { get; init; } = "RTX 5090";
     public string GpuModel { get; init; } = "5090";
     public double CurrentCeiling { get; init; } = 10;
@@ -28,7 +32,7 @@ public sealed record SettingsProfile
 
     public static SettingsProfile Rtx5080 => new()
     {
-        Id = "rtx-5080",
+        Id = Rtx5080Id,
         Name = "RTX 5080",
         GpuModel = "5080",
         CurrentCeiling = 6,

@@ -1,3 +1,4 @@
+using RTXLens.Core.Plugins;
 using System.Threading.Channels;
 using RTXLens.Contracts.Warnings;
 using RTXLens.Core.Diagnostics;
@@ -10,7 +11,7 @@ internal sealed record MobilePushAlert(string Title, Guid? IncidentId = null, st
     MobileWarningCategory? Category = null, string? PrivateTitle = null);
 
 internal sealed class MobilePushDelivery(MobilePairing pairing, ExpoMobilePushProvider provider, TimeProvider clock,
-    ILogger<MobilePushDelivery> logger) : BackgroundService
+    ILogger<MobilePushDelivery> logger, HardwareCatalog? hardware = null) : BackgroundService
 {
     private static readonly TimeSpan AlertLifetime = TimeSpan.FromMinutes(5);
     private readonly Channel<RecipientQueue> _newRecipients = Bounded<RecipientQueue>(MobilePairing.DeviceLimit);
@@ -45,7 +46,7 @@ internal sealed class MobilePushDelivery(MobilePairing pairing, ExpoMobilePushPr
                 if (warning.Phase == WarningPhase.Active && warning.NotificationSequence > previous
                     && Guid.TryParseExact(warning.EpisodeId, "N", out var incidentId))
                 {
-                    var category = MobileNotificationPreferences.CategoryFor(warning.PluginId, warning.Icon);
+                    var category = MobileNotificationPreferences.CategoryFor(hardware?.Find(warning.PluginId), warning.Icon);
                     Enqueue(new MobilePushAlert(warning.Title, incidentId, "warning", category), targets);
                 }
             }
@@ -96,7 +97,11 @@ internal sealed class MobilePushDelivery(MobilePairing pairing, ExpoMobilePushPr
         {
             foreach (var target in targets)
             {
-                if (target.Revoked.IsCancellationRequested) continue;
+                if (target.Revoked.IsCancellationRequested)
+                {
+                    continue;
+                }
+
                 if (!_recipients.TryGetValue(target.Id, out var recipient))
                 {
                     recipient = new RecipientQueue(target.Id, target.Revoked, Bounded<PendingAlert>(128));
@@ -108,8 +113,14 @@ internal sealed class MobilePushDelivery(MobilePairing pairing, ExpoMobilePushPr
                     _recipients.Add(target.Id, recipient);
                 }
 
-                if (recipient.Alerts.Writer.TryWrite(new PendingAlert(alert, target, expiresAt))) queued++;
-                else missed++;
+                if (recipient.Alerts.Writer.TryWrite(new PendingAlert(alert, target, expiresAt)))
+                {
+                    queued++;
+                }
+                else
+                {
+                    missed++;
+                }
             }
         }
         if (missed > 0)

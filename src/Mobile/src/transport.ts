@@ -14,7 +14,8 @@ declare class RtxLensTransport extends NativeModule<{
   onFrame: (event: { id: string; json: string }) => void;
 }> {
   post(address: string, pin: string, path: string, json: string): Promise<PairingReply>;
-  get(address: string, pin: string, path: string, token: string): Promise<PairingReply & { keyMismatch?: boolean }>;
+  get(address: string, pin: string, path: string, token: string):
+    Promise<PairingReply & { keyMismatch?: boolean; localNetworkDenied?: boolean }>;
   registerNotifications(address: string, pin: string, token: string, json: string): Promise<PairingReply>;
   openStream(id: string, address: string, pin: string, token: string): void;
   closeStream(id: string): void;

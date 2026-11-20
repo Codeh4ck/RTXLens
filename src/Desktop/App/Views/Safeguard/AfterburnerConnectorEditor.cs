@@ -26,7 +26,7 @@ internal sealed class AfterburnerConnectorEditor : UserControl
         _connector = connector;
         _installation = installation;
         _saved = saved;
-        _binding = saved.ScriptBindingId is { } id ? new SafeguardStorage().Read<SafeguardBinding>("bindings", id) : null;
+        _binding = saved.ScriptBindingId is { } id ? new SafeguardStorage().Read<SafeguardBinding>(SafeguardArea.Bindings, id) : null;
         _enabled = Switch($"Enable alarm for connector {connector}");
         _enabled.IsChecked = saved.AlarmConfigured;
         _timeout = new ValidatedNumberInput("Alarm timeout", saved.AlarmTimeoutMs, 0, int.MaxValue)

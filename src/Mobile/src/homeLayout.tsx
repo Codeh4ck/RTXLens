@@ -15,7 +15,7 @@ type Preview = { key: string; target: number; x: number; y: number; slot: PanelB
 const gap = 10;
 const edge = 56;
 
-export function HomeLayout({ panels, options, titleFor, renderPanel, save, enabled, initiallyEditing, onEditingChange, footer }: {
+export function HomeLayout({ panels, options, titleFor, renderPanel, save, enabled, initiallyEditing, onEditingChange, header }: {
   panels: HomePanel[];
   options: PanelOption[];
   titleFor: (panel: HomePanel) => string;
@@ -24,7 +24,7 @@ export function HomeLayout({ panels, options, titleFor, renderPanel, save, enabl
   enabled: boolean;
   initiallyEditing: boolean;
   onEditingChange: (editing: boolean) => void;
-  footer: ReactNode;
+  header?: ReactNode;
 }) {
   const styles = useStyles();
   const colors = useColors();
@@ -195,6 +195,7 @@ export function HomeLayout({ panels, options, titleFor, renderPanel, save, enabl
           contentContainerStyle={[styles.page, { flexGrow: 1 }]}
           onContentSizeChange={(_width, height) => { contentHeight.current = height; }}
           scrollEventThrottle={16} onScroll={event => { offset.current = event.nativeEvent.contentOffset.y; }}>
+          {!editing && header}
           <View onLayout={event => setGridWidth(event.nativeEvent.layout.width)} style={{ flexDirection: 'row', flexWrap: 'wrap', gap }}>
             {displayed.map((panel, index) => {
               const key = homePanelKey(panel);
@@ -239,7 +240,7 @@ export function HomeLayout({ panels, options, titleFor, renderPanel, save, enabl
             })}
           </View>
           {!current.length && <Button icon="add" label="Add panels" disabled={!enabled || saving} onPress={openPicker} />}
-          {footer}
+
         </ScrollView>
       </View>
       {picker && draft && <PanelPicker options={options} panels={draft} titleFor={titleFor} close={() => setPicker(false)}

@@ -1,3 +1,4 @@
+using RTXLens.Plugins.WireView.Contracts;
 using RTXLens.Plugins.WireView.Contracts.Common;
 using System.IO.Ports;
 using System.Text;
@@ -42,7 +43,7 @@ public sealed class WireViewProReader : IWireViewDeviceReader
     // Protocol IDs, not Windows USB VID/PID pairs
     private static readonly Dictionary<(byte VendorId, byte ProductId), string> SupportedDevices = new()
     {
-        [(0xEF, 0x05)] = "WireView Pro II",
+        [(0xEF, 0x05)] = WireViewIdentity.PluginName,
         [(0xEF, 0x06)] = "WireView Pro II Noctua Edition"
     };
 

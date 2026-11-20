@@ -24,7 +24,7 @@ var debugInstance = false;
 
 if (!debugInstance)
 {
-    builder.Host.UseWindowsService(options => options.ServiceName = "RTXLensService");
+    builder.Host.UseWindowsService(options => options.ServiceName = WindowsServiceIdentity.Name);
 }
 
 builder.Logging.ClearProviders();
@@ -32,7 +32,7 @@ if (!debugInstance && OperatingSystem.IsWindows())
 {
     var eventViewer = new ActivityEventLogProvider(new EventLogSettings
     {
-        SourceName = "RTXLensService",
+        SourceName = WindowsServiceIdentity.Name,
         Filter = (_, level) => level >= LogLevel.Warning
     });
     builder.Services.AddSingleton(eventViewer);

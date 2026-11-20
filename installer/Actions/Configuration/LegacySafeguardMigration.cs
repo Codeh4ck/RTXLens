@@ -1,3 +1,4 @@
+using RTXLens.Plugins.Msi.Contracts;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -106,9 +107,9 @@ internal sealed class LegacySafeguardMigration(string previous, string destinati
             }
 
             var executable = Value(binding, "afterburnerExecutable");
-            if (Path.IsPathRooted(executable) && Path.GetFileName(executable).Equals("MSIAfterburner.exe", StringComparison.OrdinalIgnoreCase))
+            if (Path.IsPathRooted(executable) && Path.GetFileName(executable).Equals(AfterburnerFiles.Executable, StringComparison.OrdinalIgnoreCase))
             {
-                var profile = Path.Combine(Path.GetDirectoryName(executable)!, "Profiles", "MSIAfterburner.cfg");
+                var profile = Path.Combine(Path.GetDirectoryName(executable)!, "Profiles", AfterburnerFiles.ProfileConfig);
                 if (File.Exists(profile))
                 {
                     ProtectedInstallationFile.Require(executable);
@@ -212,12 +213,12 @@ internal sealed class LegacySafeguardMigration(string previous, string destinati
         for (var connector = 1; connector <= 2; connector++)
         {
             var section = "Source PSU 12VHPWR" + connector + " alarm";
-            if (!string.Equals(ini.Get(section, "AlarmApp"), PowerShell, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(ini.Get(section, AfterburnerKeys.AlarmApp), PowerShell, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
-            var value = ini.Get(section, "AlarmAppCmdLine");
+            var value = ini.Get(section, AfterburnerKeys.AlarmAppCmdLine);
             if (value is null)
             {
                 continue;
@@ -246,7 +247,7 @@ internal sealed class LegacySafeguardMigration(string previous, string destinati
                 var replacement = Hidden + Arguments + '"' + ScriptPath(destination, script) + "\" -BindingId " + id.ToString("D");
                 if (!string.Equals(value, replacement, StringComparison.Ordinal))
                 {
-                    ini.Set(section, "AlarmAppCmdLine", replacement);
+                    ini.Set(section, AfterburnerKeys.AlarmAppCmdLine, replacement);
                     changed = true;
                 }
 
@@ -267,8 +268,8 @@ internal sealed class LegacySafeguardMigration(string previous, string destinati
 
         foreach (var directory in Directory.EnumerateDirectories(root).Where(path => BackupName.IsMatch(Path.GetFileName(path))))
         {
-            var profile = Path.Combine(directory, "MSIAfterburner.cfg");
-            var manifest = Path.Combine(directory, "manifest.json");
+            var profile = Path.Combine(directory, AfterburnerFiles.ProfileConfig);
+            var manifest = Path.Combine(directory, AfterburnerFiles.BackupManifest);
             if (!File.Exists(profile) || !File.Exists(manifest))
             {
                 continue;
@@ -283,7 +284,7 @@ internal sealed class LegacySafeguardMigration(string previous, string destinati
             }
 
             if (!data.TryGetValue("hashes", out var values) || values is not Dictionary<string, object> hashes
-                || !hashes.TryGetValue("Profiles/MSIAfterburner.cfg", out var digest)
+                || !hashes.TryGetValue(AfterburnerFiles.ProfileRelativePath, out var digest)
                 || !string.Equals(digest as string, Hash(before), StringComparison.OrdinalIgnoreCase))
             {
                 continue;
@@ -292,7 +293,7 @@ internal sealed class LegacySafeguardMigration(string previous, string destinati
             var after = RewriteProfile(before, candidates, strict: false, out var changed);
             if (changed)
             {
-                hashes["Profiles/MSIAfterburner.cfg"] = Hash(after);
+                hashes[AfterburnerFiles.ProfileRelativePath] = Hash(after);
                 Replace(journal, profile, before, after);
                 Replace(journal, manifest, metadata, EncodeJson(data));
             }
@@ -332,7 +333,7 @@ internal sealed class LegacySafeguardMigration(string previous, string destinati
     }
 
     private static string AfterburnerExecutable(string profile) =>
-        Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(profile)!)!, "MSIAfterburner.exe");
+        Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(profile)!)!, AfterburnerFiles.Executable);
 
     private static void RequireProtectedRecord(string path)
     {

@@ -1,4 +1,5 @@
-const paths = new Set(['/health', '/plugins', '/configuration', '/plugins/wireview-pro2/device/config']);
+import { serviceRoutes } from './serviceRoutes.ts';
+const paths = new Set<string>([serviceRoutes.Health, serviceRoutes.Plugins, serviceRoutes.Configuration, serviceRoutes.WireViewConfiguration]);
 
 export class ReadOnlyApi {
     readonly baseUrl: string;
@@ -32,6 +33,6 @@ export class ReadOnlyApi {
     }
 
     socketUrl(): string {
-        return this.baseUrl.replace('http:', 'ws:') + '/sensors';
+        return this.baseUrl.replace('http:', 'ws:') + serviceRoutes.Sensors;
     }
 }

@@ -1,3 +1,4 @@
+using RTXLens.Contracts.Monitoring;
 using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
@@ -18,7 +19,7 @@ public static class ServiceStartupConfiguration
 
         try
         {
-            var service = OpenService(manager, "RTXLensService", 4);
+            var service = OpenService(manager, WindowsServiceIdentity.Name, 4);
             if (service == IntPtr.Zero)
             {
                 return Marshal.GetLastWin32Error() == 1060 ? 0 : throw new Win32Exception(Marshal.GetLastWin32Error());
@@ -55,7 +56,7 @@ public static class ServiceStartupConfiguration
 
         try
         {
-            var service = OpenService(manager, "RTXLensService", 2);
+            var service = OpenService(manager, WindowsServiceIdentity.Name, 2);
             if (service == IntPtr.Zero)
             {
                 throw new Win32Exception(Marshal.GetLastWin32Error());

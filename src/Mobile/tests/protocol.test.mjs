@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import { decodeFrame, decodePairingCode, decodeSavedComputer, requestPairing } from '../src/protocol.ts';
 import { boostLimitRows, groupMetrics, metricLabel, formatReading, pinCurrentSummary, pinPanelSources, powerConnectorGroups, wireViewFaults } from '../src/metrics.ts';
-import { destinations, localSwitchAddress, retryDelay, sessionResult } from '../src/connection.ts';
+import { destinations, localProbeTimeout, localSwitchAddress, retryDelay, selectConnectionIssue, sessionResult } from '../src/connection.ts';
 import { decodeIncident, decodeIncidentPage, warningNotificationIncident } from '../src/incidentProtocol.ts';
 import {
   allowsWarning, decodeDisplayPreferences, decodeNotificationPreferences, defaultDisplayPreferences, homePanelKey, moveHomePanel,
@@ -232,6 +232,25 @@ test('prioritizes paired routes and bounds reconnect delays', () => {
   assert.equal(sessionResult({ status: 401 }), 'revoked');
   assert.equal(sessionResult({ status: 0, keyMismatch: true }), 'changed-key');
   assert.equal(sessionResult({ status: 204 }), 'connect');
+});
+
+test('allows a full local session check after the first remote fallback has failed', () => {
+  const routes = destinations(decodePairingCode(JSON.stringify(invite), now));
+  const [local, remote] = routes;
+
+  assert.equal(localProbeTimeout(local, routes.length, 0), 3_000);
+  assert.equal(localProbeTimeout(remote, routes.length, 0), undefined);
+  assert.equal(localProbeTimeout(local, routes.length, 1), undefined);
+  assert.equal(localProbeTimeout(local, 1, 0), undefined);
+});
+
+test('keeps compatibility and access failures distinct from a PC that did not respond', () => {
+  assert.equal(sessionResult({ status: 404 }), 'connect');
+  assert.equal(sessionResult({ status: 0, localNetworkDenied: true }), 'local-network-denied');
+  assert.equal(selectConnectionIssue({ local: 'local-network-denied', remote: 'unreachable' }), 'local-network-denied');
+  assert.equal(selectConnectionIssue({ local: 'changed-key', remote: 'incompatible' }), 'incompatible');
+  assert.equal(selectConnectionIssue({ local: 'unreachable', remote: 'no-readings' }), 'no-readings');
+  assert.equal(selectConnectionIssue({ local: 'unreachable' }), 'unreachable');
 });
 
 test('only offers a switch from a distinct remote connection', () => {

@@ -15,6 +15,7 @@ if (args.Contains("--verify-msi-curve-hardware"))
     return 0;
 }
 
+using var profileServices = TestHardwareCatalog.Services;
 GenericNvidiaTests.Run(runner);
 ConnectorProfileTests.Run(runner);
 SettingsProfileTests.Run(runner);
@@ -47,6 +48,7 @@ await HealthEndpointTests.RunAsync(runner);
 await ServiceLogTests.RunAsync(runner);
 await TestHostConfigurationTests.RunAsync(runner);
 await SensorEndpointTests.RunAsync(runner);
+await PluginIsolationTests.RunAsync(runner);
 await MobileAccessTests.RunAsync(runner);
 await RuntimeConfigurationTests.RunAsync(runner);
 await WireViewEndpointTests.RunAsync(runner);

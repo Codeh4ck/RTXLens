@@ -1,3 +1,5 @@
+using RTXLens.Plugins.Msi.Contracts;
+using RTXLens.Plugins.WireView.Contracts;
 using Avalonia;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -184,7 +186,7 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     public bool CanOpenWireViewSettings =>
 #if TELEMETRY_DEBUG
-        !IsSimulation || Simulation.Plugins.Any(plugin => plugin is { Id: "wireview-pro2", IsSimulated: true });
+        !IsSimulation || Simulation.Plugins.Any(plugin => plugin is { Id: WireViewIdentity.Id, IsSimulated: true });
 #else
         true;
 #endif
@@ -320,7 +322,7 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
 
         _displayedSnapshot = snapshot;
         _nextFreshnessCheck = now.AddSeconds(1);
-        var detailPanelId = ShowFanCurve ? "msi-psu" : Dashboard.SelectedPanel?.Id;
+        var detailPanelId = ShowFanCurve ? MsiIdentity.Id : Dashboard.SelectedPanel?.Id;
         var updateDetails = ShowFanCurve || ShowHardware && detailPanelId is not null;
         Dashboard.Apply(snapshot, Preferences, now, updateDetails, detailPanelId);
 

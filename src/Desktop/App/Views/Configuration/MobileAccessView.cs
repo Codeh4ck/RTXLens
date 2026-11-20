@@ -1,3 +1,4 @@
+using RTXLens.Presentation.Settings;
 using System.Globalization;
 using System.Net.NetworkInformation;
 using System.Security;
@@ -135,7 +136,7 @@ internal sealed class MobileAccessView : UserControl
 
         _invite = ActionButton("Create pairing code", "qr-code-action", CreateInviteAsync);
 
-        var pairingInfo = IconButton("Pairing and remote access information", "info-action", ShowPairingInfoAsync);
+        var pairingInfo = IconButton("Pairing and remote access information", DesktopIcons.Info, ShowPairingInfoAsync);
         _review = ActionButton("Review pairing request", "qr-code-action", () => OpenPairingWindowAsync(code: null));
         RenderDevices([]);
 
@@ -533,7 +534,7 @@ internal sealed class MobileAccessView : UserControl
             if (_devices.Children.Count > 0)
             {
                 var divider = new Border { Height = 1 };
-                divider[!Border.BackgroundProperty] = new DynamicResourceExtension("PanelBorderBrush");
+                divider[!Border.BackgroundProperty] = new DynamicResourceExtension(DesktopBrushes.PanelBorder);
                 _devices.Children.Add(divider);
             }
 

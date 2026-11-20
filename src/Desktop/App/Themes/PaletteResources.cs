@@ -1,3 +1,4 @@
+using RTXLens.Presentation.Settings;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
@@ -71,9 +72,9 @@ internal sealed class PaletteResources(Application application)
             ["PanelBrush"] = Brush(panel),
             ["InsetBrush"] = Brush(inset),
             ["TrackBrush"] = Brush(track),
-            ["PanelBorderBrush"] = Brush(Blend(background, foreground, 0.24)),
+            [DesktopBrushes.PanelBorder] = Brush(Blend(background, foreground, 0.24)),
             ["TextBrush"] = Brush(Readable(foreground, panel, 4.5)),
-            ["MutedTextBrush"] = Brush(Readable(Blend(panel, foreground, 0.65), panel, 4.5)),
+            [DesktopBrushes.MutedText] = Brush(Readable(Blend(panel, foreground, 0.65), panel, 4.5)),
             ["PrimaryBrush"] = Brush(accent),
             ["SecondaryBrush"] = Brush(Readable(palette.Secondary, panel, 4.5)),
             ["TertiaryBrush"] = Brush(Readable(palette.Tertiary, panel, 4.5)),

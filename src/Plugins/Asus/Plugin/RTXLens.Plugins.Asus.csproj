@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <ItemGroup>
         <ProjectReference Include="../../../Common/NvidiaHardware/RTXLens.Hardware.Nvidia.csproj" />
+        <ProjectReference Include="../../Nvidia/Contracts/RTXLens.Plugins.GenericNvidia.Contracts.csproj" />
         <ProjectReference Include="../../../Core/RTXLens.Core.csproj" />
         <ProjectReference Include="../Contracts/RTXLens.Plugins.Asus.Contracts.csproj" />
         <ProjectReference Include="../Analysis/RTXLens.Plugins.Asus.Analysis.csproj" />

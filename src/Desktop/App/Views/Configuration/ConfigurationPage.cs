@@ -1,3 +1,4 @@
+using RTXLens.Presentation.Settings;
 using System.Collections.Specialized;
 using Avalonia;
 using Avalonia.Automation;
@@ -533,7 +534,7 @@ internal sealed class ConfigurationPage : UserControl
 
         var header = Section("Connector sources", group);
 
-        header.HeaderActions = IconButton("How source selections work", "info-action", async () =>
+        header.HeaderActions = IconButton("How source selections work", DesktopIcons.Info, async () =>
         {
             if (TopLevel.GetTopLevel(this) is Window owner)
             {
@@ -717,7 +718,7 @@ internal sealed class ConfigurationPage : UserControl
     }
 
     private Button HelpButton(string name, string title, string introduction, params string[] steps) =>
-        IconButton(name, "info-action", async () =>
+        IconButton(name, DesktopIcons.Info, async () =>
         {
             if (TopLevel.GetTopLevel(this) is Window owner)
             {

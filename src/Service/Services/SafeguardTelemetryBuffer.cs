@@ -1,15 +1,18 @@
+using RTXLens.Contracts.Discovery;
 using RTXLens.Contracts.Sensors;
 using RTXLens.Plugins.Msi.Contracts.Safeguard;
 
 namespace RTXLens.Service.Services;
 
-internal sealed class SafeguardTelemetryBuffer
+internal sealed class SafeguardTelemetryBuffer(Dictionary<string, PluginHardwareMetadata>? sources = null)
 {
     private static readonly TimeSpan SampleInterval = TimeSpan.FromMilliseconds(100);
     internal static readonly TimeSpan MaximumCaptureAge = TimeSpan.FromSeconds(30);
     private readonly Lock _gate = new();
     private readonly LinkedList<SafeguardTelemetry> _frames = new();
     private SafeguardTelemetry? _latest;
+
+    public SafeguardTelemetry WithSources(SafeguardTelemetry frame) => frame.Sources is null ? frame with { Sources = sources } : frame;
 
     public void Observe(SensorSnapshot snapshot)
     {
@@ -21,7 +24,7 @@ internal sealed class SafeguardTelemetryBuffer
                 _frames.Clear();
             }
 
-            _latest = new(now, snapshot.Sensors) { SettingsProfile = snapshot.SettingsProfile };
+            _latest = new(now, snapshot.Sensors) { SettingsProfile = snapshot.SettingsProfile, Sources = sources };
             if (_frames.Last is not { } last || now - last.Value.CapturedAt >= SampleInterval)
             {
                 _frames.AddLast(_latest);

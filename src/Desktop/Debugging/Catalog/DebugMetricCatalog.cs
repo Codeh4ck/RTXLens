@@ -1,3 +1,7 @@
+using RTXLens.Plugins.GenericNvidia.Contracts;
+using RTXLens.Plugins.Msi.Contracts;
+using RTXLens.Plugins.WireView.Contracts;
+using RTXLens.Plugins.Asus.Contracts;
 using RTXLens.Contracts.Enums;
 using RTXLens.Debugging.Models;
 
@@ -7,13 +11,13 @@ public static class DebugMetricCatalog
 {
     public static DebugMetricDefinition[] For(string pluginId)
     {
-        if (pluginId == "generic-nvidia")
+        if (pluginId == NvidiaIdentity.Id)
         {
             return GenericNvidiaDebugMetrics.Create();
         }
 
         var metrics = new List<DebugMetricDefinition>();
-        if (pluginId == "msi-psu")
+        if (pluginId == MsiIdentity.Id)
         {
             for (var connector = 1; connector <= 2; connector++)
             {
@@ -52,7 +56,7 @@ public static class DebugMetricCatalog
             new DebugMetricDefinition("Connector", "Voltage", SensorComponent.GpuConnector, SensorMetric.Voltage, 12, 1)
         ]);
         
-        if (pluginId == "wireview-pro2")
+        if (pluginId == WireViewIdentity.Id)
         {
             metrics.AddRange([
                 new DebugMetricDefinition("Connector", "Cable rating", SensorComponent.GpuConnector, SensorMetric.PowerCapability, 600, 1),
@@ -64,7 +68,7 @@ public static class DebugMetricCatalog
                 new DebugMetricDefinition("Faults", "Fault log", SensorComponent.MonitorBoard, SensorMetric.FaultLog, 0)
             ]);
         }
-        else if (pluginId == "asus-astral")
+        else if (pluginId == AsusIdentity.Id)
         {
             metrics.AddRange([
                 new DebugMetricDefinition("GPU", "GPU board power", SensorComponent.GpuBoard, SensorMetric.Power, 450),

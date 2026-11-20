@@ -1,9 +1,7 @@
+import { pluginNames } from './pluginNames.ts';
+import { MsiId } from './pluginIds.ts';
 import { homePanelKey, type HomePinPanel, type TemperatureUnit } from './mobilePreferences.ts';
 import type { SensorReading } from './protocol';
-
-const sourceNames: Record<string, string> = {
-  'asus-astral': 'ROG Astral', 'generic-nvidia': 'NVIDIA', 'msi-psu': 'MSI PSU', 'wireview-pro2': 'WireView Pro II',
-};
 
 export const pinMetrics = ['Current', 'Power', 'Voltage'] as const;
 export type PinMetric = typeof pinMetrics[number];
@@ -16,7 +14,7 @@ export type MetricGroup = {
 };
 
 export function sourceName(id: string) {
-  return Object.hasOwn(sourceNames, id) ? sourceNames[id] : id ? words(id) : 'RTX Lens';
+  return Object.hasOwn(pluginNames, id) ? pluginNames[id] : id ? words(id) : 'RTX Lens';
 }
 
 export function isPin(reading: SensorReading) {
@@ -67,7 +65,7 @@ export function powerConnectorGroups(group: MetricGroup, hideIdleMsiConnectors: 
   }
 
   const connectors = [...byConnector];
-  return hideIdleMsiConnectors && group.source === 'msi-psu'
+  return hideIdleMsiConnectors && group.source === MsiId
     ? connectors.filter(([id, readings]) => id === null || findMetric(readings, 'PsuConnector', 'Current')?.value !== 0)
     : connectors;
 }

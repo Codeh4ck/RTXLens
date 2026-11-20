@@ -1,3 +1,5 @@
+import { serviceRoutes } from '../transport/serviceRoutes.ts';
+import { AsusId, MsiId, WireViewId } from '../pluginIds.ts';
 import { UpdateChecker } from '../updates/UpdateChecker.ts';
 import { ReadOnlyApi } from '../transport/ReadOnlyApi.ts';
 import type { ConfigurationSnapshot } from '../contracts/ConfigurationSnapshot.ts';
@@ -71,7 +73,7 @@ export class FlyoutView {
 
         try {
             const api = new ReadOnlyApi(59273);
-            const snapshot = (await api.get('/configuration', controller.signal)) as ConfigurationSnapshot;
+            const snapshot = (await api.get(serviceRoutes.Configuration, controller.signal)) as ConfigurationSnapshot;
 
             if (controller.signal.aborted) {
                 return;
@@ -92,19 +94,19 @@ export class FlyoutView {
                 const name =
                     (
                         {
-                            'asus-astral': 'ROG Astral',
-                            'wireview-pro2': 'WireView Pro II',
-                            'msi-psu': 'MSI MPG PSU'
+                            [AsusId]: 'ROG Astral',
+                            [WireViewId]: 'WireView Pro II',
+                            [MsiId]: 'MSI MPG PSU'
                         } as Record<string, string>
                     )[id] ?? id;
                 this.section(body, name, configurationRows(plugin as unknown as Record<string, unknown>));
 
-                if (id !== 'wireview-pro2') {
+                if (id !== WireViewId) {
                     continue;
                 }
 
                 try {
-                    const device = await api.get('/plugins/wireview-pro2/device/config', controller.signal);
+                    const device = await api.get(serviceRoutes.WireViewConfiguration, controller.signal);
 
                     if (controller.signal.aborted) {
                         return;

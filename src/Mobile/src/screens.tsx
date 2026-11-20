@@ -1,3 +1,4 @@
+import { NvidiaId, WireViewId } from './pluginIds.ts';
 import { useColors, useThemeStyles, type Colors } from './appearance';
 import { HomeLayout } from './homeLayout';
 import { useContext, useState, type ReactNode } from 'react';
@@ -10,14 +11,14 @@ import {
 import { homeCards, homePanelKey, type HomeCardId, type HomePanel } from './mobilePreferences';
 import { TemperatureUnitContext } from './mobileSettings';
 import type { SensorFrame, SensorReading } from './protocol';
-import { Button, Card, Icon, Page, PanelList, Selection, useStyles, type IconName, type Tab } from './ui';
+import { Card, Icon, Page, PanelList, Selection, useStyles, type IconName, type Tab } from './ui';
 
-type TelemetryProps = { frame: SensorFrame | null; live: boolean };
+type TelemetryProps = { frame: SensorFrame | null; live: boolean; connectionCard?: ReactNode };
 
 export function Home({
-  frame, live, paired, connecting, reconnecting, remote, panels, saveLayout, layoutEnabled, initiallyEditing, onEditingChange, onNavigate,
+  frame, live, connectionCard, remote, panels, saveLayout, layoutEnabled, initiallyEditing, onEditingChange, onNavigate,
 }: TelemetryProps & {
-  paired: boolean; connecting: boolean; reconnecting: boolean; remote: boolean; panels: HomePanel[];
+  remote: boolean; panels: HomePanel[];
   saveLayout: (panels: HomePanel[]) => Promise<void>; layoutEnabled: boolean; initiallyEditing: boolean; onEditingChange: (editing: boolean) => void;
   onNavigate: (tab: Tab) => void;
 }) {
@@ -27,7 +28,7 @@ export function Home({
   const temperatureUnit = useContext(TemperatureUnitContext);
   const sensors = frame?.sensors ?? [];
   const gpuGroups = groupMetrics(sensors, 'gpu');
-  const gpu = (gpuGroups.find(group => group.source === 'generic-nvidia') ?? gpuGroups[0])?.readings ?? [];
+  const gpu = (gpuGroups.find(group => group.source === NvidiaId) ?? gpuGroups[0])?.readings ?? [];
   const powerGroups = groupMetrics(sensors, 'power');
   const pinSources = pinPanelSources(powerGroups);
   const connectorPower = frame?.connectorPowerKey === undefined
@@ -35,9 +36,8 @@ export function Home({
     : sensors.find(reading => reading.identity.key === frame.connectorPowerKey);
   const warningCount = frame?.warnings.filter(warning => warning.phase === 'Active').length ?? 0;
   const tone = live ? warningCount > 0 ? colors.warning : colors.accent : colors.muted;
-  const title = !paired ? 'Pair your PC' : !live ? reconnecting ? 'Reconnecting to your PC' : connecting ? 'Connecting to your PC' : 'PC disconnected'
-    : !frame ? 'Waiting for readings' : warningCount ? `${warningCount} active ${warningCount === 1 ? 'warning' : 'warnings'}`
-      : frame.reportingSources ? 'Monitoring active' : 'No devices reporting';
+  const title = !live ? 'Last reported status' : warningCount ? `${warningCount} active ${warningCount === 1 ? 'warning' : 'warnings'}`
+    : frame?.reportingSources ? 'Monitoring active' : 'No devices reporting';
   const tiles: Record<Exclude<HomeCardId, 'status'>, { value: string; icon: IconName; tab: Tab }> = {
     gpuUsage: { value: formatReading(findMetric(gpu, 'GpuCore', 'Utilization')), icon: 'activity', tab: 'gpu' },
     coreTemperature: {
@@ -51,14 +51,13 @@ export function Home({
     <Card title={title} icon={live && warningCount ? 'warnings' : 'monitor'}>
       <View style={styles.row}>
         <View style={[local.statusDot, { backgroundColor: tone }]} />
-        <Text style={[local.status, { color: tone }]}>{live ? 'Live' : connecting ? 'Connecting' : paired ? 'Offline' : 'Setup'}</Text>
+        <Text style={[local.status, { color: tone }]}>{live ? 'Live' : 'Offline'}</Text>
       </View>
       {live && <Text style={styles.caption}>
         {remote ? 'Remote connection' : 'Local connection'}
         {frame && ` · ${frame.reportingSources} reporting ${frame.reportingSources === 1 ? 'source' : 'sources'}`}
       </Text>}
-      {!paired && <Button icon="scan" label="Pair a PC" variant="primary" onPress={() => onNavigate('settings')} />}
-      {paired && !live && <Button icon="settings" label="Connection settings" onPress={() => onNavigate('settings')} />}
+
     </Card>
   );
 
@@ -79,7 +78,8 @@ export function Home({
 
   return <HomeLayout panels={panels} options={options} titleFor={titleFor} save={saveLayout}
     enabled={layoutEnabled} initiallyEditing={initiallyEditing} onEditingChange={onEditingChange}
-    footer={frame && !live && <Text style={styles.caption}>Last readings at {time(frame.timestamp)}</Text>}
+
+    header={<>{connectionCard}{frame && !live && <Text style={styles.caption}>{lastReading(frame, live)}</Text>}</>}
     renderPanel={panel => {
       const panelTitle = titleFor(panel);
       if (panel.kind === 'metric') {
@@ -102,17 +102,20 @@ function Tile({ title, value, icon, onPress }: { title: string; value: string; i
   );
 }
 
-export function Power({ frame, live, hideIdleMsiConnectors }: TelemetryProps & { hideIdleMsiConnectors: boolean }) {
+export function Power({ frame, live, connectionCard, hideIdleMsiConnectors }: TelemetryProps & { hideIdleMsiConnectors: boolean }) {
   const local = useThemeStyles(createLocalStyles);
   const [source, setSource] = useState('');
   const [pinMetric, setPinMetric] = useState<PinMetric>('Current');
-  const groups = groupMetrics(frame?.sensors ?? [], 'power');
+  if (!frame) return <Page title="Power">{connectionCard}</Page>;
+
+  const groups = groupMetrics(frame.sensors, 'power');
   const selected = groups.find(group => group.key === source) ?? groups[0];
   const connectors = selected ? powerConnectorGroups(selected, hideIdleMsiConnectors) : [];
-  const faults = selected?.source === 'wireview-pro2' ? wireViewFaults(selected.readings) : [];
+  const faults = selected?.source === WireViewId ? wireViewFaults(selected.readings) : [];
 
   return (
     <Page title="Power" description={lastReading(frame, live)}>
+      {connectionCard}
       {groups.length > 1 && <Selection selected={selected.key}
         options={groups.map(group => ({ id: group.key, label: group.name }))} onSelect={setSource} />}
       {selected ? (
@@ -226,12 +229,14 @@ function PinStat({ label, description, value, icon }: { label: string; descripti
   );
 }
 
-export function Gpu({ frame, live }: TelemetryProps) {
+export function Gpu({ frame, live, connectionCard }: TelemetryProps) {
   const styles = useStyles();
   const local = useThemeStyles(createLocalStyles);
   const [source, setSource] = useState('');
-  const groups = groupMetrics(frame?.sensors ?? [], 'gpu');
-  const selected = groups.find(group => group.key === source) ?? groups.find(group => group.source === 'generic-nvidia') ?? groups[0];
+  if (!frame) return <Page title="GPU">{connectionCard}</Page>;
+
+  const groups = groupMetrics(frame.sensors, 'gpu');
+  const selected = groups.find(group => group.key === source) ?? groups.find(group => group.source === NvidiaId) ?? groups[0];
   const readings = selected?.readings ?? [];
   const diagnostics = ['GpuPowerLimits', 'GpuPerformance', 'GpuPcie'];
   const gpuPower = readings.filter(reading => reading.identity.component === 'GpuPowerLimits'
@@ -246,6 +251,7 @@ export function Gpu({ frame, live }: TelemetryProps) {
 
   return (
     <Page title="GPU" description={lastReading(frame, live)}>
+      {connectionCard}
       {groups.length > 1 && <Selection selected={selected.key}
         options={groups.map(group => ({ id: group.key, label: group.name }))} onSelect={setSource} />}
       {selected ? (
@@ -300,7 +306,7 @@ function linkSpeed(readings: SensorReading[], genMetric: string, widthMetric: st
     .filter(Boolean).join(' ') || 'Unavailable';
 }
 
-export function Warnings({ frame, live, simulations, history, showHistory }: TelemetryProps & {
+export function Warnings({ frame, live, connectionCard, simulations, history, showHistory }: TelemetryProps & {
   simulations: SensorFrame['simulationWarnings']; history: ReactNode; showHistory?: boolean;
 }) {
   const styles = useStyles();
@@ -310,18 +316,17 @@ export function Warnings({ frame, live, simulations, history, showHistory }: Tel
   return (
     <Page title="Warnings" description={lastReading(frame, live)}>
       <Selection options={[{ id: 'active', label: 'Active' }, { id: 'history', label: 'History' }]} selected={view} onSelect={setView} />
-      {view === 'history' ? history : <>
-      {warnings.length === 0 && (
-        <Card title={live && frame ? 'No active warnings' : 'Warning status unavailable'} icon={live && frame ? 'check' : 'warnings'}>
-          <Text style={styles.caption}>{live && frame ? 'The connected service reports no current warnings.' : 'Waiting for the service.'}</Text>
-        </Card>
-      )}
-      {warnings.map(warning => <WarningCard key={warning.episodeId} title={warning.title} detail={warning.detail}
-        metadata={[sourceName(warning.pluginId), warning.startedAt && time(warning.startedAt)].filter(Boolean).join(' · ')}
-        status={warning.phase} />)}
-      {simulations.length > 0 && <Text accessibilityRole="header" style={styles.heading}>Simulation</Text>}
-      {simulations.map(warning => <WarningCard key={warning.id} title={warning.title} detail={warning.detail}
-        metadata={time(warning.startedAt)} status="Simulation" />)}
+      {connectionCard}
+      {view === 'history' ? (live ? history : null) : frame && <>
+        {warnings.length === 0 && (
+          <Card title={live ? 'No active warnings' : 'No warnings in the last snapshot'} icon={live ? 'check' : 'warnings'}>{null}</Card>
+        )}
+        {warnings.map(warning => <WarningCard key={warning.episodeId} title={warning.title} detail={warning.detail}
+          metadata={[sourceName(warning.pluginId), warning.startedAt && time(warning.startedAt)].filter(Boolean).join(' · ')}
+          status={warning.phase} />)}
+        {simulations.length > 0 && <Text accessibilityRole="header" style={styles.heading}>Simulation</Text>}
+        {simulations.map(warning => <WarningCard key={warning.id} title={warning.title} detail={warning.detail}
+          metadata={time(warning.startedAt)} status="Simulation" />)}
       </>}
     </Page>
   );

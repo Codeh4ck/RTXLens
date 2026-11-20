@@ -1,3 +1,4 @@
+using RTXLens.Contracts.Monitoring;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Threading.RateLimiting;
@@ -86,8 +87,8 @@ internal static class MobileAccessListener
             return await next(context);
         });
         paired.MapSensorsEndpoint(formatFrame);
-        paired.MapGet("/session", () => Results.NoContent()).RequireRateLimiting("mobile-read");
-        paired.MapPost("/notification-registration", (HttpContext context, MobileNotificationRegistration request) =>
+        paired.MapGet(MobileProtocol.Session, () => Results.NoContent()).RequireRateLimiting("mobile-read");
+        paired.MapPost(MobileProtocol.Registration, (HttpContext context, MobileNotificationRegistration request) =>
         {
             if (request.Token is not null && !ExpoMobilePushProvider.IsToken(request.Token))
             {
@@ -98,7 +99,7 @@ internal static class MobileAccessListener
                 ? Results.NoContent()
                 : Results.Unauthorized();
         }).RequireRateLimiting("mobile-registration");
-        paired.MapPost("/notification-registration/v2", (HttpContext context, MobileNotificationRegistrationV2 request) =>
+        paired.MapPost(MobileProtocol.RegistrationV2, (HttpContext context, MobileNotificationRegistrationV2 request) =>
         {
             if ((request.Token is not null && !ExpoMobilePushProvider.IsToken(request.Token)) || request.Preferences is not { IsValid: true })
             {
@@ -111,17 +112,17 @@ internal static class MobileAccessListener
         }).RequireRateLimiting("mobile-registration");
         if (history is not null)
         {
-            paired.MapGet("/incidents", (string? before) => history.List(before)).RequireRateLimiting("mobile-read");
-            paired.MapGet("/incidents/{kind}/{id:guid}", (string kind, Guid id) => history.Detail(kind, id)).RequireRateLimiting("mobile-read");
+            paired.MapGet(MobileProtocol.Incidents, (string? before) => history.List(before)).RequireRateLimiting("mobile-read");
+            paired.MapGet(MobileProtocol.Incidents + "/{kind}/{id:guid}", (string kind, Guid id) => history.Detail(kind, id)).RequireRateLimiting("mobile-read");
         }
 
-        app.MapPost("/pairing", (HttpContext context, MobilePairingRequest request) =>
+        app.MapPost(MobileProtocol.Pairing, (HttpContext context, MobilePairingRequest request) =>
         {
             context.Response.Headers.CacheControl = "no-store";
             return pairing.Begin(request) is { } claim ? Results.Ok(claim) : Results.NotFound();
         }).RequireRateLimiting("invite");
 
-        app.MapPost("/pairing/complete", (HttpContext context, MobilePairingCompletion request) =>
+        app.MapPost(MobileProtocol.CompletePairing, (HttpContext context, MobilePairingCompletion request) =>
         {
             context.Response.Headers.CacheControl = "no-store";
             var (valid, credential) = pairing.Complete(request);

@@ -1,3 +1,4 @@
+using RTXLens.Presentation.Settings;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -49,9 +50,9 @@ internal sealed class PerformancePage : UserControl
         _importAlert = Alert(dismiss: DismissImportAlert);
         _start = ActionButton("New recording", "chart-record", recorder.Start);
         _stop = ActionButton("Stop recording", "chart-stop", recorder.Stop);
-        _clear = ActionButton("Clear recording", "chart-clear", recorder.Clear);
+        _clear = ActionButton("Clear recording", DesktopIcons.ChartClear, recorder.Clear);
         _import = ActionButton("Import recording", "chart-import", ImportAsync);
-        _export = ActionButton("Export recording", "chart-export", ExportAsync);
+        _export = ActionButton("Export recording", DesktopIcons.ChartExport, ExportAsync);
 
         var actions = new WrapPanel
         {
@@ -122,7 +123,7 @@ internal sealed class PerformancePage : UserControl
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Center,
             Padding = new Thickness(8, 6),
-            Content = new Image { Source = Icon("info-action"), Width = 16, Height = 16 }
+            Content = new Image { Source = Icon(DesktopIcons.Info), Width = 16, Height = 16 }
         };
         AutomationProperties.SetName(info, "Chart controls");
         ToolTip.SetTip(info, "Chart controls");
@@ -283,7 +284,7 @@ internal sealed class PerformancePage : UserControl
             if (isHeader)
             {
                 var separator = new Border { Height = 1 };
-                separator[!Border.BackgroundProperty] = new DynamicResourceExtension("PanelBorderBrush");
+                separator[!Border.BackgroundProperty] = new DynamicResourceExtension(DesktopBrushes.PanelBorder);
                 table.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
                 Grid.SetRow(separator, row + 1);
                 Grid.SetColumnSpan(separator, 2);
@@ -388,7 +389,7 @@ internal sealed class PerformancePage : UserControl
                 var group = new StackPanel { Spacing = 4 };
                 group.Children.Add(BulkSelection("Select all", [.. category.Select(item => item.Trace.Key)]));
                 var separator = new Border { Height = 1, Margin = new Thickness(0, 2) };
-                separator[!Border.BackgroundProperty] = new DynamicResourceExtension("PanelBorderBrush");
+                separator[!Border.BackgroundProperty] = new DynamicResourceExtension(DesktopBrushes.PanelBorder);
                 group.Children.Add(separator);
                 foreach (var item in category)
                 {

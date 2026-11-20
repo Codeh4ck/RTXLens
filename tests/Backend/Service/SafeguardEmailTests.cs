@@ -72,6 +72,9 @@ internal static class SafeguardEmailTests
             Reading("generic-nvidia", SensorComponent.GpuMemory, SensorMetric.MemoryUsed, 2048, Trigger),
             Reading("generic-nvidia", SensorComponent.GpuHotspot, SensorMetric.Temperature, 99, Trigger) with { Quality = ReadingQuality.Stale }
         ]);
+        var catalog = TestHardwareCatalog.Installed;
+        frame = frame with { Sources = frame.Readings.Select(reading => reading.Identity.PluginId).Distinct()
+            .ToDictionary(id => id, id => catalog.Find(id)!) };
         var (html, plain) = CreateBodies(SafeguardScripts.Notify, frame);
         TestAssert.True(html.Contains("WireView Pro II") && html.Contains("ROG Astral") && html.Contains("MSI PSU")
             && html.Contains("Connector 1 pins") && html.Contains("Connector 2 pins") && html.Contains("NVIDIA GPU status"),

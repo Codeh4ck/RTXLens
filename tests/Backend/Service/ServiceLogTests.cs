@@ -80,7 +80,11 @@ internal static class ServiceLogTests
 
     private static ulong WrittenBytes(SafeProcessHandle process)
     {
-        if (!GetProcessIoCounters(process, out var counters)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        if (!GetProcessIoCounters(process, out var counters))
+        {
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+
         return counters.WriteTransferCount;
     }
 

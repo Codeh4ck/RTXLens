@@ -1,3 +1,4 @@
+using RTXLens.Plugins.Msi.Contracts;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -123,14 +124,13 @@ public sealed partial class AfterburnerFileStore(string installation, string bac
             throw new InvalidOperationException("This backup is needed to recover an interrupted update. Complete recovery before deleting it.");
         }
 
-        var allowed = new[] { "PSU.cfg", "MSIAfterburner.cfg", "manifest.json" };
         if (Directory.EnumerateDirectories(directory).Any()
-            || Directory.EnumerateFiles(directory).Any(path => !allowed.Contains(Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)))
+            || Directory.EnumerateFiles(directory).Any(path => !BackupFiles.Contains(Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)))
         {
             throw new InvalidDataException("The backup contains unexpected files and was not deleted.");
         }
 
-        foreach (var name in allowed)
+        foreach (var name in BackupFiles)
         {
             EnsureNoLinks(Path.Combine(directory, name));
         }
@@ -140,9 +140,8 @@ public sealed partial class AfterburnerFileStore(string installation, string bac
 
     private static void DeleteBackupFiles(string directory)
     {
-        var allowed = new[] { "PSU.cfg", "MSIAfterburner.cfg", "manifest.json" };
         // Delete only the known files inside this one validated backup. Never recurse over a supplied path.
-        foreach (var name in allowed)
+        foreach (var name in BackupFiles)
         {
             var path = Path.Combine(directory, name);
             EnsureNoLinks(path);
@@ -176,7 +175,7 @@ public sealed partial class AfterburnerFileStore(string installation, string bac
             WriteNew(Path.Combine(directory, Path.GetFileName(file.RelativePath)), file.Before);
         }
 
-        WriteNew(Path.Combine(directory, "manifest.json"), JsonSerializer.SerializeToUtf8Bytes(backup, AfterburnerJsonContext.Default.AfterburnerBackup));
+        WriteNew(Path.Combine(directory, AfterburnerFiles.BackupManifest), JsonSerializer.SerializeToUtf8Bytes(backup, AfterburnerJsonContext.Default.AfterburnerBackup));
         _ = ReadBackup(backup.Id);
         return backup;
     }
@@ -289,7 +288,7 @@ public sealed partial class AfterburnerFileStore(string installation, string bac
 
         directory ??= BackupPath(id);
         EnsureNoLinks(directory);
-        var manifest = JsonSerializer.Deserialize(ReadLimited(Path.Combine(directory, "manifest.json")),
+        var manifest = JsonSerializer.Deserialize(ReadLimited(Path.Combine(directory, AfterburnerFiles.BackupManifest)),
             AfterburnerJsonContext.Default.AfterburnerBackup) ?? throw new InvalidDataException("Backup manifest is empty.");
 
         if (manifest.Id != id || !Installation.Equals(manifest.Installation, StringComparison.OrdinalIgnoreCase)
@@ -305,8 +304,8 @@ public sealed partial class AfterburnerFileStore(string installation, string bac
 
         if (manifest.Restorable)
         {
-            _ = AfterburnerConfiguration.Inspect(ReadLimited(Path.Combine(directory, "PSU.cfg")),
-                ReadLimited(Path.Combine(directory, "MSIAfterburner.cfg")));
+            _ = AfterburnerConfiguration.Inspect(ReadLimited(Path.Combine(directory, AfterburnerFiles.PluginConfig)),
+                ReadLimited(Path.Combine(directory, AfterburnerFiles.ProfileConfig)));
         }
         return manifest;
     }

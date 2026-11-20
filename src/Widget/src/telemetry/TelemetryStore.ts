@@ -1,3 +1,5 @@
+import { hardwareLabels } from '../panels/hardwareLabels.ts';
+import { AsusId, WireViewId } from '../pluginIds.ts';
 import type { ConfigurationSnapshot } from '../contracts/ConfigurationSnapshot.ts';
 import type { ConnectionState } from '../contracts/ConnectionState.ts';
 import type { PluginHealth } from '../contracts/PluginHealth.ts';
@@ -15,7 +17,7 @@ export class TelemetryStore {
     wireLimit: number | null = null;
     wireLimitDevice: string | null = null;
     wireName = '';
-    msiName = 'MSI MPG Ai1300TS / Ai1600TS';
+    msiName: string = hardwareLabels.MsiFamily;
     private readonly indexed = new Map<string, SensorReading>();
     private readonly observed = new Map<string, number>();
 
@@ -58,7 +60,7 @@ export class TelemetryStore {
         this.wireLimit = null;
         this.wireLimitDevice = null;
         this.wireName = '';
-        this.msiName = 'MSI MPG Ai1300TS / Ai1600TS';
+        this.msiName = hardwareLabels.MsiFamily;
         this.clearIndexes();
     }
 
@@ -179,11 +181,11 @@ export class TelemetryStore {
     }
 
     limit(pluginId: string, deviceId: string | null): number | null {
-        if (pluginId === 'wireview-pro2') {
+        if (pluginId === WireViewId) {
             return deviceId === this.wireLimitDevice ? this.wireLimit : null;
         }
 
-        const value = this.configuration?.configuration.plugins['asus-astral']?.options?.wireOvercurrentAmperageThreshold;
+        const value = this.configuration?.configuration.plugins[AsusId]?.options?.wireOvercurrentAmperageThreshold;
 
         return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
     }

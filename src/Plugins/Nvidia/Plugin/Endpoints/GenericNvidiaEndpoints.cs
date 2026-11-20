@@ -1,3 +1,4 @@
+using RTXLens.Plugins.GenericNvidia.Contracts;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -14,7 +15,7 @@ public static class GenericNvidiaEndpoints
 {
     public static void MapGenericNvidiaEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/plugins/generic-nvidia").AddEndpointFilter<ApiExceptionFilter>();
+        var group = endpoints.MapGroup("/" + NvidiaIdentity.Route).AddEndpointFilter<ApiExceptionFilter>();
 
         group.MapGet("/devices", async (NvidiaTelemetryReader reader, bool? refresh, CancellationToken token) =>
         {

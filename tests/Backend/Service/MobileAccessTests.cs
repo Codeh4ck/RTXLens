@@ -125,7 +125,10 @@ internal static class MobileAccessTests
                 {
                     var record = await input.Reader.ReadAsync(timeout.Token);
                     receiptWarning |= IsReceiptWarning(record);
-                    if (record.Entry.Code == "mobile.push-accepted") break;
+                    if (record.Entry.Code == "mobile.push-accepted")
+                    {
+                        break;
+                    }
                 }
             }
         }
@@ -769,7 +772,11 @@ internal static class MobileAccessTests
         {
             TestAssert.Equal("https://exp.host/--/api/v2/push/send", request.RequestUri?.AbsoluteUri);
             var message = await request.Content!.ReadAsStringAsync(cancellationToken);
-            if (onSend is not null) await onSend(message, cancellationToken);
+            if (onSend is not null)
+            {
+                await onSend(message, cancellationToken);
+            }
+
             await Messages.Writer.WriteAsync(message, cancellationToken);
             return new HttpResponseMessage(HttpStatusCode.OK)
             {

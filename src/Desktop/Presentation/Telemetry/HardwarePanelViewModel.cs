@@ -1,3 +1,7 @@
+using RTXLens.Plugins.GenericNvidia.Contracts;
+using RTXLens.Plugins.Msi.Contracts;
+using RTXLens.Plugins.WireView.Contracts;
+using RTXLens.Plugins.Asus.Contracts;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using RTXLens.Contracts.Discovery;
@@ -18,14 +22,15 @@ public sealed class HardwarePanelViewModel : ObservableObject
     private int _psuConnector = 1;
     private string[] _genericKeys = [];
     private PluginCapability[] _capabilities;
+    private readonly GpuAssociation _association;
 
     public string Id { get; }
     public string Name { get; }
-    public bool IsWireView => Id == "wireview-pro2";
-    public bool IsAsus => Id == "asus-astral";
-    public bool IsNvidia => Id == "generic-nvidia";
+    public bool IsWireView => Id == WireViewIdentity.Id;
+    public bool IsAsus => Id == AsusIdentity.Id;
+    public bool IsNvidia => Id == NvidiaIdentity.Id;
     public bool HasGpuStatus => IsAsus || IsWireView || IsNvidia;
-    public bool IsMsi => Id == "msi-psu";
+    public bool IsMsi => Id == MsiIdentity.Id;
     public MsiPanelViewModel Msi { get; } = new();
 
     public bool Enabled
@@ -194,14 +199,9 @@ public sealed class HardwarePanelViewModel : ObservableObject
     public HardwarePanelViewModel(PluginInfo plugin)
     {
         Id = plugin.Id;
-        Name = Id switch
-        {
-            "wireview-pro2" => "WireView Pro II",
-            "asus-astral" => "ROG Astral",
-            "msi-psu" => "MSI PSU",
-            "generic-nvidia" => "GPU Status",
-            _ => plugin.Name
-        };
+        var hardware = plugin.Hardware ?? LegacyHardwareCatalog.Sources.GetValueOrDefault(Id);
+        _association = hardware?.Association ?? GpuAssociation.None;
+        Name = IsNvidia ? "GPU Status" : hardware?.DisplayName ?? plugin.Name;
         _capabilities = plugin.Capabilities;
         Enabled = plugin.Enabled;
         State = plugin.State.ToString();
@@ -311,7 +311,7 @@ public sealed class HardwarePanelViewModel : ObservableObject
         }
 
         var activeProfile = snapshot.SettingsProfile;
-        var profile = activeProfile?.AppliesToConnector(Id, deviceId) == true ? activeProfile.Profile : null;
+        var profile = activeProfile?.AppliesToConnector(_association, deviceId) == true ? activeProfile.Profile : null;
         var profileLimit = snapshot.PinWarningLimits is { } limits
             ? limits.FirstOrDefault(limit => limit.PluginId == Id && limit.DeviceId == deviceId)?.OvercurrentAmperes
             : IsAsus || profile?.UseWireViewOvercurrentFallback == true ? profile?.OvercurrentAmperes : null;

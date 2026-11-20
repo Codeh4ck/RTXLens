@@ -1,3 +1,5 @@
+import { chartSettings } from '../settings/chartSettings.ts';
+import { AsusId, MsiId, NvidiaId, WireViewId } from '../pluginIds.ts';
 import { Settings } from '../settings/Settings.ts';
 import type { PanelData } from '../panels/PanelData.ts';
 import type { MetricData } from '../panels/MetricData.ts';
@@ -100,16 +102,16 @@ export class PanelView {
         element.innerHTML = template;
 
         const pins = data.kind === 'pins';
-        const psu = data.pluginId === 'msi-psu';
-        const gpuStatus = data.kind === 'status' && ['asus-astral', 'generic-nvidia'].includes(data.pluginId);
+        const psu = data.pluginId === MsiId;
+        const gpuStatus = data.kind === 'status' && [AsusId, NvidiaId].includes(data.pluginId);
         element.dataset.gpuStatus = String(gpuStatus);
 
-        if (pins || !['asus-astral', 'generic-nvidia'].includes(data.pluginId)) {
+        if (pins || ![AsusId, NvidiaId].includes(data.pluginId)) {
             element.querySelector('.gpu-usage')!.remove();
             element.querySelector('.core-voltage')!.remove();
         }
 
-        if (!settings.enabled('showSource')) {
+        if (!settings.enabled(chartSettings.Source)) {
             element.querySelector('.panel-source')!.remove();
         }
 
@@ -123,15 +125,15 @@ export class PanelView {
         } else {
             element.querySelector('.status-rows')!.remove();
 
-            if (!settings.enabled('showAxis')) {
+            if (!settings.enabled(chartSettings.Axis)) {
                 element.querySelector('.chart-axis')!.remove();
             }
 
-            if (psu || !settings.enabled('showSpread')) {
+            if (psu || !settings.enabled(chartSettings.Spread)) {
                 element.querySelector('.spread-badge')!.remove();
             }
 
-            if (!settings.enabled('showPeak')) {
+            if (!settings.enabled(chartSettings.Peak)) {
                 element.querySelector('.reset-peak')!.remove();
             }
 
@@ -139,7 +141,7 @@ export class PanelView {
                 element.querySelector('.metric-switch')!.remove();
             }
 
-            if (psu && !settings.enabled('showPeak')) {
+            if (psu && !settings.enabled(chartSettings.Peak)) {
                 element.querySelector('.chart-caption')!.remove();
             }
         }
@@ -174,7 +176,7 @@ export class PanelView {
         this.coreVoltage = element.querySelector('.core-voltage-value') ? new MetricText(element.querySelector('.core-voltage-value')!) : null;
         this.spread = this.nodes['spread-value'] ? new MetricText(this.nodes['spread-value']) : null;
 
-        for (let index = 0; index < (pins && settings.enabled('showAxis') ? 5 : 0); index++) {
+        for (let index = 0; index < (pins && settings.enabled(chartSettings.Axis) ? 5 : 0); index++) {
             const tick = document.createElement('span');
             element.querySelector('.chart-axis')!.append(tick);
             this.tickNodes.push(tick);
@@ -234,7 +236,7 @@ export class PanelView {
             pin.innerHTML =
                 '<span class="headroom"></span><b class="pin-value"></b><div class="pin-track"><div class="pin-fill"></div><div class="peak-marker"></div><span class="overflow-marker" aria-label="Outside display range">!</span></div><span class="pin-label"></span><span class="psu-comparison"></span>';
 
-            if (psu || !settings.enabled('showHeadroom')) {
+            if (psu || !settings.enabled(chartSettings.Headroom)) {
                 pin.querySelector('.headroom')!.remove();
             }
 
@@ -242,7 +244,7 @@ export class PanelView {
                 pin.querySelector('.psu-comparison')!.remove();
             }
 
-            if (!settings.enabled('showPeak')) {
+            if (!settings.enabled(chartSettings.Peak)) {
                 pin.querySelector('.peak-marker')!.remove();
             }
 
@@ -294,11 +296,11 @@ export class PanelView {
         this.element.dataset.tone = data.tone;
         this.element.dataset.comparison = data.comparisonLabel ? 'true' : 'false';
         this.element.dataset.voltage = String(data.voltage);
-        this.element.dataset.psu = String(data.pluginId === 'msi-psu');
+        this.element.dataset.psu = String(data.pluginId === MsiId);
         this.element.dataset.plugin = data.pluginId;
         this.element.dataset.hero = String(this.settings.enabled(`panel${this.slot}Hero`));
         this.element.dataset.summary = String(data.summary.length > 0);
-        this.element.dataset.peak = String(this.settings.enabled('showPeak'));
+        this.element.dataset.peak = String(this.settings.enabled(chartSettings.Peak));
         this.writeMetrics(this.summary, data.summary);
 
         if (data.kind === 'pins') {
@@ -330,7 +332,7 @@ export class PanelView {
         this.nodes['panel-detail']!.hidden = !detail;
         this.element
             .querySelector('.panel-icon')!
-            .setAttribute('data-icon', data.kind === 'status' ? (data.pluginId === 'wireview-pro2' ? 'vtemp' : 'vcore') : 'pin');
+            .setAttribute('data-icon', data.kind === 'status' ? (data.pluginId === WireViewId ? 'vtemp' : 'vcore') : 'pin');
     }
 
     private renderPins(data: PanelData): void {

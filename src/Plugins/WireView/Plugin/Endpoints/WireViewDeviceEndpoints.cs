@@ -1,3 +1,4 @@
+using RTXLens.Plugins.WireView.Contracts;
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
@@ -19,7 +20,7 @@ namespace RTXLens.Plugins.WireView.Endpoints;
 
 internal static class WireViewDeviceEndpoints
 {
-    private const string ActivitySource = "WireView Pro II";
+    private const string ActivitySource = WireViewIdentity.PluginName;
 
     private static DeviceConfig ReadWriteRequest(JsonElement body)
     {
@@ -55,7 +56,7 @@ internal static class WireViewDeviceEndpoints
 
     public static void MapWireViewDeviceEndpoints(this RouteGroupBuilder group)
     {
-        group.MapGet("/device/config", async (PluginRuntimeManager runtime, ILogger<WireViewPlugin> logger, CancellationToken token) =>
+        group.MapGet(WireViewIdentity.DeviceConfigPath, async (PluginRuntimeManager runtime, ILogger<WireViewPlugin> logger, CancellationToken token) =>
         {
             var configuration = await WireViewAccess.ExecuteAsync(runtime, plugin => plugin.Reader.ReadConfig(), token);
 
@@ -73,7 +74,7 @@ internal static class WireViewDeviceEndpoints
                 : throw new IOException("Failed to read WireView device configuration.");
         });
 
-        group.MapPut("/device/config", async (JsonElement body, HttpContext context, PluginRuntimeManager runtime,
+        group.MapPut(WireViewIdentity.DeviceConfigPath, async (JsonElement body, HttpContext context, PluginRuntimeManager runtime,
             ILogger<WireViewPlugin> logger, CancellationToken token) =>
         {
             var host = context.Request.Host.Host.Trim('[', ']');
@@ -110,7 +111,7 @@ internal static class WireViewDeviceEndpoints
                 : throw new IOException("Failed to read raw WireView device configuration.");
         });
 
-        group.MapPost("/faults/clear", async (ClearFaultsRequest request, PluginRuntimeManager runtime, ILogger<WireViewPlugin> logger, CancellationToken token) =>
+        group.MapPost(WireViewIdentity.ClearFaultsPath, async (ClearFaultsRequest request, PluginRuntimeManager runtime, ILogger<WireViewPlugin> logger, CancellationToken token) =>
         {
             var statusMask = (ushort)~request.FaultStatusMask;
             var logMask = (ushort)~request.FaultLogMask;

@@ -1,3 +1,4 @@
+using RTXLens.Plugins.Msi.Contracts;
 using Microsoft.Extensions.Logging;
 using RTXLens.Contracts.Configuration;
 using RTXLens.Core.Diagnostics;
@@ -15,7 +16,7 @@ namespace RTXLens.Plugins.Msi;
 
 public sealed class MsiPlugin(PluginSettings settings, TimeProvider clock, IMsiPsuReader reader, ILogger<MsiPlugin>? logger = null) : ISensorPlugin
 {
-    public const string PluginId = "msi-psu";
+    public const string PluginId = MsiIdentity.Id;
     private MsiOptions _options = MsiSettings.GetOptions(settings);
     public PluginDescriptor Descriptor { get; private set; } = Describe(settings);
     public MsiSnapshot? Latest { get; private set; }
@@ -61,6 +62,6 @@ public sealed class MsiPlugin(PluginSettings settings, TimeProvider clock, IMsiP
         reader.Dispose();
     }
 
-    private static PluginDescriptor Describe(PluginSettings settings) => new(PluginId, "MSI MPG Ai1300TS / Ai1600TS",
+    private static PluginDescriptor Describe(PluginSettings settings) => new(PluginId, MsiIdentity.PluginName,
         TimeSpan.FromMilliseconds(settings.PollIntervalMs), TimeSpan.FromMilliseconds(settings.StaleAfterMs));
 }

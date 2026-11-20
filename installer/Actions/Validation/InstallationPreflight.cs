@@ -1,3 +1,4 @@
+using RTXLens.Contracts.Monitoring;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -50,13 +51,13 @@ public static class InstallationPreflight
             throw new IOException("The destination contains files not managed by this installer. Choose an empty dedicated folder or remove the previous unmanaged installation first.");
         }
 
-        using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\RTXLensService");
+        using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\" + WindowsServiceIdentity.Name);
         if (key?.GetValue("ImagePath") is not string image)
         {
             return;
         }
 
-        var expected = Path.Combine(Path.GetFullPath(installDirectory), "Service", "RTXLens.Service.exe");
+        var expected = Path.Combine(Path.GetFullPath(installDirectory), "Service", WindowsServiceIdentity.Executable);
         if (!managed || !image.StartsWith('"' + expected + '"', StringComparison.OrdinalIgnoreCase))
         {
             throw new IOException("An unmanaged RTXLensService installation already exists. Remove that service registration before installing this release. Runtime configuration will be preserved.");

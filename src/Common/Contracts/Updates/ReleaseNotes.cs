@@ -14,10 +14,9 @@ public sealed record ReleaseNotes
         && ReleaseTag is { Length: > 1 } && ReleaseTag.StartsWith('v')
         && SemanticVersion.TryParse(ReleaseTag[1..], out _)
         && PublishedAt != default
-        && (ReleaseUrl == ReleaseManifest.RepositoryUrl + "/releases/tag/" + ReleaseTag
-            || ReleaseUrl == "https://github.com/Codeh4ck/RTX5090Monitor/releases/tag/" + ReleaseTag)
+        && ReleaseManifest.IsReleaseUrl(ReleaseUrl, ReleaseTag)
         && !string.IsNullOrWhiteSpace(Changelog);
 
     public static Uri DownloadFor(string releaseUrl) =>
-        new(releaseUrl.Replace("/releases/tag/", "/releases/download/", StringComparison.Ordinal) + "/RTXLens-win-x64.zip");
+        new(releaseUrl.Replace(ReleaseManifest.TagPath, ReleaseManifest.DownloadPath, StringComparison.Ordinal) + "/" + ReleaseManifest.ArchiveName);
 }

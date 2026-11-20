@@ -1,3 +1,4 @@
+using RTXLens.Contracts.Monitoring;
 using RTXLens.Contracts.Discovery;
 using RTXLens.Core;
 using RTXLens.Core.Configuration;
@@ -7,7 +8,7 @@ namespace RTXLens.Service.Endpoints;
 
 internal static class PluginEndpoints
 {
-    public static void MapPluginEndpoints(this IEndpointRouteBuilder endpoints) => endpoints.MapGet("/plugins",
+    public static void MapPluginEndpoints(this IEndpointRouteBuilder endpoints) => endpoints.MapGet("/" + ServiceRoutes.Plugins,
         (PluginRuntimeManager runtime, SensorStateStore store, IRuntimeConfiguration configuration, TimeProvider clock) =>
         {
             var health = store.GetPluginHealth(clock.GetUtcNow()).ToDictionary(plugin => plugin.PluginId);
@@ -17,7 +18,7 @@ internal static class PluginEndpoints
             {
                 var state = health[definition.Id];
                 return new PluginInfo(definition.Id, definition.Name, settings[definition.Id].Enabled,
-                    state.State, state.LastSuccessAt, state.Message, definition.Capabilities) { Warnings = definition.Warnings, ConnectorMetrics = definition.ConnectorMetrics };
+                    state.State, state.LastSuccessAt, state.Message, definition.Capabilities) { Hardware = definition.Hardware, Warnings = definition.Warnings, ConnectorMetrics = definition.ConnectorMetrics };
             }).ToArray();
 
             return Results.Json(new PluginCatalog(1, plugins), AppJsonContext.Default.PluginCatalog);

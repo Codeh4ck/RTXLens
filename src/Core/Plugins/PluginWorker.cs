@@ -39,7 +39,36 @@ internal sealed class PluginWorker
         _store.Register(Describe(_settings));
     }
 
-    public void Start() => _loop = Task.Run(RunAsync);
+    public void Start(PluginSettings settings)
+    {
+        _settings = settings;
+        _settingsApplied = true;
+        _store.Register(Describe(settings));
+        _store.SetLifecycle(_factory.Id, settings.Enabled ? PluginState.Starting : PluginState.Disabled);
+        LogEnabled(settings.Enabled);
+        _loop = Task.Run(RunAsync);
+    }
+
+    private void LogEnabled(bool enabled)
+    {
+        var status = enabled ? "enabled" : "disabled";
+        _logger.LogActivity(LogLevel.Information, $"plugin.{status}", _factory.Name, $"Plugin {status}.");
+    }
+
+    private ISensorPlugin CreateConfiguredPlugin(PluginSettings settings)
+    {
+        var plugin = _factory.Create(settings);
+        try
+        {
+            plugin.ApplySettings(settings);
+            return plugin;
+        }
+        catch
+        {
+            plugin.Dispose();
+            throw;
+        }
+    }
 
     public PluginSettings CreateDefaultSettings(IConfigurationSection? bootstrap = null)
     {
@@ -95,14 +124,13 @@ internal sealed class PluginWorker
                 _store.SetLifecycle(_factory.Id, PluginState.Disabled);
                 ResetPollState();
             }
+            else if (_plugin is null)
+            {
+                _store.SetLifecycle(_factory.Id, PluginState.Starting);
+                _plugin = CreateConfiguredPlugin(settings);
+            }
             else
             {
-                if (_plugin is null)
-                {
-                    _store.SetLifecycle(_factory.Id, PluginState.Starting);
-                    _plugin = _factory.Create(settings);
-                }
-
                 _plugin.ApplySettings(settings);
             }
 
@@ -111,8 +139,7 @@ internal sealed class PluginWorker
 
             if (enabledChanged)
             {
-                var status = settings.Enabled ? "enabled" : "disabled";
-                _logger.LogActivity(LogLevel.Information, $"plugin.{status}", _factory.Name, $"Plugin {status}.");
+                LogEnabled(settings.Enabled);
             }
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
@@ -134,7 +161,12 @@ internal sealed class PluginWorker
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            return _plugin is null ? throw new PluginUnavailableException($"Plugin '{_factory.Id}' is disabled.") : action(_plugin);
+            if (!_settings.Enabled)
+            {
+                throw new PluginUnavailableException($"Plugin '{_factory.Id}' is disabled.");
+            }
+
+            return action(_plugin ??= CreateConfiguredPlugin(_settings));
         }
         finally
         {
@@ -163,7 +195,7 @@ internal sealed class PluginWorker
 
             _store.SetLifecycle(_factory.Id, PluginState.Starting);
 
-            _plugin = _factory.Create(_settings);
+            _plugin = CreateConfiguredPlugin(_settings);
             _settingsApplied = true;
 
             ResetPollState();
@@ -235,7 +267,7 @@ internal sealed class PluginWorker
 
         try
         {
-            if (_plugin is null)
+            if (!_settings.Enabled)
             {
                 return;
             }
@@ -250,6 +282,8 @@ internal sealed class PluginWorker
             var started = Stopwatch.GetTimestamp();
             try
             {
+                // First activation may enter a device driver. Keep it on this worker.
+                _plugin ??= CreateConfiguredPlugin(_settings);
                 var sample = await _plugin.PollAsync(poll.Token);
                 poll.Token.ThrowIfCancellationRequested();
 

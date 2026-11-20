@@ -1,3 +1,4 @@
+using RTXLens.Plugins.Asus.Contracts;
 using System.Text.Json;
 using RTXLens.Contracts.Configuration;
 using RTXLens.Plugins.GenericNvidia.Contracts.Configuration;
@@ -9,7 +10,7 @@ internal static class GenericNvidiaConfigurationMigration
     public static ServiceConfiguration Upgrade(ServiceConfiguration configuration)
     {
         if (configuration.Plugins.ContainsKey(GenericNvidiaPlugin.PluginId)
-            || !configuration.Plugins.TryGetValue("asus-astral", out var asus))
+            || !configuration.Plugins.TryGetValue(AsusIdentity.Id, out var asus))
         {
             return configuration;
         }

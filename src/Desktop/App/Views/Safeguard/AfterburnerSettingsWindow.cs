@@ -1,3 +1,5 @@
+using RTXLens.Presentation.Settings;
+using RTXLens.Plugins.Msi.Contracts;
 using System.Diagnostics;
 using Avalonia;
 using Avalonia.Automation;
@@ -83,9 +85,9 @@ internal sealed class AfterburnerSettingsWindow : LensWindow
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         _connectors.Theme = (ControlTheme)Application.Current!.FindResource("ConfigurationTabStripTheme")!;
 
-        _save = ActionButton("Save config", "chart-export", () => RunAsync(SaveAsync));
+        _save = ActionButton("Save config", DesktopIcons.ChartExport, () => RunAsync(SaveAsync));
         _restore = ActionButton("Restore config", "chart-import", () => RunAsync(RestoreAsync));
-        _delete = ActionButton("Delete", "chart-clear", () => RunAsync(DeleteAsync));
+        _delete = ActionButton("Delete", DesktopIcons.ChartClear, () => RunAsync(DeleteAsync));
         _apply = CommitButton("Apply Afterburner settings", () => RunAsync(ApplyAsync));
         _restart = ActionButton("Start Afterburner", "refresh", () => RunAsync(RestartAsync));
         _restart.Content = Row(new Image { Source = Icon("refresh"), Width = 15, Height = 15 }, _restartText);
@@ -99,9 +101,9 @@ internal sealed class AfterburnerSettingsWindow : LensWindow
                 await DiscoverAsync(_store?.Installation);
             }
         }));
-        var softwareInfo = IconButton("About software alarms", "info-action", () => ShowInformationAsync(this,
+        var softwareInfo = IconButton("About software alarms", DesktopIcons.Info, () => ShowInformationAsync(this,
             "Afterburner software alarms", DialogText("Afterburner checks the configured software current limits. The PSU hardware protection remains active.")));
-        var limitInfo = IconButton("About current limits", "info-action", () => ShowInformationAsync(this,
+        var limitInfo = IconButton("About current limits", DesktopIcons.Info, () => ShowInformationAsync(this,
             "Software current limits", DialogText("The limits are shared by both connectors. Current difference is the highest pin current minus the lowest.")));
         var limits = Columns(Field("Max per-pin current (A)", _maximum), Field("Max pin current difference (A)", _difference));
         var limitRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8, Children = { limits, limitInfo } };
@@ -133,7 +135,7 @@ internal sealed class AfterburnerSettingsWindow : LensWindow
             Spacing = 10,
             Children = { Toolbar(_save, _restore, _delete), backups, _backupFolder }
         });
-        backupPanel.HeaderActions = IconButton("About configuration backups", "info-action", () => ShowInformationAsync(this,
+        backupPanel.HeaderActions = IconButton("About configuration backups", DesktopIcons.Info, () => ShowInformationAsync(this,
             "Configuration backups", DialogText("Save config copies both files currently on disk, even while Afterburner is running. "
                 + "RTX Lens also makes a backup before applying settings or restoring a backup.")));
 
@@ -541,7 +543,7 @@ internal sealed class AfterburnerSettingsWindow : LensWindow
 
         store.ValidateCurrent(baseline);
         AfterburnerDiscovery.RequireStopped();
-        using var process = Process.Start(new ProcessStartInfo(Path.Combine(installation.Directory, "MSIAfterburner.exe"))
+        using var process = Process.Start(new ProcessStartInfo(Path.Combine(installation.Directory, AfterburnerFiles.Executable))
         {
             UseShellExecute = true, Verb = "runas"
         }) ?? throw new InvalidOperationException("Afterburner could not be started.");

@@ -1,3 +1,4 @@
+using RTXLens.Plugins.GenericNvidia.Contracts;
 using RTXLens.Contracts.Configuration;
 using RTXLens.Core.Plugins;
 using RTXLens.Contracts.Enums;
@@ -11,7 +12,7 @@ namespace RTXLens.Plugins.GenericNvidia;
 
 public sealed class GenericNvidiaPlugin(PluginSettings settings, NvidiaTelemetryReader reader, INvidiaDiagnosticsReader? diagnostics = null) : ISensorPlugin
 {
-    public const string PluginId = "generic-nvidia";
+    public const string PluginId = NvidiaIdentity.Id;
 
     private GenericNvidiaOptions _options = GenericNvidiaSettings.GetOptions(settings);
     private int _pollIntervalMs = settings.PollIntervalMs;

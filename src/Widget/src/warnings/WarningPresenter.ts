@@ -1,3 +1,4 @@
+import { AsusId, MsiId, WireViewId } from '../pluginIds.ts';
 import { TelemetryStore } from '../telemetry/TelemetryStore.ts';
 import type { WarningNotice } from './WarningNotice.ts';
 
@@ -73,9 +74,9 @@ export class WarningPresenter {
         return (
             (
                 {
-                    'asus-astral': 'Astral',
-                    'wireview-pro2': 'WireView Pro II',
-                    'msi-psu': 'MSI PSU'
+                    [AsusId]: 'Astral',
+                    [WireViewId]: 'WireView Pro II',
+                    [MsiId]: 'MSI PSU'
                 } as Record<string, string>
             )[pluginId] ?? pluginId
         );

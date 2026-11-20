@@ -1,3 +1,4 @@
+using RTXLens.Plugins.Msi.Contracts;
 using RTXLens.Contracts.Enums;
 using RTXLens.Contracts.Sensors;
 
@@ -9,9 +10,9 @@ public sealed partial class PerformanceRecorder
 
     private void UpdateMsiConnectors(SensorSnapshot snapshot, DateTimeOffset now)
     {
-        var settings = _settings.GetValueOrDefault("msi-psu");
+        var settings = _settings.GetValueOrDefault(MsiIdentity.Id);
         if (settings is not { Enabled: true }
-            || !snapshot.Plugins.Any(plugin => plugin is { PluginId: "msi-psu", State: PluginState.Ready }))
+            || !snapshot.Plugins.Any(plugin => plugin is { PluginId: MsiIdentity.Id, State: PluginState.Ready }))
         {
             _activeMsiConnectors.Clear();
             return;
@@ -19,7 +20,7 @@ public sealed partial class PerformanceRecorder
 
         var connectors = snapshot.Sensors.Where(reading => reading is
             {
-                Identity: { PluginId: "msi-psu", ConnectorId: not null, Metric: SensorMetric.Current,
+                Identity: { PluginId: MsiIdentity.Id, ConnectorId: not null, Metric: SensorMetric.Current,
                     Component: SensorComponent.PsuPin or SensorComponent.PsuConnector },
                 Quality: ReadingQuality.Valid, Value: { } value
             }
@@ -48,7 +49,7 @@ public sealed partial class PerformanceRecorder
 
     private bool IsActiveConnector(PerformanceTrace trace) => IsActiveConnector(trace.Identity);
 
-    private bool IsActiveConnector(SensorIdentity identity) => identity.PluginId != "msi-psu"
+    private bool IsActiveConnector(SensorIdentity identity) => identity.PluginId != MsiIdentity.Id
         || identity.ConnectorId is null
         || _activeMsiConnectors.Contains((identity.DeviceId, identity.ConnectorId));
 

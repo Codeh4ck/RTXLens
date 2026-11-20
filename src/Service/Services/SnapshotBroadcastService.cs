@@ -1,3 +1,4 @@
+using RTXLens.Core.Plugins;
 using System.Diagnostics;
 using System.Text.Json;
 using RTXLens.Contracts.Diagnostics;
@@ -15,10 +16,10 @@ namespace RTXLens.Service.Services;
 
 internal sealed class SnapshotBroadcastService(IRuntimeConfiguration configuration, TimeProvider clock,
     SensorStateStore store, SensorStreamHub hub, RTXLens.Core.Plugins.PluginRuntimeManager runtime,
-    SettingsProfileResolver profiles, DeviceWarningProfileStore warningProfiles, WarningShutdownCoordinator shutdown,
+    HardwareCatalog hardware, ProfileGpuDiscovery gpuDiscovery, SettingsProfileResolver profiles, DeviceWarningProfileStore warningProfiles, WarningShutdownCoordinator shutdown,
     SafeguardJournalService safeguard, MonitoringActivity activity, MobileAccessService? mobileAccess = null) : BackgroundService
 {
-    private readonly DeviceWarningEvaluator _profileWarnings = new();
+    private readonly DeviceWarningEvaluator _profileWarnings = new(hardware);
     private readonly AsyncSignal _wake = new();
     private readonly WarningEngine _warnings = new(runtime.WarningRegistry);
 
@@ -41,7 +42,7 @@ internal sealed class SnapshotBroadcastService(IRuntimeConfiguration configurati
                 var snapshot = store.Snapshot(now, settings.Selections) with { ConfigurationRevision = current.Revision };
 
                 snapshot = activity.ResolveConnectorSources(snapshot, current.Configuration);
-                snapshot = snapshot with { SettingsProfile = profiles.Resolve(snapshot, current.Configuration) };
+                snapshot = snapshot with { SettingsProfile = profiles.Resolve(snapshot, current.Configuration, snapshot.Sensors.Length == 0 ? [] : gpuDiscovery.GetCachedDevices()) };
 
                 safeguard.Observe(snapshot);
 
@@ -50,7 +51,7 @@ internal sealed class SnapshotBroadcastService(IRuntimeConfiguration configurati
                     var evaluated = _profileWarnings.Evaluate(snapshot, current.Configuration, activeProfiles, profiles.Automatic);
 
                     var warnings = _warnings.Evaluate(evaluated.Snapshot, current.Configuration, now, evaluated.Warnings,
-                        observation => observation.PluginId != "asus-astral" && observation.TypeId != ActiveSettingsProfile.WireViewProfileOvercurrent);
+                        observation => hardware.UsePluginWarning(observation.PluginId, observation.TypeId));
 
                     snapshot = evaluated.Snapshot with { Warnings = warnings };
 
@@ -58,6 +59,7 @@ internal sealed class SnapshotBroadcastService(IRuntimeConfiguration configurati
                 });
 
                 TelemetryMetrics.SnapshotDuration.Record(Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+
                 activity.Observe(snapshot, settings.ConnectorProfiles);
                 mobileAccess?.ObserveWarnings(snapshot);
 

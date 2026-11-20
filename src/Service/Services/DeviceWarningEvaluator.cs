@@ -1,15 +1,15 @@
+using RTXLens.Core.Plugins;
 using System.Globalization;
 using RTXLens.Contracts.Alerts;
 using RTXLens.Contracts.Configuration;
 using RTXLens.Contracts.Enums;
 using RTXLens.Contracts.Sensors;
 using RTXLens.Contracts.Warnings;
-using RTXLens.Plugins.Asus.Contracts.Warnings;
 using RTXLens.Warnings;
 
 namespace RTXLens.Service.Services;
 
-internal sealed class DeviceWarningEvaluator
+internal sealed class DeviceWarningEvaluator(HardwareCatalog hardware)
 {
     private readonly Dictionary<string, TargetState> _targets = new(StringComparer.Ordinal);
 
@@ -19,20 +19,21 @@ internal sealed class DeviceWarningEvaluator
         var contributions = new List<ConfiguredWarning>();
         var shutdowns = new List<WarningShutdownCandidate>();
         var pinLimits = new Dictionary<(string PluginId, string DeviceId), double>();
-        var alerts = snapshot.Alerts.Where(alert => alert.PluginId != "asus-astral"
-            || alert.Kind is not (AsusAlertKinds.WireOvercurrent or AsusAlertKinds.CurrentImbalance)).ToList();
+        var alerts = snapshot.Alerts.Where(alert => hardware.Find(alert.PluginId)?.PinProfiles is not { UpdateDetectionFlags: true } support
+            || (alert.Kind != support.OvercurrentAlert && alert.Kind != support.ImbalanceAlert)).ToList();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var groups = snapshot.Sensors.Where(IsPinReading).ToLookup(reading => reading.Identity.PluginId);
 
         foreach (var profile in profiles.Where(profile => profile.Enabled))
         {
-            if (!configuration.Plugins.TryGetValue(profile.PluginId, out var plugin) || !plugin.Enabled)
+            var metadata = hardware.Find(profile.PluginId);
+            if (metadata?.PinProfiles is not { } support || !configuration.Plugins.TryGetValue(profile.PluginId, out var plugin) || !plugin.Enabled)
             {
                 continue;
             }
 
             var readings = groups[profile.PluginId].Where(reading =>
-                profile.PluginId != "msi-psu" || reading.Identity.ConnectorId == profile.ConnectorId).ToArray();
+                support.Connectors.Length == 0 || reading.Identity.ConnectorId == profile.ConnectorId).ToArray();
             var previous = _targets.GetValueOrDefault(profile.Id);
             var available = snapshot.Plugins.Any(health => health.PluginId == profile.PluginId && health.State == PluginState.Ready);
             var maxAge = TimeSpan.FromMilliseconds(plugin.StaleAfterMs);
@@ -48,7 +49,7 @@ internal sealed class DeviceWarningEvaluator
             }
 
             var preset = automatic?.GpuModel == "5080" ? SettingsProfile.Rtx5080 : SettingsProfile.Rtx5090;
-            var limits = profile.Limits ?? ConnectorWarningLimits.From(profile.PluginId == "asus-astral" ? automatic ?? preset : preset);
+            var limits = profile.Limits ?? ConnectorWarningLimits.From(support.UseAutomaticLimits ? automatic ?? preset : preset);
             var state = previous;
             if (state is null || state.Profile != profile || state.DeviceId != deviceId || state.Limits != limits || state.MaxAge != maxAge)
             {
@@ -58,7 +59,7 @@ internal sealed class DeviceWarningEvaluator
 
             seen.Add(profile.Id);
 
-            if (profile.PluginId != "msi-psu")
+            if (support.PublishPinLimits)
             {
                 var key = (profile.PluginId, deviceId);
                 pinLimits[key] = Math.Min(pinLimits.GetValueOrDefault(key, double.PositiveInfinity), limits.OvercurrentAmperes);
@@ -80,7 +81,7 @@ internal sealed class DeviceWarningEvaluator
                 }
             }
 
-            Emit("overcurrent", "Pin overcurrent", "current", current.Length == 6, overcurrent, "A");
+            Emit(PinWarningKind.Overcurrent, "Pin overcurrent", "current", current.Length == 6, overcurrent, "A");
 
             var high = current.MaxBy(reading => reading.Value);
             var low = current.MinBy(reading => reading.Value);
@@ -90,21 +91,21 @@ internal sealed class DeviceWarningEvaluator
                 && imbalance >= limits.ImbalancePercentage;
             var imbalanceAt = current.Length == 6 ? current.Min(reading => reading.ObservedAt) : (DateTimeOffset?)null;
             var unbalanced = state.Sustained(0, uneven ? imbalanceAt : null, limits.ImbalanceMilliseconds);
-            Emit("imbalance", "Current imbalance", "imbalance", current.Length == 6, unbalanced ? [high!, low!] : [], "A",
+            Emit(PinWarningKind.Imbalance, "Current imbalance", "imbalance", current.Length == 6, unbalanced ? [high!, low!] : [], "A",
                 unbalanced ? imbalance : null, imbalanceAt);
 
-            if (profile.PluginId != "msi-psu")
+            if (support.SupportsVoltage)
             {
-                Emit("low-voltage", "Low pin voltage", "voltage", voltage.Length == 6,
+                Emit(PinWarningKind.LowVoltage, "Low pin voltage", "voltage", voltage.Length == 6,
                     [.. voltage.Where(reading => reading.Value <= limits.LowPinVoltage)], "V");
-                Emit("high-voltage", "High pin voltage", "voltage", voltage.Length == 6,
+                Emit(PinWarningKind.HighVoltage, "High pin voltage", "voltage", voltage.Length == 6,
                     [.. voltage.Where(reading => reading.Value >= limits.HighPinVoltage)], "V");
             }
 
             void Emit(string kind, string title, string icon, bool complete, IReadOnlyList<SensorReading> offending,
                 string unit, double? percentage = null, DateTimeOffset? evidenceAt = null)
             {
-                var source = SourceLabel(profile);
+                var source = profile.ConnectorId is null ? metadata.DisplayName : $"{metadata.DisplayName} connector {profile.ConnectorId}";
                 var typeId = profile.PluginId + "/monitor-" + kind;
                 var detail = string.Join(" / ", offending.Select(reading => $"P{reading.Identity.Channel}: {Number(reading.Value!.Value)} {unit}"));
                 if (percentage is { } difference)
@@ -121,23 +122,21 @@ internal sealed class DeviceWarningEvaluator
                 var observation = new WarningObservation(profile.PluginId, deviceId, typeId, complete || offending.Count > 0,
                     offending.Count > 0, detail) { ProfileId = profile.Id };
                 contributions.Add(new(definition, observation, profile.NotificationPolicy
-                    ?? LegacyPolicy(configuration.Warnings, profile.PluginId, kind)));
+                    ?? (support.LegacyWarningIds.TryGetValue(kind, out var legacyId) ? configuration.Warnings.Overrides.GetValueOrDefault(legacyId) : null)));
 
                 if (profile.ShutdownAfterSeconds is not null)
                 {
                     // Track each offending pin independently. A different pin must earn its own countdown.
-                    foreach (var reading in kind == "imbalance" ? offending.Take(1) : offending)
+                    foreach (var reading in kind == PinWarningKind.Imbalance ? offending.Take(1) : offending)
                     {
-                        var key = kind == "imbalance" ? observation.Id : $"{observation.Id}/P{reading.Identity.Channel}";
-                        shutdowns.Add(new(key, profile, limits, definition, observation, evidenceAt ?? reading.ObservedAt, maxAge));
+                        var key = kind == PinWarningKind.Imbalance ? observation.Id : $"{observation.Id}/P{reading.Identity.Channel}";
+                        shutdowns.Add(new(key, profile, limits, definition, observation, evidenceAt ?? reading.ObservedAt, maxAge, source));
                     }
                 }
 
-                if (observation.Active && ((profile.PluginId == "asus-astral" && kind is "overcurrent" or "imbalance")
-                    || (profile.PluginId == "wireview-pro2" && kind == "overcurrent")))
+                var alertKind = kind switch { PinWarningKind.Overcurrent => support.OvercurrentAlert, PinWarningKind.Imbalance => support.ImbalanceAlert, _ => null };
+                if (observation.Active && alertKind is not null)
                 {
-                    var alertKind = profile.PluginId == "wireview-pro2" ? ActiveSettingsProfile.WireViewProfileOvercurrent
-                        : kind == "overcurrent" ? AsusAlertKinds.WireOvercurrent : AsusAlertKinds.CurrentImbalance;
                     alerts.Add(new(profile.PluginId, deviceId, alertKind, snapshot.Timestamp,
                         [.. offending.Select(reading => new AlertPin(reading.Identity.Channel!.Value, reading.Value!.Value))], percentage));
                 }
@@ -149,56 +148,35 @@ internal sealed class DeviceWarningEvaluator
             _targets.Remove(id);
         }
 
-        var astralAlerts = alerts.Where(alert => alert.PluginId == "asus-astral").ToLookup(alert => alert.DeviceId);
+        var deviceAlerts = alerts.ToLookup(alert => (alert.PluginId, alert.DeviceId));
         return new(snapshot with
         {
             Alerts = [.. alerts],
-            Sensors = [.. snapshot.Sensors.Select(UpdateAstralFlag)],
+            Sensors = [.. snapshot.Sensors.Select(UpdateDetectionFlag)],
             PinWarningLimits = [.. pinLimits.Select(entry => new PinWarningLimit(entry.Key.PluginId, entry.Key.DeviceId, entry.Value))]
         }, contributions, shutdowns);
 
-        SensorReading UpdateAstralFlag(SensorReading reading)
+        SensorReading UpdateDetectionFlag(SensorReading reading)
         {
-            if (reading.Identity.PluginId != "asus-astral" || reading.Quality != ReadingQuality.Valid)
+            if (hardware.Find(reading.Identity.PluginId)?.PinProfiles is not { UpdateDetectionFlags: true } support || reading.Quality != ReadingQuality.Valid)
             {
                 return reading;
             }
 
-            var active = astralAlerts[reading.Identity.DeviceId];
+            var active = deviceAlerts[(reading.Identity.PluginId, reading.Identity.DeviceId)];
             return reading.Identity.Metric switch
             {
-                SensorMetric.OvercurrentDetected => reading with { Value = active.Any(alert => alert.Kind == AsusAlertKinds.WireOvercurrent
+                SensorMetric.OvercurrentDetected => reading with { Value = active.Any(alert => alert.Kind == support.OvercurrentAlert
                     && alert.Pins.Any(pin => pin.Channel == reading.Identity.Channel)) ? 1 : 0 },
-                SensorMetric.ImbalanceDetected => reading with { Value = active.Any(alert => alert.Kind == AsusAlertKinds.CurrentImbalance) ? 1 : 0 },
+                SensorMetric.ImbalanceDetected => reading with { Value = active.Any(alert => alert.Kind == support.ImbalanceAlert) ? 1 : 0 },
                 _ => reading
             };
         }
     }
 
-    public static string SourceLabel(DeviceWarningProfile profile) => profile.PluginId switch
-    {
-        "asus-astral" => "ROG Astral",
-        "wireview-pro2" => "WireView Pro II",
-        _ => $"MSI PSU connector {profile.ConnectorId}"
-    };
-
-    private static bool IsPinReading(SensorReading reading) =>
-        reading.Identity is { Channel: >= 1 and <= 6, Metric: SensorMetric.Current or SensorMetric.Voltage } and ({ PluginId: "msi-psu", Component: SensorComponent.PsuPin }
-            or { PluginId: "asus-astral" or "wireview-pro2", Component: SensorComponent.GpuPin });
-
-    private static WarningPolicy? LegacyPolicy(WarningOptions options, string pluginId, string kind)
-    {
-        var legacyId = (pluginId, kind) switch
-        {
-            ("asus-astral", "overcurrent") => AsusWarningIds.Overcurrent,
-            ("asus-astral", "imbalance") => AsusWarningIds.Imbalance,
-            ("asus-astral", "low-voltage") => AsusWarningIds.LowVoltage,
-            ("asus-astral", "high-voltage") => AsusWarningIds.HighVoltage,
-            _ => ""
-        };
-
-        return options.Overrides.GetValueOrDefault(legacyId);
-    }
+    private bool IsPinReading(SensorReading reading) =>
+        reading.Identity is { Channel: >= 1 and <= 6, Metric: SensorMetric.Current or SensorMetric.Voltage }
+        && hardware.Find(reading.Identity.PluginId)?.PinProfiles?.Component == reading.Identity.Component;
 
     private static string Number(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
 
@@ -229,4 +207,4 @@ internal sealed record DeviceWarningEvaluation(SensorSnapshot Snapshot, IReadOnl
     IReadOnlyList<WarningShutdownCandidate> Shutdowns);
 
 internal sealed record WarningShutdownCandidate(string Key, DeviceWarningProfile Profile, ConnectorWarningLimits Limits,
-    WarningDefinition Definition, WarningObservation Observation, DateTimeOffset ObservedAt, TimeSpan MaxAge);
+    WarningDefinition Definition, WarningObservation Observation, DateTimeOffset ObservedAt, TimeSpan MaxAge, string Source);

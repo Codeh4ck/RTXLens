@@ -1,3 +1,4 @@
+import { AsusId, WireViewId } from './pluginIds.ts';
 export const warningCategories = {
   connector: 1,
   temperature: 2,
@@ -93,7 +94,7 @@ export function decodeNotificationPreferences(value: string): NotificationPrefer
 
 export function warningCategory(pluginId: string, icon: string): WarningCategory {
   if (icon === 'temperature') return warningCategories.temperature;
-  return pluginId === 'asus-astral' || pluginId === 'wireview-pro2' ? warningCategories.connector : warningCategories.other;
+  return pluginId === AsusId || pluginId === WireViewId ? warningCategories.connector : warningCategories.other;
 }
 
 export function allowsWarning(preferences: NotificationPreferences, category?: WarningCategory) {

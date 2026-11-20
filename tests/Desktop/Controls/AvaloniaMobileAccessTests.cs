@@ -22,39 +22,6 @@ internal static class AvaloniaMobileAccessTests
         var requestId = Guid.NewGuid();
         var code = new MobilePairingInvite("test-invite", new string('A', 64), DateTimeOffset.UtcNow.AddMinutes(5));
 
-        Task<MobileAccessResponse> SendAsync(MobileAccessRequest request, CancellationToken token)
-        {
-            switch (request.Operation)
-            {
-                case MobileAccessOperation.Configure:
-                    applied = request;
-                    break;
-
-                case MobileAccessOperation.CreateInvite:
-                    status = status with { PendingApproval = new MobilePairingApproval(requestId, "Test iPhone", code.ExpiresAt) };
-                    return Task.FromResult(new MobileAccessResponse(true, Invite: code));
-
-                case MobileAccessOperation.Approve:
-                    decision = request;
-                    status = status with
-                    {
-                        PendingApproval = null,
-                        Devices = [
-                            new MobileDevice(Guid.NewGuid(), "Test iPhone", null),
-                            new MobileDevice(Guid.NewGuid(), "Test Android", null, LockScreenNotifications: true)
-                        ]
-                    };
-                    return Task.FromResult(new MobileAccessResponse(true));
-
-                case MobileAccessOperation.Reject:
-                    decision = request;
-                    status = status with { PendingApproval = null };
-                    return Task.FromResult(new MobileAccessResponse(true));
-            }
-
-            return Task.FromResult(new MobileAccessResponse(true, Status: status));
-        }
-
         var view = new MobileAccessView(SendAsync, CancellationToken.None, ["192.168.1.20"]);
         var window = new Window
         {
@@ -145,6 +112,41 @@ internal static class AvaloniaMobileAccessTests
         finally
         {
             window.Close();
+        }
+
+        return;
+
+        Task<MobileAccessResponse> SendAsync(MobileAccessRequest request, CancellationToken token)
+        {
+            switch (request.Operation)
+            {
+                case MobileAccessOperation.Configure:
+                    applied = request;
+                    break;
+
+                case MobileAccessOperation.CreateInvite:
+                    status = status with { PendingApproval = new MobilePairingApproval(requestId, "Test iPhone", code.ExpiresAt) };
+                    return Task.FromResult(new MobileAccessResponse(true, Invite: code));
+
+                case MobileAccessOperation.Approve:
+                    decision = request;
+                    status = status with
+                    {
+                        PendingApproval = null,
+                        Devices = [
+                            new MobileDevice(Guid.NewGuid(), "Test iPhone", null),
+                            new MobileDevice(Guid.NewGuid(), "Test Android", null, LockScreenNotifications: true)
+                        ]
+                    };
+                    return Task.FromResult(new MobileAccessResponse(true));
+
+                case MobileAccessOperation.Reject:
+                    decision = request;
+                    status = status with { PendingApproval = null };
+                    return Task.FromResult(new MobileAccessResponse(true));
+            }
+
+            return Task.FromResult(new MobileAccessResponse(true, Status: status));
         }
 
         static Button FindButton(Visual root, string label) => root.GetVisualDescendants().OfType<Button>()

@@ -1,3 +1,4 @@
+import { mobileProtocol } from './mobileProtocol.ts';
 export type PairedComputer = {
   localAddress: string;
   remoteAddress: string;
@@ -11,7 +12,7 @@ export type PairingCode = Omit<PairedComputer, 'token'> & {
 };
 
 export type PairingReply = { status: number; body: string };
-export type PairingRequest = (path: '/pairing' | '/pairing/complete', body: string) => Promise<PairingReply>;
+export type PairingRequest = (path: typeof mobileProtocol.Pairing | typeof mobileProtocol.CompletePairing, body: string) => Promise<PairingReply>;
 
 export type SensorReading = {
   identity: {
@@ -150,7 +151,7 @@ export async function requestPairing(
     return null;
   }
 
-  const response = await post('/pairing', JSON.stringify({ invite: code.secret, deviceName }));
+  const response = await post(mobileProtocol.Pairing, JSON.stringify({ invite: code.secret, deviceName }));
   if (signal.aborted) {
     return null;
   }
@@ -164,7 +165,7 @@ export async function requestPairing(
   waiting();
   const body = JSON.stringify({ id: claim.id, secret: claim.secret });
   while (!signal.aborted && Date.now() < code.expiresAt) {
-    const completed = await post('/pairing/complete', body);
+    const completed = await post(mobileProtocol.CompletePairing, body);
     if (signal.aborted) {
       return null;
     }

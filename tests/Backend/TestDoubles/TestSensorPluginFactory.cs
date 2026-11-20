@@ -1,3 +1,4 @@
+using RTXLens.Contracts.Discovery;
 using RTXLens.Contracts.Configuration;
 using RTXLens.Core.Plugins;
 
@@ -7,6 +8,7 @@ internal sealed class TestSensorPluginFactory(string id, TestPluginBehavior beha
 {
     public string Id => id;
     public string Name => id;
+    public PluginHardwareMetadata Hardware { get; init; } = new(id);
 
     public ISensorPlugin Create(PluginSettings settings)
     {

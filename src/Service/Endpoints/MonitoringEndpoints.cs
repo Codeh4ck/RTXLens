@@ -1,3 +1,4 @@
+using RTXLens.Contracts.Monitoring;
 namespace RTXLens.Service.Endpoints;
 
 internal static class MonitoringEndpoints
@@ -14,7 +15,7 @@ internal static class MonitoringEndpoints
         app.MapPluginEndpoints();
         app.MapServiceLogEndpoints();
 
-        app.MapPost("/restart", (Services.IServiceRestart restart) =>
+        app.MapPost("/" + ServiceRoutes.Restart, (Services.IServiceRestart restart) =>
         {
             restart.RequestRestart();
             return Results.Ok();

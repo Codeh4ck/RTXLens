@@ -1,3 +1,4 @@
+using RTXLens.Plugins.Msi.Contracts;
 using System.Diagnostics;
 using System.Runtime.Versioning;
 using Microsoft.Win32;
@@ -93,7 +94,7 @@ public static class AfterburnerDiscovery
     {
         directory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory));
         AfterburnerFileStore.EnsureNoLinks(directory);
-        var executable = Path.Combine(directory, "MSIAfterburner.exe");
+        var executable = Path.Combine(directory, AfterburnerFiles.Executable);
         AfterburnerFileStore.EnsureNoLinks(executable);
 
         if (!File.Exists(executable))

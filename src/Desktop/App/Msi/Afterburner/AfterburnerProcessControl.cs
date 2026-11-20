@@ -1,3 +1,4 @@
+using RTXLens.Plugins.Msi.Contracts;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -12,7 +13,7 @@ internal static class AfterburnerProcessControl
 {
     internal static async Task CloseAsync(string installation)
     {
-        var expectedExecutable = Path.Combine(installation, "MSIAfterburner.exe");
+        var expectedExecutable = Path.Combine(installation, AfterburnerFiles.Executable);
         var processes = Process.GetProcessesByName("MSIAfterburner");
         using var current = Process.GetCurrentProcess();
 
@@ -98,7 +99,7 @@ internal static class AfterburnerProcessControl
 
     internal static bool HasElevatedInstance(string installation)
     {
-        var expected = Path.Combine(installation, "MSIAfterburner.exe");
+        var expected = Path.Combine(installation, AfterburnerFiles.Executable);
         var processes = Process.GetProcessesByName("MSIAfterburner");
         using var current = Process.GetCurrentProcess();
         try

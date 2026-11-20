@@ -1,3 +1,5 @@
+using RTXLens.Presentation.Telemetry;
+using RTXLens.Presentation.Settings;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -15,6 +17,11 @@ internal sealed class SafeguardExecutionReportWindow : LensWindow
 {
     public SafeguardExecutionReportWindow(SafeguardReport report)
     {
+        if (report.Telemetry is { Sources: null } telemetry)
+        {
+            report = report with { Telemetry = telemetry with { Sources = LegacyHardwareCatalog.Sources.ToDictionary() } };
+        }
+
         Title = "RTX Lens - Safeguard+ execution";
         Width = 780;
         Height = 700;
@@ -23,7 +30,7 @@ internal sealed class SafeguardExecutionReportWindow : LensWindow
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
         var status = Alert();
-        var export = ActionButton("Export HTML report", "chart-export", async () =>
+        var export = ActionButton("Export HTML report", DesktopIcons.ChartExport, async () =>
         {
             try
             {

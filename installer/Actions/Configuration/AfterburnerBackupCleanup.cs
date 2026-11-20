@@ -1,3 +1,4 @@
+using RTXLens.Plugins.Msi.Contracts;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -154,7 +155,7 @@ public static class AfterburnerBackupCleanup
     {
         Folder.Store => NameIs(path, "pending.json") || NameIs(path, ".operation.lock") || NameIs(path, "restart-required.txt")
             || ImportMarker.IsMatch(Path.GetFileName(path)),
-        Folder.Archive => NameIs(path, "PSU.cfg") || NameIs(path, "MSIAfterburner.cfg") || NameIs(path, "manifest.json"),
+        Folder.Archive => NameIs(path, AfterburnerFiles.PluginConfig) || NameIs(path, AfterburnerFiles.ProfileConfig) || NameIs(path, AfterburnerFiles.BackupManifest),
         Folder.Results => OperationResult.IsMatch(Path.GetFileName(path)),
         _ => false
     };

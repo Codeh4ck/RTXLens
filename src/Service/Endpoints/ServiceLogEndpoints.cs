@@ -1,3 +1,4 @@
+using RTXLens.Contracts.Monitoring;
 using System.Net;
 using System.Text.Json;
 using Microsoft.AspNetCore.Cors;
@@ -10,7 +11,7 @@ internal static class ServiceLogEndpoints
 {
     public static void MapServiceLogEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/logs").WithMetadata(new DisableCorsAttribute());
+        var group = endpoints.MapGroup("/" + ServiceRoutes.Logs).WithMetadata(new DisableCorsAttribute());
         group.MapGet("", (HttpContext context, ServiceLogJournal journal, long? before, int? limit) =>
         {
             if (!IsLocalClient(context))

@@ -1,3 +1,4 @@
+using RTXLens.Plugins.Msi.Contracts;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -6,7 +7,7 @@ namespace RTXLens.Presentation.Msi.Afterburner;
 
 public sealed partial class AfterburnerFileStore
 {
-    private static readonly string[] BackupFiles = ["PSU.cfg", "MSIAfterburner.cfg", "manifest.json"];
+    private static readonly string[] BackupFiles = [AfterburnerFiles.PluginConfig, AfterburnerFiles.ProfileConfig, AfterburnerFiles.BackupManifest];
     private string LegacyImportMarker => Path.Combine(BackupDirectory, "legacy-import-" + InstallationKey(Installation) + ".txt");
 
     private AfterburnerFileStore? LegacyStore

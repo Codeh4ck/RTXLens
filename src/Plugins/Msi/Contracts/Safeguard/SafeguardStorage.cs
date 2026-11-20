@@ -111,13 +111,13 @@ public sealed class SafeguardStorage : ISafeguardJournalStorage
 
     public static string DisplayStatus(SafeguardExecution execution, DateTimeOffset now) =>
         execution.FinishedAt is not null || IsRunning(execution, now) ? execution.Status
-        : execution.Status == "Submitting shutdown" ? "Shutdown request unconfirmed" : "Interrupted";
+        : execution.Status == SafeguardStatus.SubmittingShutdown ? SafeguardStatus.ShutdownRequestUnconfirmed : SafeguardStatus.Interrupted;
 
     public void DeleteExecutions(IEnumerable<Guid> ids, DateTimeOffset now)
     {
         var selection = ids.Distinct().ToArray();
 
-        if (selection.Any(id => Read<SafeguardExecution>("history", id) is { } execution && IsRunning(execution, now)))
+        if (selection.Any(id => Read<SafeguardExecution>(SafeguardArea.History, id) is { } execution && IsRunning(execution, now)))
         {
             throw new InvalidOperationException("An active execution cannot be deleted.");
         }
@@ -130,17 +130,17 @@ public sealed class SafeguardStorage : ISafeguardJournalStorage
 
     public void DeleteExecutionHistory(Guid id)
     {
-        Delete("history", id);
-        if (!File.Exists(Location("outbox", id)))
+        Delete(SafeguardArea.History, id);
+        if (!File.Exists(Location(SafeguardArea.Outbox, id)))
         {
-            Delete("telemetry", id);
-            Delete("delivery", id);
+            Delete(SafeguardArea.Telemetry, id);
+            Delete(SafeguardArea.Delivery, id);
         }
     }
 
     private string Area(string area)
     {
-        if (area is not ("bindings" or "mail" or "requests" or "results" or "history" or "outbox" or "delivery" or "seen" or "telemetry"))
+        if (area is not (SafeguardArea.Bindings or SafeguardArea.Mail or SafeguardArea.Requests or SafeguardArea.Results or SafeguardArea.History or SafeguardArea.Outbox or SafeguardArea.Delivery or SafeguardArea.Seen or SafeguardArea.Telemetry))
         {
             throw new ArgumentOutOfRangeException(nameof(area));
         }

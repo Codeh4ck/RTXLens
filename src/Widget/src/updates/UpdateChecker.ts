@@ -1,6 +1,6 @@
 import type { UpdateCheckState } from './UpdateCheckState.ts';
 import { UpdateStateStore } from './UpdateStateStore.ts';
-import { isNewerVersion, nextUpdateCheck, parseReleaseManifest, repositoryUrl, updateManifestUrl } from './versions.ts';
+import { isNewerVersion, nextUpdateCheck, parseReleaseManifest, releaseTagUrl, updateManifestUrl } from './versions.ts';
 
 export class UpdateChecker {
     private readonly state: UpdateCheckState;
@@ -48,7 +48,7 @@ export class UpdateChecker {
     }
 
     get releaseUrl(): string | null {
-        return this.state.manifest?.releaseUrl ?? (this.state.manifest ? `${repositoryUrl}/releases/tag/${encodeURIComponent(this.state.manifest.releaseTag)}` : null);
+        return this.state.manifest?.releaseUrl ?? (this.state.manifest ? releaseTagUrl(this.state.manifest.releaseTag) : null);
     }
 
     get lastChecked(): string {

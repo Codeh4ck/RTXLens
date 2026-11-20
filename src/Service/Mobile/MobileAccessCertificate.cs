@@ -43,13 +43,14 @@ internal sealed class MobileAccessCertificate : IDisposable
             var request = new CertificateRequest("CN=RTX Lens Mobile Access", _key, HashAlgorithmName.SHA256);
             request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
             request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature, true));
-            request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(
-                new OidCollection { new("1.3.6.1.5.5.7.3.1") }, false));
+            request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new("1.3.6.1.5.5.7.3.1") }, false));
 
             var expiration = now.AddYears(1);
             var certificate = CreateTlsCertificate(request, now.AddMinutes(-5), expiration);
+
             _certificates.Add(certificate);
             _renewAfter = expiration.AddDays(-30);
+
             return certificate;
         }
     }

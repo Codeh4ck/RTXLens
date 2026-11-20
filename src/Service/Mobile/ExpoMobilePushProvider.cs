@@ -1,3 +1,4 @@
+using RTXLens.Contracts.Monitoring;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -23,7 +24,7 @@ internal sealed partial class ExpoMobilePushProvider(HttpClient client)
             body = alert.IncidentId is null ? "Open RTX Lens to view warnings." : "Open RTX Lens to view the incident.",
             sound = "default",
             priority = "high",
-            channelId = "rtxlens-warnings",
+            channelId = MobileProtocol.WarningChannel,
             ttl = 300,
             data = new { screen = "warnings", incidentId = alert.IncidentId, kind = alert.IncidentKind }
         }, null, cancellationToken);
@@ -36,10 +37,12 @@ internal sealed partial class ExpoMobilePushProvider(HttpClient client)
         try
         {
             using var response = await client.PostAsJsonAsync(uri, payload, cancellationToken);
+
             if (response.StatusCode is HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests || (int)response.StatusCode >= 500)
             {
                 return new(MobilePushOutcome.Retry);
             }
+
             if (!response.IsSuccessStatusCode)
             {
                 return new(MobilePushOutcome.Rejected);
@@ -47,10 +50,12 @@ internal sealed partial class ExpoMobilePushProvider(HttpClient client)
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
             using var json = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+
             if (json.RootElement.ValueKind != JsonValueKind.Object || !json.RootElement.TryGetProperty("data", out var data))
             {
                 return new(MobilePushOutcome.Rejected);
             }
+
             if (ticketId is not null && (data.ValueKind != JsonValueKind.Object || !data.TryGetProperty(ticketId, out data)))
             {
                 return new(MobilePushOutcome.Pending);
@@ -58,8 +63,7 @@ internal sealed partial class ExpoMobilePushProvider(HttpClient client)
 
             return ReadResult(data);
         }
-        catch (Exception error) when (error is HttpRequestException or IOException or OperationCanceledException
-            && !cancellationToken.IsCancellationRequested)
+        catch (Exception error) when (error is HttpRequestException or IOException or OperationCanceledException && !cancellationToken.IsCancellationRequested)
         {
             return new(MobilePushOutcome.Retry);
         }
@@ -84,6 +88,7 @@ internal sealed partial class ExpoMobilePushProvider(HttpClient client)
 
         var code = data.TryGetProperty("details", out var details) && details.ValueKind == JsonValueKind.Object
             && details.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.String ? error.GetString() : null;
+
         return code switch
         {
             "DeviceNotRegistered" => new(MobilePushOutcome.Unregistered),

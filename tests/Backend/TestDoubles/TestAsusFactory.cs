@@ -1,3 +1,5 @@
+using RTXLens.Contracts.Discovery;
+using RTXLens.Plugins.Asus.Contracts;
 using RTXLens.Plugins.Asus.Analysis.Warnings;
 using RTXLens.Warnings;
 using RTXLens.Plugins.Asus.Contracts.Configuration;
@@ -15,6 +17,7 @@ namespace RTXLens.Tests.TestDoubles;
 internal sealed class TestAsusFactory(AsusTestState state, AsusStream stream) : ISensorPluginFactory
 {
     public IWarningSource WarningSource { get; } = new AsusWarningSource();
+    public PluginHardwareMetadata Hardware => AsusIdentity.Hardware;
     public string Id => AsusPlugin.PluginId;
     public string Name => "Test ASUS GPU";
 
