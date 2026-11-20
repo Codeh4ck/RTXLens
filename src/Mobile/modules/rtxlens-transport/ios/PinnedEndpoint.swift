@@ -7,6 +7,7 @@ enum TransportError: LocalizedError, Equatable {
     case invalidEndpoint
     case invalidResponse
     case connectionFailed
+    case localNetworkDenied
     case timeout
     case keyMismatch
 
@@ -15,6 +16,7 @@ enum TransportError: LocalizedError, Equatable {
         case .invalidEndpoint: return "The paired PC address or public key is invalid."
         case .invalidResponse: return "The PC sent an invalid response."
         case .connectionFailed: return "Could not connect securely to the PC. Check its address and pairing key."
+        case .localNetworkDenied: return "Allow Local Network access for RTX Lens in Settings."
         case .timeout: return "The PC did not respond in time."
         case .keyMismatch: return "The PC’s key no longer matches this pairing."
         }

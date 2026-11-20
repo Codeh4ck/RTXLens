@@ -18,7 +18,9 @@ public final class RtxLensTransportModule: Module {
                     request.start { result in
                         switch result {
                         case .success(let reply): promise.resolve(reply)
-                        case .failure(let error): promise.reject("PAIRING_FAILED", error.localizedDescription)
+                        case .failure(let error):
+                            let code = (error as? TransportError) == .localNetworkDenied ? "LOCAL_NETWORK_DENIED" : "PAIRING_FAILED"
+                            promise.reject(code, error.localizedDescription)
                         }
                     }
                 } catch {
@@ -38,6 +40,8 @@ public final class RtxLensTransportModule: Module {
                         case .failure(let error):
                             if (error as? TransportError) == .keyMismatch {
                                 promise.resolve(["status": 0, "body": "", "keyMismatch": true])
+                            } else if (error as? TransportError) == .localNetworkDenied {
+                                promise.resolve(["status": 0, "body": "", "localNetworkDenied": true])
                             } else {
                                 promise.reject("REQUEST_FAILED", error.localizedDescription)
                             }

@@ -66,7 +66,12 @@ final class PinnedHttpRequest {
         }
         connection.start(queue: queue)
         queue.asyncAfter(deadline: .now() + 12) { [weak self] in
-            self?.finish(.failure(TransportError.timeout))
+            guard let self else { return }
+            if case .localNetworkDenied? = self.connection.currentPath?.unsatisfiedReason {
+                self.finish(.failure(TransportError.localNetworkDenied))
+            } else {
+                self.finish(.failure(TransportError.timeout))
+            }
         }
     }
 
