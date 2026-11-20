@@ -1,3 +1,8 @@
+1.1.3 - Faster startup and steadier mobile monitoring
+- Ready devices start reporting while other hardware is still connecting at PC startup
+- The mobile app reconnects more reliably and makes it clearer when the PC connection drops
+- Warning profiles retain their saved settings when a hardware plugin is temporarily unavailable
+
 1.1.2 - More reliable live monitoring
 - The iCUE widget reconnects if live readings stop arriving and marks stale values even when no new data comes in
 - The widget skips unnecessary redraws when readings stay steady, while compact pages keep cycling
