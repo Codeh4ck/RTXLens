@@ -1,3 +1,4 @@
+using RTXLens.Presentation.Settings;
 using System.Net;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -54,7 +55,7 @@ internal sealed class GpuChartProfilesView : ProfileRequestView
                 await RunAsync(api => AddAsync(api, name));
             }
         });
-        _delete = IconButton("Delete GPU chart profile", "chart-clear", async () =>
+        _delete = IconButton("Delete GPU chart profile", DesktopIcons.ChartClear, async () =>
         {
             if (_profiles.SelectedItem is ProfileOption { IsCustom: true, Profile: var profile }
                 && TopLevel.GetTopLevel(this) is Window owner
@@ -216,7 +217,7 @@ internal sealed class GpuChartProfilesView : ProfileRequestView
     private void LoadCatalog(SettingsProfileCatalog catalog, string? selectedId = null)
     {
         _catalog = catalog;
-        var profiles = new[] { SettingsProfile.Rtx5090 with { Id = "auto", Name = "Auto" } }.Concat(catalog.Profiles)
+        var profiles = new[] { SettingsProfile.Rtx5090 with { Id = SettingsProfile.AutomaticId, Name = "Auto" } }.Concat(catalog.Profiles)
             .Select(profile => new ProfileOption(profile)).ToArray();
         var selected = profiles.FirstOrDefault(profile => profile.Profile.Id == selectedId)
             ?? profiles.FirstOrDefault(profile => profile.Profile.Id == catalog.SelectedId) ?? profiles[0];
@@ -236,7 +237,7 @@ internal sealed class GpuChartProfilesView : ProfileRequestView
             return effective;
         }
 
-        return selected.Profile.Id == "auto" ? _catalog?.Automatic : selected.Profile;
+        return selected.Profile.Id == SettingsProfile.AutomaticId ? _catalog?.Automatic : selected.Profile;
     }
 
     private void ShowDraft(SettingsProfile? profile)

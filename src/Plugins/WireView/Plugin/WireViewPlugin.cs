@@ -1,3 +1,4 @@
+using RTXLens.Plugins.WireView.Contracts;
 using System.Text.Json;
 using RTXLens.Contracts.Configuration;
 using RTXLens.Contracts.Enums;
@@ -14,7 +15,7 @@ namespace RTXLens.Plugins.WireView;
 
 public sealed class WireViewPlugin : ISensorPlugin
 {
-    public const string PluginId = "wireview-pro2";
+    public const string PluginId = WireViewIdentity.Id;
 
     private readonly TimeProvider _clock;
     private readonly WireViewStream _stream;
@@ -106,6 +107,6 @@ public sealed class WireViewPlugin : ISensorPlugin
         _stream.Hub.Reset();
     }
 
-    private static PluginDescriptor CreateDescriptor(PluginSettings settings) => new(PluginId, "WireView Pro II",
+    private static PluginDescriptor CreateDescriptor(PluginSettings settings) => new(PluginId, WireViewIdentity.PluginName,
         TimeSpan.FromMilliseconds(settings.PollIntervalMs), TimeSpan.FromMilliseconds(settings.StaleAfterMs));
 }

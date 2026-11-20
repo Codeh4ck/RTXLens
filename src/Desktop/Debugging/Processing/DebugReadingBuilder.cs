@@ -1,3 +1,6 @@
+using RTXLens.Plugins.GenericNvidia.Contracts;
+using RTXLens.Plugins.Msi.Contracts;
+using RTXLens.Plugins.Asus.Contracts;
 using RTXLens.Contracts.Enums;
 using RTXLens.Contracts.Sensors;
 using RTXLens.Debugging.Models;
@@ -45,12 +48,12 @@ internal static class DebugReadingBuilder
 
     private static void Derive(DebugPluginViewModel plugin, List<SensorReading> readings, DateTimeOffset now)
     {
-        if (plugin.Id == "generic-nvidia")
+        if (plugin.Id == NvidiaIdentity.Id)
         {
             return;
         }
 
-        if (plugin.Id == "msi-psu")
+        if (plugin.Id == MsiIdentity.Id)
         {
             foreach (var connector in new[] { "1", "2" })
             {
@@ -76,7 +79,7 @@ internal static class DebugReadingBuilder
 
         Set(SensorComponent.GpuConnector, SensorMetric.Voltage, current is > 0 ? power / current : null, 1);
 
-        if (plugin.Id == "asus-astral")
+        if (plugin.Id == AsusIdentity.Id)
         {
             var used = Value(SensorComponent.GpuMemory, SensorMetric.MemoryUsed);
             var total = Value(SensorComponent.GpuMemory, SensorMetric.MemoryTotal);

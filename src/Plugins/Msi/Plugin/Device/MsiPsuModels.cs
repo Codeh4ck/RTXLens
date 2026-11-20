@@ -6,10 +6,13 @@ internal static class MsiPsuModels
     public const int Ai1300TsProductId = 0xAA6F;
     public const int Ai1600TsProductId = 0x808C;
 
+    public const string Ai1300TsName = "MPG Ai1300TS";
+    public const string Ai1600TsName = "MPG Ai1600TS";
+
     public static string? Name(int vendorId, int productId) => vendorId != VendorId ? null : productId switch
     {
-        Ai1300TsProductId => "MPG Ai1300TS",
-        Ai1600TsProductId => "MPG Ai1600TS",
+        Ai1300TsProductId => Ai1300TsName,
+        Ai1600TsProductId => Ai1600TsName,
         _ => null
     };
 

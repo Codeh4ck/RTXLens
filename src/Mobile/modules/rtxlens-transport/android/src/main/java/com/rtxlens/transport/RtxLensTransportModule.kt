@@ -39,7 +39,7 @@ class RtxLensTransportModule : Module() {
         }
 
         AsyncFunction("registerNotifications") { address: String, pin: String, token: String, json: String, promise: Promise ->
-            request(address, pin, "/notification-registration/v2", json, token, promise)
+            request(address, pin, MobileRoutes.registrationV2, json, token, promise)
         }
 
         Function("openStream") { id: String, address: String, pin: String, token: String ->
@@ -65,15 +65,15 @@ class RtxLensTransportModule : Module() {
             val client = createClient(endpoint, pin)
             val url = endpoint.newBuilder().encodedPath(path.substringBefore('?'))
             val builder = Request.Builder()
-            val registration = path == "/notification-registration/v2"
+            val registration = path == MobileRoutes.registrationV2
             if (token == null) {
-                require((path == "/pairing" || path == "/pairing/complete") && json != null)
+                require((path == MobileRoutes.pairing || path == MobileRoutes.completePairing) && json != null)
             } else {
                 require(tokenPattern.matches(token))
                 if (registration) {
                     require(json != null)
                 } else {
-                    require(json == null && (path == "/session" || path == "/incidents"
+                    require(json == null && (path == MobileRoutes.session || path == MobileRoutes.incidents
                         || historyPage.matches(path) || historyDetail.matches(path)))
                 }
                 if ('?' in path) {

@@ -1,3 +1,4 @@
+using RTXLens.Presentation.Settings;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -83,7 +84,7 @@ internal sealed class WarningsConfigurationView : UserControl
             PolicyFields(policies.Defaults));
         BindTo(notificationFields, IsEnabledProperty, editor, nameof(editor.CanEdit));
         var notifications = Section("Warning notifications", notificationFields);
-        notifications.HeaderActions = IconButton("How warning notifications work", "info-action", async () =>
+        notifications.HeaderActions = IconButton("How warning notifications work", DesktopIcons.Info, async () =>
         {
             if (TopLevel.GetTopLevel(notifications) is Window owner)
             {

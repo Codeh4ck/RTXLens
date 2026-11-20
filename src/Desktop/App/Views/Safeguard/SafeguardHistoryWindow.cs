@@ -1,3 +1,4 @@
+using RTXLens.Presentation.Settings;
 using System.Runtime.Versioning;
 using Avalonia;
 using Avalonia.Controls;
@@ -40,8 +41,8 @@ internal sealed class SafeguardHistoryWindow : LensWindow
         _list.ItemTemplate = new FuncDataTemplate<Row>((row, _) => CreateRow(row!.Name, row.Date, row.Status));
         _list.SelectionChanged += (_, _) => UpdateActions();
         _list.DoubleTapped += (_, _) => Inspect();
-        _inspect = ActionButton("Inspect", "info-action", Inspect);
-        _delete = ActionButton("Delete selected", "chart-clear", () => RunAsync(DeleteAsync));
+        _inspect = ActionButton("Inspect", DesktopIcons.Info, Inspect);
+        _delete = ActionButton("Delete selected", DesktopIcons.ChartClear, () => RunAsync(DeleteAsync));
         _retention = new ValidatedNumberInput("History retention", _storage.RetentionDays, 1, 365) { MinWidth = 115 };
         var save = CommitButton("Save retention", () => RunAsync(async () =>
         {
@@ -80,7 +81,7 @@ internal sealed class SafeguardHistoryWindow : LensWindow
         {
             var now = DateTimeOffset.UtcNow;
             var cutoff = now.AddDays(-_storage.RetentionDays);
-            return _storage.Ids("history").Select(id => _storage.Read<SafeguardExecution>("history", id)).OfType<SafeguardExecution>()
+            return _storage.Ids(SafeguardArea.History).Select(id => _storage.Read<SafeguardExecution>(SafeguardArea.History, id)).OfType<SafeguardExecution>()
                 .Where(run => run.StartedAt >= cutoff).OrderByDescending(run => run.StartedAt).ThenBy(run => run.Id)
                 .Select(run => new Row(run.Id, run.Name, run.StartedAt.LocalDateTime.ToString("g"),
                     SafeguardStorage.DisplayStatus(run, now), SafeguardStorage.IsRunning(run, now))).ToArray();
@@ -121,17 +122,17 @@ internal sealed class SafeguardHistoryWindow : LensWindow
 
     private SafeguardReport? ReadReport(Guid id)
     {
-        if (_storage.Read<SafeguardExecution>("history", id) is not { } run)
+        if (_storage.Read<SafeguardExecution>(SafeguardArea.History, id) is not { } run)
         {
             return null;
         }
 
-        var telemetry = _storage.Read<SafeguardTelemetry>("telemetry", id);
-        var binding = _storage.Read<SafeguardBinding>("bindings", run.BindingId);
+        var telemetry = _storage.Read<SafeguardTelemetry>(SafeguardArea.Telemetry, id);
+        var binding = _storage.Read<SafeguardBinding>(SafeguardArea.Bindings, run.BindingId);
         return SafeguardReport.ForExecution(run, SafeguardStorage.DisplayStatus(run, DateTimeOffset.UtcNow), telemetry) with
         {
-            Delivery = _storage.Read<SafeguardDelivery>("delivery", id),
-            MailSettings = binding?.MailId is { } mailId ? _storage.Read<SafeguardMailCredential>("mail", mailId)?.Settings : null
+            Delivery = _storage.Read<SafeguardDelivery>(SafeguardArea.Delivery, id),
+            MailSettings = binding?.MailId is { } mailId ? _storage.Read<SafeguardMailCredential>(SafeguardArea.Mail, mailId)?.Settings : null
         };
     }
 

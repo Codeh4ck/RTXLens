@@ -79,7 +79,7 @@ internal sealed class WarningShutdownCoordinator(RuntimeConfigurationFile config
             remaining.Add(warning.Key);
             if (!_countdowns.ContainsKey(warning.Key))
             {
-                logger.LogActivity(LogLevel.Warning, "protection.shutdown-countdown", DeviceWarningEvaluator.SourceLabel(warning.Profile),
+                logger.LogActivity(LogLevel.Warning, "protection.shutdown-countdown", warning.Source,
                     $"Shutdown countdown started for {warning.Definition.Title}.",
                     $"Delay: {warning.Profile.ShutdownAfterSeconds} seconds.");
             }
@@ -88,7 +88,7 @@ internal sealed class WarningShutdownCoordinator(RuntimeConfigurationFile config
                 || timer.Limits != warning.Limits || warning.ObservedAt < timer.Last
                 || warning.ObservedAt - timer.Last > warning.MaxAge)
             {
-                timer = new(warning.Profile, warning.Limits, warning.ObservedAt, warning.ObservedAt);
+                timer = new(warning.Profile, warning.Limits, warning.ObservedAt, warning.ObservedAt, warning.Source);
             }
 
             timer = timer with { Last = warning.ObservedAt };
@@ -123,7 +123,7 @@ internal sealed class WarningShutdownCoordinator(RuntimeConfigurationFile config
             var countdown = _countdowns[key];
             _countdowns.Remove(key);
 
-            logger.LogActivity(LogLevel.Information, "protection.shutdown-cancelled", DeviceWarningEvaluator.SourceLabel(countdown.Profile),
+            logger.LogActivity(LogLevel.Information, "protection.shutdown-cancelled", countdown.Source,
                 "Shutdown countdown ended because the warning is no longer confirmed.");
         }
     }
@@ -164,7 +164,7 @@ internal sealed class WarningShutdownCoordinator(RuntimeConfigurationFile config
     private ShutdownOutcome Request(WarningShutdownCandidate warning)
     {
         var reason = new WarningShutdownReason(Guid.NewGuid().ToString("N"), clock.GetUtcNow(), _boot,
-            DeviceWarningEvaluator.SourceLabel(warning.Profile), warning.Profile.Name, warning.Definition.Title, warning.Observation.Detail);
+            warning.Source, warning.Profile.Name, warning.Definition.Title, warning.Observation.Detail);
 
         lock (_gate)
         {
@@ -222,5 +222,5 @@ internal sealed class WarningShutdownCoordinator(RuntimeConfigurationFile config
         }
     }
 
-    private sealed record Countdown(DeviceWarningProfile Profile, ConnectorWarningLimits Limits, DateTimeOffset Start, DateTimeOffset Last);
+    private sealed record Countdown(DeviceWarningProfile Profile, ConnectorWarningLimits Limits, DateTimeOffset Start, DateTimeOffset Last, string Source);
 }

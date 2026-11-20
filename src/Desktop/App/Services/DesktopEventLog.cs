@@ -1,3 +1,7 @@
+using RTXLens.Plugins.GenericNvidia.Contracts;
+using RTXLens.Plugins.Msi.Contracts;
+using RTXLens.Plugins.WireView.Contracts;
+using RTXLens.Plugins.Asus.Contracts;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using RTXLens.Contracts.Diagnostics;
@@ -176,10 +180,10 @@ internal sealed class DesktopEventLog
 
     private static string Label(string name) => name switch
     {
-        "generic-nvidia" => "Nvidia",
-        "msi-psu" => "MSI PSU",
-        "wireview-pro2" => "WireView Pro II",
-        "asus-astral" => "ROG Astral",
+        NvidiaIdentity.Id => NvidiaIdentity.PluginName,
+        MsiIdentity.Id => MsiIdentity.DisplayName,
+        WireViewIdentity.Id => WireViewIdentity.DisplayName,
+        AsusIdentity.Id => AsusIdentity.DisplayName,
         _ => Humanize(name)
     };
 

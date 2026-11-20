@@ -1,10 +1,11 @@
+import { mobileProtocol } from './mobileProtocol.ts';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { warningNotificationIncident, type IncidentRef } from './incidentProtocol';
 
-const channelId = 'rtxlens-warnings';
+const channelId = mobileProtocol.WarningChannel;
 const build = Constants.expoConfig?.extra;
 const projectId = build?.eas?.projectId;
 

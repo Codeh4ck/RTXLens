@@ -1,3 +1,5 @@
+using RTXLens.Plugins.Asus.Contracts.Warnings;
+using RTXLens.Plugins.GenericNvidia.Contracts;
 using System.Globalization;
 using System.Text.Json;
 using RTXLens.Contracts.Configuration;
@@ -12,17 +14,17 @@ namespace RTXLens.Plugins.GenericNvidia.Analysis.Warnings;
 
 public sealed class GenericNvidiaWarningSource : IWarningSource
 {
-    public string PluginId => "generic-nvidia";
+    public string PluginId => NvidiaIdentity.Id;
 
     public IReadOnlyList<WarningDefinition> Definitions =>
     [
         new(GenericNvidiaWarningIds.CoreTemperature, PluginId, "Core temperature", "temperature")
         {
-            LegacyIds = ["AsusCoreTemperature", "asus-astral/core-temperature"]
+            LegacyIds = ["AsusCoreTemperature", AsusWarningIds.CoreTemperature]
         },
         new(GenericNvidiaWarningIds.MemoryTemperature, PluginId, "VRAM temperature", "temperature")
         {
-            LegacyIds = ["AsusMemoryTemperature", "asus-astral/memory-temperature"]
+            LegacyIds = ["AsusMemoryTemperature", AsusWarningIds.MemoryTemperature]
         }
     ];
 

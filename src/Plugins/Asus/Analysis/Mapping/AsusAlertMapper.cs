@@ -1,3 +1,4 @@
+using RTXLens.Plugins.Asus.Contracts;
 using RTXLens.Plugins.Asus.Contracts.Warnings;
 using System.Globalization;
 using RTXLens.Contracts.Alerts;
@@ -12,14 +13,14 @@ public static class AsusAlertMapper
         var alerts = new List<SensorAlert>(2);
         if (monitor.CurrentImbalance is { } imbalance)
         {
-            alerts.Add(new SensorAlert("asus-astral", deviceId, AsusAlertKinds.CurrentImbalance, imbalance.Timestamp,
+            alerts.Add(new SensorAlert(AsusIdentity.Id, deviceId, AsusAlertKinds.CurrentImbalance, imbalance.Timestamp,
                 [Pin(imbalance.MaxPinName, imbalance.MaxPinAmperage), Pin(imbalance.MinPinName, imbalance.MinPinAmperage)],
                 imbalance.PercentageDifference));
         }
 
         if (monitor.WireOvercurrent is { } overcurrent)
         {
-            alerts.Add(new SensorAlert("asus-astral", deviceId, AsusAlertKinds.WireOvercurrent, now,
+            alerts.Add(new SensorAlert(AsusIdentity.Id, deviceId, AsusAlertKinds.WireOvercurrent, now,
                 [.. overcurrent.PinValues.Select(pin => Pin(pin.Key, pin.Value))]));
         }
 

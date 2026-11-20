@@ -1,3 +1,4 @@
+import { NvidiaId, WireViewId } from './pluginIds.ts';
 import { useColors, useThemeStyles, type Colors } from './appearance';
 import { HomeLayout } from './homeLayout';
 import { useContext, useState, type ReactNode } from 'react';
@@ -27,7 +28,7 @@ export function Home({
   const temperatureUnit = useContext(TemperatureUnitContext);
   const sensors = frame?.sensors ?? [];
   const gpuGroups = groupMetrics(sensors, 'gpu');
-  const gpu = (gpuGroups.find(group => group.source === 'generic-nvidia') ?? gpuGroups[0])?.readings ?? [];
+  const gpu = (gpuGroups.find(group => group.source === NvidiaId) ?? gpuGroups[0])?.readings ?? [];
   const powerGroups = groupMetrics(sensors, 'power');
   const pinSources = pinPanelSources(powerGroups);
   const connectorPower = frame?.connectorPowerKey === undefined
@@ -110,7 +111,7 @@ export function Power({ frame, live, connectionCard, hideIdleMsiConnectors }: Te
   const groups = groupMetrics(frame.sensors, 'power');
   const selected = groups.find(group => group.key === source) ?? groups[0];
   const connectors = selected ? powerConnectorGroups(selected, hideIdleMsiConnectors) : [];
-  const faults = selected?.source === 'wireview-pro2' ? wireViewFaults(selected.readings) : [];
+  const faults = selected?.source === WireViewId ? wireViewFaults(selected.readings) : [];
 
   return (
     <Page title="Power" description={lastReading(frame, live)}>
@@ -235,7 +236,7 @@ export function Gpu({ frame, live, connectionCard }: TelemetryProps) {
   if (!frame) return <Page title="GPU">{connectionCard}</Page>;
 
   const groups = groupMetrics(frame.sensors, 'gpu');
-  const selected = groups.find(group => group.key === source) ?? groups.find(group => group.source === 'generic-nvidia') ?? groups[0];
+  const selected = groups.find(group => group.key === source) ?? groups.find(group => group.source === NvidiaId) ?? groups[0];
   const readings = selected?.readings ?? [];
   const diagnostics = ['GpuPowerLimits', 'GpuPerformance', 'GpuPcie'];
   const gpuPower = readings.filter(reading => reading.identity.component === 'GpuPowerLimits'

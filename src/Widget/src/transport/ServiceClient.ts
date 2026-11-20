@@ -1,3 +1,5 @@
+import { serviceRoutes } from './serviceRoutes.ts';
+import { WireViewId } from '../pluginIds.ts';
 import type { ConfigurationSnapshot } from '../contracts/ConfigurationSnapshot.ts';
 import type { PluginInfo } from '../contracts/PluginInfo.ts';
 import { TelemetryStore } from '../telemetry/TelemetryStore.ts';
@@ -236,8 +238,8 @@ export class ServiceClient {
 
         try {
             const [catalog, configuration] = await Promise.allSettled([
-                api.get('/plugins', signal),
-                api.get('/configuration', signal)
+                api.get(serviceRoutes.Plugins, signal),
+                api.get(serviceRoutes.Configuration, signal)
             ]);
 
             if (generation !== this.generation) {
@@ -289,7 +291,7 @@ export class ServiceClient {
     }
 
     private async refreshWireLimit(generation: number, revision: number): Promise<void> {
-        const device = this.store.device('wireview-pro2', '', Date.now());
+        const device = this.store.device(WireViewId, '', Date.now());
 
         if (
             !device ||
@@ -312,9 +314,9 @@ export class ServiceClient {
         this.store.wireLimitDevice = null;
 
         try {
-            const value = (await this.api.get('/plugins/wireview-pro2/device/config', this.controller.signal)) as Record<string, unknown>;
+            const value = (await this.api.get(serviceRoutes.WireViewConfiguration, this.controller.signal)) as Record<string, unknown>;
 
-            if (generation !== this.generation || device !== this.store.device('wireview-pro2', '', Date.now())) {
+            if (generation !== this.generation || device !== this.store.device(WireViewId, '', Date.now())) {
                 return;
             }
 

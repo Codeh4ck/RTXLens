@@ -1,3 +1,4 @@
+using RTXLens.Core.Plugins;
 using System.Diagnostics;
 using System.Text.Json;
 using RTXLens.Contracts.Diagnostics;
@@ -15,10 +16,10 @@ namespace RTXLens.Service.Services;
 
 internal sealed class SnapshotBroadcastService(IRuntimeConfiguration configuration, TimeProvider clock,
     SensorStateStore store, SensorStreamHub hub, RTXLens.Core.Plugins.PluginRuntimeManager runtime,
-    ProfileGpuDiscovery gpuDiscovery, SettingsProfileResolver profiles, DeviceWarningProfileStore warningProfiles, WarningShutdownCoordinator shutdown,
+    HardwareCatalog hardware, ProfileGpuDiscovery gpuDiscovery, SettingsProfileResolver profiles, DeviceWarningProfileStore warningProfiles, WarningShutdownCoordinator shutdown,
     SafeguardJournalService safeguard, MonitoringActivity activity, MobileAccessService? mobileAccess = null) : BackgroundService
 {
-    private readonly DeviceWarningEvaluator _profileWarnings = new();
+    private readonly DeviceWarningEvaluator _profileWarnings = new(hardware);
     private readonly AsyncSignal _wake = new();
     private readonly WarningEngine _warnings = new(runtime.WarningRegistry);
 
@@ -50,7 +51,7 @@ internal sealed class SnapshotBroadcastService(IRuntimeConfiguration configurati
                     var evaluated = _profileWarnings.Evaluate(snapshot, current.Configuration, activeProfiles, profiles.Automatic);
 
                     var warnings = _warnings.Evaluate(evaluated.Snapshot, current.Configuration, now, evaluated.Warnings,
-                        observation => observation.PluginId != "asus-astral" && observation.TypeId != ActiveSettingsProfile.WireViewProfileOvercurrent);
+                        observation => hardware.UsePluginWarning(observation.PluginId, observation.TypeId));
 
                     snapshot = evaluated.Snapshot with { Warnings = warnings };
 

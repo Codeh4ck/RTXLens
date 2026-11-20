@@ -1,3 +1,4 @@
+using RTXLens.Presentation.Settings;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Globalization;
@@ -45,8 +46,8 @@ internal sealed class FanCurveWindow : LensWindow
             EditingOptions = new XyCurveEditingOptions(1, 1, 1, MaximumPointCount: 6, ExtendEndpoints: true)
         };
         curve[!XyPlot.AccentBrushProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("PrimaryBrush");
-        curve[!XyPlot.GridBrushProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("PanelBorderBrush");
-        curve[!XyPlot.AxisBrushProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("MutedTextBrush");
+        curve[!XyPlot.GridBrushProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(DesktopBrushes.PanelBorder);
+        curve[!XyPlot.AxisBrushProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(DesktopBrushes.MutedText);
 
         var pointList = new ItemsControl
         {
@@ -377,7 +378,7 @@ internal sealed class FanCurveWindow : LensWindow
         AutomationProperties.SetName(temperature, "Temperature (°C)");
         AutomationProperties.SetName(duty, "Duty (%)");
 
-        var remove = IconButton("Remove point", "chart-clear", () => editor.RemoveCurvePoint(point));
+        var remove = IconButton("Remove point", DesktopIcons.ChartClear, () => editor.RemoveCurvePoint(point));
         BindTo(remove, IsEnabledProperty, editor, nameof(editor.CanRemoveCurvePoint));
         var row = PointColumns(temperature, duty);
         Grid.SetColumn(remove, 2);

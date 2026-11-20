@@ -1,3 +1,7 @@
+using RTXLens.Plugins.GenericNvidia.Contracts;
+using RTXLens.Plugins.Msi.Contracts;
+using RTXLens.Plugins.WireView.Contracts;
+using RTXLens.Plugins.Asus.Contracts;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -21,8 +25,8 @@ internal sealed class SettingsPage : UserControl
 {
     private static readonly (string Id, string Label)[] StartupTabs =
     [
-        ("", "First reporting plugin"), ("wireview-pro2", "WireView Pro II"), ("asus-astral", "ROG Astral"),
-        ("generic-nvidia", "GPU Status"), ("msi-psu", "MSI PSU"), ("performance", "Performance Chart"), ("event-log", "Event Log")
+        ("", "First reporting plugin"), (WireViewIdentity.Id, "WireView Pro II"), (AsusIdentity.Id, "ROG Astral"),
+        (NvidiaIdentity.Id, "GPU Status"), (MsiIdentity.Id, "MSI PSU"), ("performance", "Performance Chart"), ("event-log", "Event Log")
     ];
 
     private readonly ShellViewModel _shell;
@@ -156,7 +160,7 @@ internal sealed class SettingsPage : UserControl
         {
             Height = 1,
             Margin = new Thickness(0, 4),
-            [!Border.BackgroundProperty] = new DynamicResourceExtension("PanelBorderBrush")
+            [!Border.BackgroundProperty] = new DynamicResourceExtension(DesktopBrushes.PanelBorder)
         });
 
         var presets = ThemePreset.All;
@@ -297,7 +301,7 @@ internal sealed class SettingsPage : UserControl
 
     private Control UpdateCard(UpdateNotice notice)
     {
-        var release = ActionButton("View release", "chart-export",
+        var release = ActionButton("View release", DesktopIcons.ChartExport,
             () => _shell.RunAsync(async () =>
             {
                 if (TopLevel.GetTopLevel(this) is { } root && !await root.Launcher.LaunchUriAsync(new Uri(notice.ReleaseUrl)))
@@ -305,7 +309,7 @@ internal sealed class SettingsPage : UserControl
                     throw new IOException("The release page could not be opened.");
                 }
             }));
-        var notes = ActionButton("View release notes", "info-action", async () =>
+        var notes = ActionButton("View release notes", DesktopIcons.Info, async () =>
         {
             if (TopLevel.GetTopLevel(this) is Window owner)
             {

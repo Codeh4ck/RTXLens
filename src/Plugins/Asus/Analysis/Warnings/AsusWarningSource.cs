@@ -1,3 +1,4 @@
+using RTXLens.Plugins.Asus.Contracts;
 using System.Globalization;
 using System.Text.Json;
 using RTXLens.Contracts.Alerts;
@@ -13,7 +14,7 @@ namespace RTXLens.Plugins.Asus.Analysis.Warnings;
 
 public sealed class AsusWarningSource : IWarningSource
 {
-    public string PluginId => "asus-astral";
+    public string PluginId => AsusIdentity.Id;
     public IReadOnlyList<WarningDefinition> Definitions => [
         new(AsusWarningIds.Overcurrent, PluginId, "Pin overcurrent", "current") { LegacyIds = ["AsusOvercurrent"] },
         new(AsusWarningIds.Imbalance, PluginId, "Current imbalance", "imbalance") { LegacyIds = ["AsusImbalance"] },
@@ -57,7 +58,7 @@ public sealed class AsusWarningSource : IWarningSource
             var voltages = pins.Where(sensor => sensor.Identity.Metric == SensorMetric.Voltage).ToArray();
 
             var active = snapshot.SettingsProfile;
-            var profile = active?.AppliesToConnector(PluginId, device.Key) == true ? active.Profile : null;
+            var profile = active?.AppliesToConnector(AsusIdentity.Hardware.Association, device.Key) == true ? active.Profile : null;
             var lowVoltage = profile?.LowPinVoltage ?? 11.5;
             var highVoltage = profile?.HighPinVoltage ?? 12.5;
             Voltage(AsusWarningIds.LowVoltage, [.. voltages.Where(sensor => sensor.Value is > 0 && sensor.Value <= lowVoltage)]);

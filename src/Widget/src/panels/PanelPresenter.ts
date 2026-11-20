@@ -1,3 +1,6 @@
+import { hardwareLabels, msiModels } from './hardwareLabels.ts';
+import { chartSettings } from '../settings/chartSettings.ts';
+import { AsusId, MsiId, NvidiaId, WireViewId } from '../pluginIds.ts';
 import { Settings } from '../settings/Settings.ts';
 import { TelemetryStore } from '../telemetry/TelemetryStore.ts';
 import { PeakStore } from '../telemetry/PeakStore.ts';
@@ -36,8 +39,8 @@ export class PanelPresenter {
 
     present(binding: PanelBinding, now: number, showSummary = true): PanelData {
         const { pluginId, deviceId, connectorId } = binding;
-        const isPsu = pluginId === 'msi-psu';
-        const isWire = pluginId === 'wireview-pro2';
+        const isPsu = pluginId === MsiId;
+        const isWire = pluginId === WireViewId;
         let state = this.store.state(pluginId, now);
 
         if (
@@ -95,7 +98,7 @@ export class PanelPresenter {
                 }
 
                 const pins = alert.pins.map((pin) => `P${pin.channel} ${this.format.value(pin.currentA, 'A')}`).join(', ');
-                data.alerts.push(`${alert.kind === 'CurrentImbalance' ? 'Current imbalance' : 'Pin overcurrent'}: ${pins}`);
+                data.alerts.push(`${alert.kind === hardwareLabels.ImbalanceAlert ? 'Current imbalance' : 'Pin overcurrent'}: ${pins}`);
             }
         }
 
@@ -119,22 +122,22 @@ export class PanelPresenter {
 
     private sourceName(pluginId: string, deviceId: string | null): string {
         switch (pluginId) {
-            case 'msi-psu':
-                if (/pid_808c/i.test(deviceId ?? '')) return 'MSI MPG Ai1600TS';
-                if (/pid_aa6f/i.test(deviceId ?? '')) return 'MSI MPG Ai1300TS';
-                return this.store.msiName;
-            case 'wireview-pro2': return this.store.wireName || 'WireView Pro II';
-            case 'generic-nvidia': return this.store.health(pluginId)?.message || 'NVIDIA GeForce RTX';
-            default: return 'ROG Astral';
+            case MsiId:
+                return Object.entries(msiModels).find(([product]) => deviceId?.toLowerCase().includes(product))?.[1]
+                    ?? this.store.msiName;
+            case WireViewId: return this.store.wireName || hardwareLabels.WireView;
+            case NvidiaId: return this.store.health(pluginId)?.message || 'NVIDIA GeForce RTX';
+            case AsusId: return hardwareLabels.Astral;
+            default: return this.store.catalog.find(plugin => plugin.id === pluginId)?.name ?? pluginId;
         }
     }
 
     private panelTitle(binding: PanelBinding): string {
         if (binding.kind === 'pins') {
-            return binding.pluginId === 'msi-psu' ? `PSU connector ${binding.connectorId}` : 'Pin distribution';
+            return binding.pluginId === MsiId ? `PSU connector ${binding.connectorId}` : 'Pin distribution';
         }
-        if (binding.pluginId === 'msi-psu') return 'PSU status';
-        return binding.pluginId === 'wireview-pro2' ? 'Temperatures and faults' : 'GPU status';
+        if (binding.pluginId === MsiId) return 'PSU status';
+        return binding.pluginId === WireViewId ? 'Temperatures and faults' : 'GPU status';
     }
 
     private populatePsu(data: PanelData, binding: PanelBinding, value: ReadMetric, showSummary: boolean): void {
@@ -162,11 +165,11 @@ export class PanelPresenter {
     }
 
     private electricalSummary({ pluginId, deviceId }: PanelBinding, now: number): MetricData[] {
-        const isNvidia = pluginId === 'generic-nvidia';
+        const isNvidia = pluginId === NvidiaId;
         const selectedSource = isNvidia
             ? this.store.configuration?.configuration.plugins[pluginId]?.options?.electricalSource
             : 'Automatic';
-        const electricalPlugin = selectedSource === 'WireView' ? 'wireview-pro2' : pluginId;
+        const electricalPlugin = selectedSource === 'WireView' ? WireViewId : pluginId;
         const electricalDevice = electricalPlugin === pluginId ? deviceId : this.store.device(electricalPlugin, '', now);
         const electrical = (metric: string) => {
             const selection = isNvidia
@@ -265,8 +268,8 @@ export class PanelPresenter {
     }
 
     private pins(binding: PanelBinding, now: number, data: PanelData): void {
-        const isPsu = binding.pluginId === 'msi-psu';
-        const isWire = binding.pluginId === 'wireview-pro2';
+        const isPsu = binding.pluginId === MsiId;
+        const isWire = binding.pluginId === WireViewId;
         const prefix = isWire ? 'wireview' : 'asus';
         const unit = isPsu ? 'A' : this.settings.text(`${prefix}Metric`);
         const metric = unit === 'W' ? 'Power' : unit === 'V' ? 'Voltage' : 'Current';
@@ -293,13 +296,13 @@ export class PanelPresenter {
         }
         const fill = (value: number) => Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
         const component = isPsu ? 'PsuPin' : 'GpuPin';
-        const psuDevice = this.store.device('msi-psu', '', now);
+        const psuDevice = this.store.device(MsiId, '', now);
         const comparison = !isPsu && this.settings.enabled(`${prefix}Compare`);
         const connector = this.settings.text(`${prefix}Connector`);
         data.axisUnit = unit;
         data.voltage = unit === 'V';
 
-        if (this.settings.enabled('showAxis')) {
+        if (this.settings.enabled(chartSettings.Axis)) {
             const ticks = [1, 0.75, 0.5, 0.25, 0].map(fraction => min + (max - min) * fraction);
             data.axis = ticks.map((tick) =>
                 this.format.value(tick, unit, 1)
@@ -314,7 +317,7 @@ export class PanelPresenter {
         data.comparisonLabel = comparison
             ? `PSU C${connector} · current beneath P1-P6` +
               (!isWire ? ' · reversed P6-P1' : '') +
-              (!this.store.reporting('msi-psu', now) || !psuDevice ? ' · unavailable' : '')
+              (!this.store.reporting(MsiId, now) || !psuDevice ? ' · unavailable' : '')
             : '';
 
         if (profile) {
@@ -328,8 +331,8 @@ export class PanelPresenter {
             const comparisonChannel = isWire ? channel : 7 - channel;
             const current = this.store.value(binding.pluginId, binding.deviceId, component, 'Current', now, channel, binding.connectorId);
             const value = this.store.value(binding.pluginId, binding.deviceId, component, metric, now, channel, binding.connectorId);
-            const headroom = this.settings.enabled('showHeadroom') && limit !== null && current !== null ? limit - current : null;
-            const peak = this.settings.enabled('showPeak') ? this.peaks.observe(`${data.identity}/${channel}/${metric}`, value) : null;
+            const headroom = this.settings.enabled(chartSettings.Headroom) && limit !== null && current !== null ? limit - current : null;
+            const peak = this.settings.enabled(chartSettings.Peak) ? this.peaks.observe(`${data.identity}/${channel}/${metric}`, value) : null;
             const warning =
                 this.store.value(
                     binding.pluginId,
@@ -341,7 +344,7 @@ export class PanelPresenter {
                     binding.connectorId
                 ) === 1 || (isWire && this.store.snapshot?.alerts.some(alert =>
                     alert.pluginId === binding.pluginId && alert.deviceId === binding.deviceId
-                    && alert.kind === 'wireview-pro2/profile-pin-overcurrent'
+                    && alert.kind === hardwareLabels.ProfileOvercurrentAlert
                     && alert.pins.some(pin => pin.channel === channel)) === true);
 
             return {
@@ -351,7 +354,7 @@ export class PanelPresenter {
                 headroom: headroom === null ? '-' : `${headroom >= 0 ? '+' : ''}${this.format.value(headroom, 'A')}`,
                 headroomValue: headroom,
                 comparison: comparison
-                    ? this.format.value(this.store.value('msi-psu', psuDevice, 'PsuPin', 'Current', now, comparisonChannel, connector), 'A')
+                    ? this.format.value(this.store.value(MsiId, psuDevice, 'PsuPin', 'Current', now, comparisonChannel, connector), 'A')
                     : '',
                 fill: value === null ? 0 : fill(value),
                 peak: peak === null ? null : fill(peak),
@@ -360,7 +363,7 @@ export class PanelPresenter {
             };
         });
 
-        if (!this.settings.enabled('showSpread') || isPsu) {
+        if (!this.settings.enabled(chartSettings.Spread) || isPsu) {
             return;
         }
 

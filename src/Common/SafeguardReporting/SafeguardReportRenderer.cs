@@ -1,3 +1,4 @@
+using RTXLens.Contracts.Discovery;
 using System.Globalization;
 using System.Net;
 using System.Text;
@@ -217,7 +218,8 @@ internal static class SafeguardReportRenderer
 
             foreach (var device in telemetry.Readings.GroupBy(reading => (reading.Identity.PluginId, reading.Identity.DeviceId)))
             {
-                var source = SourceName(device.Key.PluginId);
+                var metadata = telemetry.Sources?.GetValueOrDefault(device.Key.PluginId);
+                var source = metadata?.DisplayName ?? device.Key.PluginId;
                 var observed = device.Max(reading => reading.ObservedAt);
                 var subtitle = $"{device.Key.DeviceId} · Last sample {FormatTime(observed)}";
 
@@ -239,7 +241,7 @@ internal static class SafeguardReportRenderer
                 {
                     var heading = connector.Key is null ? $"{source} · Pins" : $"{source} · Connector {connector.Key} pins";
                     var activeProfile = telemetry.SettingsProfile;
-                    var profile = activeProfile?.AppliesToConnector(device.Key.PluginId, device.Key.DeviceId) == true ? activeProfile.Profile : null;
+                    var profile = activeProfile?.AppliesToConnector(metadata?.Association ?? GpuAssociation.None, device.Key.DeviceId) == true ? activeProfile.Profile : null;
 
                     var cableRating = general
                         .FirstOrDefault(reading => reading is { Identity.Metric: SensorMetric.PowerCapability, Quality: ReadingQuality.Valid, Value: > 0 })?.Value;
@@ -293,15 +295,6 @@ internal static class SafeguardReportRenderer
 
     private static string FormatTime(DateTimeOffset time) => time.ToLocalTime()
         .ToString("ddd, dd MMM yyyy 'at' HH:mm:ss '(UTC'zzz')'", CultureInfo.InvariantCulture);
-
-    private static string SourceName(string id) => id switch
-    {
-        "asus-astral" => "ROG Astral",
-        "wireview-pro2" => "WireView Pro II",
-        "msi-psu" => "MSI PSU",
-        "generic-nvidia" => "NVIDIA GPU status",
-        _ => id
-    };
 
     private static bool IsPin(SensorReading reading) => reading.Identity.Component is SensorComponent.GpuPin or SensorComponent.PsuPin;
 

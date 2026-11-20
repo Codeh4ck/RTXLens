@@ -1,3 +1,4 @@
+using RTXLens.Contracts.Monitoring;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -23,7 +24,7 @@ internal sealed partial class ExpoMobilePushProvider(HttpClient client)
             body = alert.IncidentId is null ? "Open RTX Lens to view warnings." : "Open RTX Lens to view the incident.",
             sound = "default",
             priority = "high",
-            channelId = "rtxlens-warnings",
+            channelId = MobileProtocol.WarningChannel,
             ttl = 300,
             data = new { screen = "warnings", incidentId = alert.IncidentId, kind = alert.IncidentKind }
         }, null, cancellationToken);

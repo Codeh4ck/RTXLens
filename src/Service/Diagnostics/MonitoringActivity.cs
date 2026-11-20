@@ -1,3 +1,4 @@
+using RTXLens.Contracts.Discovery;
 using RTXLens.Contracts.Enums;
 using RTXLens.Contracts.Monitoring;
 using RTXLens.Contracts.Sensors;
@@ -7,7 +8,7 @@ using RTXLens.Core.Plugins;
 
 namespace RTXLens.Service.Diagnostics;
 
-internal sealed class MonitoringActivity(PluginRuntimeManager runtime, ILogger<MonitoringActivity> logger)
+internal sealed class MonitoringActivity(PluginRuntimeManager runtime, HardwareCatalog hardware, ILogger<MonitoringActivity> logger)
 {
     private readonly Dictionary<string, PluginState> _pluginStates = new(StringComparer.Ordinal);
     private readonly Dictionary<SensorMetric, ResolvedSelection> _selections = new();
@@ -60,13 +61,14 @@ internal sealed class MonitoringActivity(PluginRuntimeManager runtime, ILogger<M
             _pluginStates[plugin.PluginId] = plugin.State;
         }
 
-        var gpu = snapshot.Sensors.FirstOrDefault(reading => reading is { Quality: ReadingQuality.Valid, Identity: { PluginId: "generic-nvidia", Component: SensorComponent.GpuCore } })?.Identity.DeviceId
+        var gpuReading = snapshot.Sensors.FirstOrDefault(reading => reading is { Quality: ReadingQuality.Valid, Identity.Component: SensorComponent.GpuCore } && hardware.Find(reading.Identity.PluginId)?.Association == GpuAssociation.SelectedGpu);
+        var gpu = gpuReading?.Identity.DeviceId
             ?? snapshot.SettingsProfile?.GpuDeviceId;
 
         if (gpu is not null && _gpu != gpu)
         {
             var message = _gpu is null ? "GPU detected for monitoring." : "The GPU selected for monitoring changed.";
-            logger.LogActivity(LogLevel.Information, "gpu.selected", Source("generic-nvidia"), message);
+            logger.LogActivity(LogLevel.Information, "gpu.selected", gpuReading is null ? "GPU" : Source(gpuReading.Identity.PluginId), message);
             _gpu = gpu;
         }
 

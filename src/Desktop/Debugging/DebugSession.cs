@@ -1,3 +1,7 @@
+using RTXLens.Plugins.GenericNvidia.Contracts;
+using RTXLens.Plugins.Msi.Contracts;
+using RTXLens.Plugins.WireView.Contracts;
+using RTXLens.Plugins.Asus.Contracts;
 using System.Text.Json;
 using RTXLens.Client.Serialization;
 using RTXLens.Contracts.Configuration;
@@ -39,7 +43,7 @@ public sealed class DebugSession : ObservableObject
     public event Action<bool>? Changed;
 
     public string LastNotification { get; private set => Set(ref field, value); } = "No debug notifications yet.";
-    public DebugPluginViewModel[] Plugins { get; } = [new("wireview-pro2", "WireView Pro II"), new("asus-astral", "ROG Astral"), new("msi-psu", "MSI PSU"), new("generic-nvidia", "GenericNvidia")];
+    public DebugPluginViewModel[] Plugins { get; } = [new(WireViewIdentity.Id, "WireView Pro II"), new(AsusIdentity.Id, "ROG Astral"), new(MsiIdentity.Id, "MSI PSU"), new(NvidiaIdentity.Id, "GenericNvidia")];
 
     public void ReportNotification(string title, string message) => LastNotification = "DEBUG · " + title + " · " + message;
 
@@ -80,7 +84,7 @@ public sealed class DebugSession : ObservableObject
         if (structural)
         {
             _revision++;
-            if (pluginId == "asus-astral")
+            if (pluginId == AsusIdentity.Id)
             {
                 _asus.Reset();
             }
@@ -114,7 +118,7 @@ public sealed class DebugSession : ObservableObject
             Plugins.Single(plugin => plugin.Id == id).Reset();
             _configurationOverrides.Remove(id);
 
-            if (id == "wireview-pro2")
+            if (id == WireViewIdentity.Id)
             {
                 _wireViewConfiguration = null;
                 _wireViewDeviceId = null;
@@ -150,12 +154,12 @@ public sealed class DebugSession : ObservableObject
             _batch = false;
         }
 
-        Edited(true, "asus-astral");
+        Edited(true, AsusIdentity.Id);
     }
 
     public DeviceConfig? GetSimulatedWireViewConfiguration()
     {
-        var wireView = Plugins.Single(plugin => plugin.Id == "wireview-pro2");
+        var wireView = Plugins.Single(plugin => plugin.Id == WireViewIdentity.Id);
         if (!Enabled || wireView is not { IsSimulated: true, Installed: true, Enabled: true, State: PluginState.Ready })
         {
             return null;
@@ -291,7 +295,7 @@ public sealed class DebugSession : ObservableObject
 
                 if (state != PluginState.Ready)
                 {
-                    if (plugin.Id == "asus-astral")
+                    if (plugin.Id == AsusIdentity.Id)
                     {
                         _asus.Reset();
                     }
@@ -314,7 +318,7 @@ public sealed class DebugSession : ObservableObject
             if (!ready)
             {
                 readings.AddRange(baseline);
-                if (plugin.Id == "asus-astral")
+                if (plugin.Id == AsusIdentity.Id)
                 {
                     _asus.Reset();
                 }
@@ -323,7 +327,7 @@ public sealed class DebugSession : ObservableObject
             }
 
             var effective = DebugReadingBuilder.Build(plugin, baseline, device, now).ToList();
-            if (plugin is { IsSimulated: true, Id: "msi-psu" } && _configurationOverrides.TryGetValue(plugin.Id, out var msiSettings))
+            if (plugin is { IsSimulated: true, Id: MsiIdentity.Id } && _configurationOverrides.TryGetValue(plugin.Id, out var msiSettings))
             {
                 var options = msiSettings.Options?.Deserialize(ClientJsonContext.Default.MsiOptions) ?? new MsiOptions();
                 if (options.FanControl != MsiFanControl.Unmanaged)
@@ -344,7 +348,7 @@ public sealed class DebugSession : ObservableObject
                 }
             }
 
-            if (plugin.Id == "asus-astral" && (plugin.IsSimulated || plugin.Metrics.Any(metric => metric.Mode != DebugMetricMode.Live
+            if (plugin.Id == AsusIdentity.Id && (plugin.IsSimulated || plugin.Metrics.Any(metric => metric.Mode != DebugMetricMode.Live
                                                                                                   && (metric.Definition.Metric is SensorMetric
                                                                                                               .ImbalanceDetected
                                                                                                           or SensorMetric.ImbalancePercentage
@@ -411,14 +415,14 @@ public sealed class DebugSession : ObservableObject
     {
         Options = id switch
         {
-            "asus-astral" => JsonSerializer.SerializeToElement(new AsusOptions(), ClientJsonContext.Default.AsusOptions),
-            "generic-nvidia" => JsonSerializer.SerializeToElement(new RTXLens.Plugins.GenericNvidia.Contracts.Configuration.GenericNvidiaOptions(), ClientJsonContext.Default.GenericNvidiaOptions),
-            "msi-psu" => JsonSerializer.SerializeToElement(new MsiOptions(), ClientJsonContext.Default.MsiOptions),
+            AsusIdentity.Id => JsonSerializer.SerializeToElement(new AsusOptions(), ClientJsonContext.Default.AsusOptions),
+            NvidiaIdentity.Id => JsonSerializer.SerializeToElement(new RTXLens.Plugins.GenericNvidia.Contracts.Configuration.GenericNvidiaOptions(), ClientJsonContext.Default.GenericNvidiaOptions),
+            MsiIdentity.Id => JsonSerializer.SerializeToElement(new MsiOptions(), ClientJsonContext.Default.MsiOptions),
             _ => null
         }
     };
 
-    private static PluginCapability[] Capabilities(string id) => id == "wireview-pro2"
+    private static PluginCapability[] Capabilities(string id) => id == WireViewIdentity.Id
         ?
         [
             PluginCapability.Telemetry, PluginCapability.Configuration, PluginCapability.Restart, PluginCapability.DeviceConfigurationRead,

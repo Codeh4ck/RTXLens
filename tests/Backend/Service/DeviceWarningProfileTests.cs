@@ -1,3 +1,8 @@
+using Microsoft.Extensions.Configuration;
+using System.Net.Http.Json;
+using RTXLens.Core.Plugins;
+using RTXLens.Contracts.Discovery;
+using RTXLens.Plugins.Asus.Contracts;
 using System.Net;
 using Microsoft.Extensions.Logging.Abstractions;
 using RTXLens.Client.Http;
@@ -17,7 +22,7 @@ namespace RTXLens.Tests.Service;
 
 internal static class DeviceWarningProfileTests
 {
-    private static readonly DeviceWarningProfile Astral = new();
+    private static readonly DeviceWarningProfile Astral = AsusIdentity.Hardware.PinProfiles!.DefaultProfile!;
     private static readonly DeviceWarningProfile Msi = new()
     {
         Id = Guid.NewGuid().ToString("N"),
@@ -28,6 +33,9 @@ internal static class DeviceWarningProfileTests
 
     public static async Task RunAsync(TestRunner runner)
     {
+        runner.Run(LoadsLegacyAndUnavailableSourcesFromDisk);
+        await runner.RunAsync(PreservesLegacyProfileDefaultsAsync);
+        await runner.RunAsync(DiscoversAnUnfamiliarPinSourceAsync);
         runner.Run(ProfilesUseIndependentSourcesAndReminderPolicies);
         runner.Run(Uses5080ActivationAndRequiresFreshSustainedSamples);
         runner.Run(ShutdownRequiresContinuousWarningAndSurvivesReboot);
@@ -35,9 +43,97 @@ internal static class DeviceWarningProfileTests
         await runner.RunAsync(PersistsProfilesThroughLocalDesktopApiAsync);
     }
 
+    private static void LoadsLegacyAndUnavailableSourcesFromDisk()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var file = Path.Combine(directory.FullName, "device-warnings.json");
+            var missingId = Guid.NewGuid().ToString("N");
+            File.WriteAllText(file, $$"""
+                [
+                    { "enabled": false },
+                    { "id": "{{missingId}}", "name": "Saved source", "pluginId": "uninstalled-device" }
+                ]
+                """);
+            var options = new ConfigurationBuilder().AddInMemoryCollection(
+                new Dictionary<string, string?> { ["SettingsProfiles:Directory"] = directory.FullName }).Build();
+            var settings = new SettingsProfileStore(options, NullLogger<SettingsProfileStore>.Instance);
+            DeviceWarningProfileStore Open() => new(TestHardwareCatalog.Installed, settings, NullLogger<DeviceWarningProfileStore>.Instance);
+            var store = Open();
+            var saved = store.Catalog(null, Configuration()).Profiles;
+            TestAssert.Equal(Astral with { Enabled = false }, saved.Single(profile => profile.Id == "automatic-astral"));
+            TestAssert.Equal("uninstalled-device", saved.Single(profile => profile.Id == missingId).PluginId);
+            store.Save(Msi);
+            TestAssert.Equal(3, Open().Catalog(null, Configuration()).Profiles.Length);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    private static async Task PreservesLegacyProfileDefaultsAsync()
+    {
+        await using var host = await MonitoringTestHost.StartWithInstalledPluginsDisabledAsync();
+        var api = new MonitoringApiClient(host.Client);
+        using var legacy = await host.Client.PutAsJsonAsync("/warning-profiles", new { enabled = false });
+        legacy.EnsureSuccessStatusCode();
+        var restored = (await api.GetDeviceWarningProfilesAsync(CancellationToken.None)).Profiles.Single();
+        TestAssert.Equal("automatic-astral", restored.Id);
+        TestAssert.Equal("Astral", restored.Name);
+        TestAssert.Equal("asus-astral", restored.PluginId);
+        TestAssert.False(restored.Enabled, "Reading old requests must preserve explicit values.");
+
+        using var body = JsonContent.Create(Msi, options: new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = null });
+        using var mixedCase = await host.Client.PutAsync("/warning-profiles", body);
+        mixedCase.EnsureSuccessStatusCode();
+        TestAssert.Equal(Msi, (await api.GetDeviceWarningProfilesAsync(CancellationToken.None)).Profiles.Single(p => p.Id == Msi.Id));
+
+        using var invalid = await host.Client.PutAsJsonAsync("/warning-profiles", new { pluginId = "" });
+        TestAssert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+    }
+
+    private static async Task DiscoversAnUnfamiliarPinSourceAsync()
+    {
+        const string id = "test-pin-monitor";
+        var factory = new TestSensorPluginFactory(id)
+        {
+            Hardware = new("Test monitor") { PinProfiles = new(SensorComponent.PsuPin) { Connectors = ["aux"] } }
+        };
+        await using var host = await MonitoringTestHost.StartWithFactoriesAsync(factory);
+        var api = new MonitoringApiClient(host.Client);
+        var catalog = await api.GetDeviceWarningProfilesAsync(CancellationToken.None);
+        TestAssert.Equal("Test monitor", catalog.Sources![id].DisplayName);
+        TestAssert.Equal(0, catalog.Profiles.Length);
+        var profile = Msi with { PluginId = id, ConnectorId = "aux" };
+        await api.SaveDeviceWarningProfileAsync(profile, CancellationToken.None);
+        using var invalid = await host.Client.PutAsJsonAsync("/warning-profiles", profile with { ConnectorId = "2" });
+        TestAssert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        TestAssert.Equal(profile, (await api.GetDeviceWarningProfilesAsync(CancellationToken.None)).Profiles.Single());
+
+        var evaluator = new DeviceWarningEvaluator(new HardwareCatalog([factory]));
+        var configuration = Configuration();
+        configuration.Plugins[id] = new PluginSettings();
+        DeviceWarningEvaluation EvaluateAt(int seconds)
+        {
+            var frame = Frame(seconds, 0, 10, 0);
+            var pins = frame.Sensors.Where(reading => reading.Identity.PluginId == "msi-psu" && reading.Identity.ConnectorId == "2");
+            return evaluator.Evaluate(frame with
+            {
+                Sensors = [.. pins.Select(reading => reading with { Identity = reading.Identity with { PluginId = id, ConnectorId = "aux" } })],
+                Plugins = [new PluginHealth(id, PluginState.Ready, frame.Timestamp, null)]
+            }, configuration, [profile], SettingsProfile.Rtx5090);
+        }
+        TestAssert.False(EvaluateAt(0).Warnings.Any(warning => warning.Observation.Active), "The first sample starts the timer.");
+        var active = EvaluateAt(3).Warnings.Single(warning => warning.Observation.Active);
+        TestAssert.Equal(id + "/monitor-overcurrent", active.Definition.Id);
+        TestAssert.Equal("Test monitor connector aux · Pin overcurrent", active.Definition.Title);
+    }
+
     private static void ProfilesUseIndependentSourcesAndReminderPolicies()
     {
-        var evaluator = new DeviceWarningEvaluator();
+        var evaluator = new DeviceWarningEvaluator(TestHardwareCatalog.Installed);
         var warnings = new WarningEngine(WarningTestData.Registry());
         var configuration = Configuration();
         var wireView = new DeviceWarningProfile
@@ -73,13 +169,13 @@ internal static class DeviceWarningProfileTests
             TestAssert.Equal(2, result.Snapshot.PinWarningLimits!.Length);
             TestAssert.Equal(6d, result.Snapshot.PinWarningLimits[0].OvercurrentAmperes);
             return warnings.Evaluate(result.Snapshot, configuration, snapshot.Timestamp, result.Warnings,
-                observation => observation.PluginId != "asus-astral" && observation.TypeId != ActiveSettingsProfile.WireViewProfileOvercurrent);
+                observation => TestHardwareCatalog.Installed.UsePluginWarning(observation.PluginId, observation.TypeId));
         }
     }
 
     private static void Uses5080ActivationAndRequiresFreshSustainedSamples()
     {
-        var evaluator = new DeviceWarningEvaluator();
+        var evaluator = new DeviceWarningEvaluator(TestHardwareCatalog.Installed);
         var configuration = Configuration();
         var start = Frame(0, 5, 0, 0, lowAstral: 4);
 
@@ -104,7 +200,7 @@ internal static class DeviceWarningProfileTests
         var clock = new TestTimeProvider();
         var action = new FakeShutdown(reasonPath);
         var coordinator = new WarningShutdownCoordinator(configurationFile, clock, action, NullLogger<WarningShutdownCoordinator>.Instance);
-        var evaluator = new DeviceWarningEvaluator();
+        var evaluator = new DeviceWarningEvaluator(TestHardwareCatalog.Installed);
         var configuration = Configuration();
         var profile = Msi with { ShutdownAfterSeconds = 2 };
 
@@ -171,7 +267,7 @@ internal static class DeviceWarningProfileTests
                 var action = new FakeShutdown(reason, outcome);
                 var coordinator = new WarningShutdownCoordinator(new RuntimeConfigurationFile(Path.Combine(root.FullName, "settings.json")),
                     new TestTimeProvider(), action, NullLogger<WarningShutdownCoordinator>.Instance);
-                var evaluator = new DeviceWarningEvaluator();
+                var evaluator = new DeviceWarningEvaluator(TestHardwareCatalog.Installed);
                 var profile = Msi with { ShutdownAfterSeconds = 2 };
                 var configuration = Configuration();
 
@@ -206,7 +302,7 @@ internal static class DeviceWarningProfileTests
         var api = new MonitoringApiClient(host.Client);
         var token = CancellationToken.None;
         var catalog = await api.GetDeviceWarningProfilesAsync(token);
-        TestAssert.Equal(DeviceWarningProfile.DefaultId, catalog.Profiles.Single().Id);
+        TestAssert.Equal("automatic-astral", catalog.Profiles.Single().Id);
 
         await api.SaveDeviceWarningProfileAsync(Msi, token);
         var saved = await api.GetDeviceWarningProfilesAsync(token);

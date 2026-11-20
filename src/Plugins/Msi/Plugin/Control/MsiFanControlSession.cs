@@ -1,3 +1,4 @@
+using RTXLens.Plugins.Msi.Contracts;
 using Microsoft.Extensions.Logging;
 using RTXLens.Core.Diagnostics;
 using RTXLens.Plugins.Msi.Contracts.Configuration;
@@ -7,7 +8,7 @@ namespace RTXLens.Plugins.Msi.Control;
 
 internal sealed class MsiFanControlSession(ILogger logger)
 {
-    internal const string ActivitySource = "MSI MPG Ai1300TS / Ai1600TS";
+    internal const string ActivitySource = MsiIdentity.PluginName;
     private readonly MsiFanCurveController _curve = new();
     private bool _ownsFan;
     private bool _curveInitialized;

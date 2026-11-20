@@ -1,3 +1,4 @@
+using RTXLens.Plugins.Asus.Contracts;
 using RTXLens.Plugins.Asus.Contracts.Configuration;
 using System.Text.Json;
 using RTXLens.Contracts.Enums;
@@ -17,7 +18,7 @@ namespace RTXLens.Plugins.Asus;
 
 public sealed class AsusPlugin(PluginSettings settings, TimeProvider clock, IAsusGpuReader reader, AsusStream stream, ActiveSettingsProfileState? profiles = null) : ISensorPlugin
 {
-    public const string PluginId = "asus-astral";
+    public const string PluginId = AsusIdentity.Id;
 
     private readonly AsusAlertMonitor _alerts = new();
     private AsusOptions _options = AsusSettings.GetOptions(settings);
@@ -69,7 +70,7 @@ public sealed class AsusPlugin(PluginSettings settings, TimeProvider clock, IAsu
             var now = clock.GetUtcNow();
             var currents = AsusSnapshotMapper.GetPinCurrents(data);
             var active = profiles?.Current;
-            var effective = active?.AppliesToConnector(PluginId, data.DeviceId) == true ? AsusProfileOptions.Apply(active.Profile, _options) : _options;
+            var effective = active?.AppliesToConnector(AsusIdentity.Hardware.Association, data.DeviceId) == true ? AsusProfileOptions.Apply(active.Profile, _options) : _options;
 
             if (_effectiveOptions != effective)
             {

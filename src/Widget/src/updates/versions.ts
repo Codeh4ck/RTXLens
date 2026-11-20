@@ -1,7 +1,9 @@
+import { releaseLinks } from './releaseLinks.ts';
 import type { ReleaseManifest } from './ReleaseManifest.ts';
 
-export const updateManifestUrl = 'https://rtxlens.com/updates/version.json';
-export const repositoryUrl = 'https://github.com/Codeh4ck/RTXLens';
+export const updateManifestUrl = releaseLinks.ManifestUrl;
+export const repositoryUrl = releaseLinks.RepositoryUrl;
+export const releaseTagUrl = (tag: string) => repositoryUrl + releaseLinks.TagPath + encodeURIComponent(tag);
 
 export function parseVersion(value: unknown): number[] | null {
     if (typeof value !== 'string' || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(value)) {
@@ -46,8 +48,8 @@ export function parseReleaseManifest(value: unknown): ReleaseManifest {
     const tag = manifest.releaseTag;
     const releaseUrl = manifest.releaseUrl;
     if (releaseUrl !== undefined
-        && releaseUrl !== repositoryUrl + '/releases/tag/' + tag
-        && releaseUrl !== 'https://github.com/Codeh4ck/RTX5090Monitor/releases/tag/' + tag) {
+        && releaseUrl !== releaseTagUrl(tag)
+        && releaseUrl !== releaseLinks.LegacyRepositoryUrl + releaseLinks.TagPath + tag) {
         throw new Error('Unsupported release URL.');
     }
 

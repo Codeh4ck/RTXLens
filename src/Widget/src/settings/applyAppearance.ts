@@ -1,3 +1,4 @@
+import { chartSettings } from './chartSettings.ts';
 import { Settings } from './Settings.ts';
 import { defaults } from './definitions.ts';
 import { hexToRGB } from './hexToRGB.ts';
@@ -79,12 +80,12 @@ export function applyAppearance(root: HTMLElement, settings: Settings): void {
 
     for (const [id, token] of Object.entries({
         showIcons: 'icons',
-        showSource: 'source',
+        [chartSettings.Source]: 'source',
         showScanlines: 'scanlines',
-        showHeadroom: 'headroom',
-        showAxis: 'axis',
+        [chartSettings.Headroom]: 'headroom',
+        [chartSettings.Axis]: 'axis',
         showGrid: 'grid',
-        showSpread: 'spread',
+        [chartSettings.Spread]: 'spread',
         alertPulse: 'alertPulse',
         reduceMotion: 'reduceMotion'
     })) {

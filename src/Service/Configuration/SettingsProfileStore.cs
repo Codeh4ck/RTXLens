@@ -9,11 +9,11 @@ internal sealed class SettingsProfileStore
     private readonly Lock _gate = new();
     private readonly Dictionary<string, SettingsProfile> _profiles = new(StringComparer.Ordinal)
     {
-        ["rtx-5090"] = SettingsProfile.Rtx5090,
-        ["rtx-5080"] = SettingsProfile.Rtx5080
+        [SettingsProfile.Rtx5090Id] = SettingsProfile.Rtx5090,
+        [SettingsProfile.Rtx5080Id] = SettingsProfile.Rtx5080
     };
 
-    private string _selectedId = "auto";
+    private string _selectedId = SettingsProfile.AutomaticId;
     private SettingsProfile? _session;
 
     public SettingsProfileStore(IConfiguration configuration, ILogger<SettingsProfileStore> logger, string? defaultDirectory = null)
@@ -49,7 +49,7 @@ internal sealed class SettingsProfileStore
             }
 
             var selectedPath = Path.Combine(_directory, "active-profile.txt");
-            if (File.Exists(selectedPath) && File.ReadAllText(selectedPath).Trim() is { } id && (id == "auto" || _profiles.ContainsKey(id)))
+            if (File.Exists(selectedPath) && File.ReadAllText(selectedPath).Trim() is { } id && (id == SettingsProfile.AutomaticId || _profiles.ContainsKey(id)))
             {
                 _selectedId = id;
             }
@@ -80,7 +80,7 @@ internal sealed class SettingsProfileStore
     {
         lock (_gate)
         {
-            if (request.ProfileId != "auto" && !_profiles.ContainsKey(request.ProfileId))
+            if (request.ProfileId != SettingsProfile.AutomaticId && !_profiles.ContainsKey(request.ProfileId))
             {
                 throw new ArgumentException("Select an available GPU settings profile.");
             }
@@ -92,7 +92,7 @@ internal sealed class SettingsProfileStore
 
             if (!request.Save)
             {
-                if (request.Settings is null && (request.ProfileId != "auto" || Directory.Exists(_directory)))
+                if (request.Settings is null && (request.ProfileId != SettingsProfile.AutomaticId || Directory.Exists(_directory)))
                 {
                     Directory.CreateDirectory(_directory);
                     WriteAtomically(Path.Combine(_directory, "active-profile.txt"), request.ProfileId);
@@ -160,7 +160,7 @@ internal sealed class SettingsProfileStore
 
             if (_selectedId == id)
             {
-                _selectedId = "auto";
+                _selectedId = SettingsProfile.AutomaticId;
                 _session = null;
             }
         }

@@ -1,3 +1,4 @@
+using RTXLens.Contracts.Monitoring;
 using RTXLens.Core.Configuration;
 using RTXLens.Contracts.Configuration;
 using RTXLens.Core.Http;
@@ -9,16 +10,16 @@ internal static class ConfigurationEndpoints
 {
     public static void MapConfigurationEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/settings-profiles", (SettingsProfileResolver profiles) =>
+        endpoints.MapGet("/" + ServiceRoutes.SettingsProfiles, (SettingsProfileResolver profiles) =>
             Results.Json(profiles.Catalog(), AppJsonContext.Default.SettingsProfileCatalog));
 
-        endpoints.MapPut("/settings-profiles", (SettingsProfileRequest request, SettingsProfileStore store, SettingsProfileResolver profiles) =>
+        endpoints.MapPut("/" + ServiceRoutes.SettingsProfiles, (SettingsProfileRequest request, SettingsProfileStore store, SettingsProfileResolver profiles) =>
         {
             store.Apply(request);
             return Results.Json(profiles.Catalog(), AppJsonContext.Default.SettingsProfileCatalog);
         }).AddEndpointFilter<ApiExceptionFilter>();
 
-        endpoints.MapPut("/settings-profiles/{id}", (string id, SettingsProfile settings, HttpContext context,
+        endpoints.MapPut("/" + ServiceRoutes.SettingsProfiles + "/{id}", (string id, SettingsProfile settings, HttpContext context,
             SettingsProfileStore store, SettingsProfileResolver profiles) =>
         {
             if (!WarningProfileEndpoints.IsLocalClient(context.Request))
@@ -30,7 +31,7 @@ internal static class ConfigurationEndpoints
             return Results.Json(profiles.Catalog(), AppJsonContext.Default.SettingsProfileCatalog);
         }).AddEndpointFilter<ApiExceptionFilter>();
 
-        endpoints.MapDelete("/settings-profiles/{id}", (string id, HttpContext context,
+        endpoints.MapDelete("/" + ServiceRoutes.SettingsProfiles + "/{id}", (string id, HttpContext context,
             SettingsProfileStore store, SettingsProfileResolver profiles) =>
         {
             if (!WarningProfileEndpoints.IsLocalClient(context.Request))
@@ -42,19 +43,19 @@ internal static class ConfigurationEndpoints
             return Results.Json(profiles.Catalog(), AppJsonContext.Default.SettingsProfileCatalog);
         }).AddEndpointFilter<ApiExceptionFilter>();
 
-        endpoints.MapGet("/configuration", (HttpContext context, IRuntimeConfiguration configuration) => ConfigurationPrecondition.Respond(context, configuration.Current));
+        endpoints.MapGet("/" + ServiceRoutes.Configuration, (HttpContext context, IRuntimeConfiguration configuration) => ConfigurationPrecondition.Respond(context, configuration.Current));
 
-        endpoints.MapPut("/configuration",
+        endpoints.MapPut("/" + ServiceRoutes.Configuration,
             async (ServiceConfiguration settings, HttpContext context, IRuntimeConfiguration configuration, CancellationToken token) =>
             {
                 var updated = await configuration.UpdateAsync(_ => settings, token, ConfigurationPrecondition.Read(context.Request));
                 return ConfigurationPrecondition.Respond(context, updated);
             }).AddEndpointFilter<ApiExceptionFilter>();
 
-        endpoints.MapGet("/plugins/{pluginId}/settings", (string pluginId, IRuntimeConfiguration configuration) =>
+        endpoints.MapGet("/" + ServiceRoutes.Plugins + "/{pluginId}/settings", (string pluginId, IRuntimeConfiguration configuration) =>
             Results.Ok(configuration.Current.Configuration.Plugins[pluginId])).AddEndpointFilter<ApiExceptionFilter>();
 
-        endpoints.MapPut("/plugins/{pluginId}/settings", UpdatePluginSettingsAsync).AddEndpointFilter<ApiExceptionFilter>();
+        endpoints.MapPut("/" + ServiceRoutes.Plugins + "/{pluginId}/settings", UpdatePluginSettingsAsync).AddEndpointFilter<ApiExceptionFilter>();
     }
 
     private static async Task<IResult> UpdatePluginSettingsAsync(string pluginId, PluginSettings settings, HttpContext context,

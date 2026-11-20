@@ -1,3 +1,4 @@
+using RTXLens.Plugins.Msi.Contracts;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -13,7 +14,7 @@ public static class MsiEndpoints
 {
     public static void MapMsiEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/plugins/msi-psu").AddEndpointFilter<ApiExceptionFilter>();
+        var group = endpoints.MapGroup("/" + MsiIdentity.Route).AddEndpointFilter<ApiExceptionFilter>();
         group.MapPost("/restart", async (PluginRuntimeManager runtime, CancellationToken token) =>
         {
             await runtime.RestartAsync(MsiPlugin.PluginId, token);

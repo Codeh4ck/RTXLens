@@ -122,7 +122,7 @@ internal static class SettingsProfileTests
         NvidiaDevice[] devices = [new("gpu0", "/gpu-nvidia/0", name)];
         var store = new SettingsProfileStore(StoreConfiguration(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))),
             NullLogger<SettingsProfileStore>.Instance);
-        var resolver = new SettingsProfileResolver(store, new ActiveSettingsProfileState());
+        var resolver = new SettingsProfileResolver(store, new ActiveSettingsProfileState(), TestHardwareCatalog.Installed);
         return resolver.Resolve(snapshot, configuration ?? WarningTestData.Configuration(), devices)
             ?? throw new InvalidOperationException("The configured GPU was not recognized.");
     }

@@ -45,7 +45,7 @@ internal sealed partial class ShellViewModel
 
                 var storage = new SafeguardStorage();
                 var cutoff = DateTimeOffset.UtcNow.AddDays(-storage.RetentionDays);
-                return storage.Ids("history").Any(id => storage.Read<SafeguardExecution>("history", id)?.StartedAt >= cutoff);
+                return storage.Ids(SafeguardArea.History).Any(id => storage.Read<SafeguardExecution>(SafeguardArea.History, id)?.StartedAt >= cutoff);
             });
 
             if (!_disposed && revision == _safeguardAvailabilityRevision)
@@ -149,7 +149,7 @@ internal sealed partial class ShellViewModel
         {
             if (_safeguardConsumer != Guid.Empty)
             {
-                _safeguardStorage?.Write("seen", _safeguardConsumer, _seenSafeguard);
+                _safeguardStorage?.Write(SafeguardArea.Seen, _safeguardConsumer, _seenSafeguard);
             }
         }
         catch (Exception error) when (SafeguardScriptWindow.IsConfigurationError(error))

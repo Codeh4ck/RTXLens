@@ -1,3 +1,8 @@
+using RTXLens.Plugins.GenericNvidia.Contracts;
+using RTXLens.Plugins.Msi.Contracts;
+using RTXLens.Plugins.Asus.Contracts;
+using RTXLens.Contracts.Monitoring;
+using RTXLens.Plugins.WireView.Contracts;
 using RTXLens.Plugins.GenericNvidia.Contracts.Devices;
 using System.Net.Http.Json;
 using System.Net.WebSockets;
@@ -23,7 +28,7 @@ public sealed class MonitoringApiClient(HttpClient http) : IMonitoringApi
 
     public async Task<RTXLens.Contracts.Updates.ServiceVersionResponse?> GetVersionAsync(CancellationToken token)
     {
-        using var response = await http.GetAsync("version", token);
+        using var response = await http.GetAsync(ServiceRoutes.Version, token);
 
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
@@ -37,27 +42,27 @@ public sealed class MonitoringApiClient(HttpClient http) : IMonitoringApi
             && Contracts.Updates.SemanticVersion.TryParse(value.Version, out _) ? value : null;
     }
 
-    public Task<HealthResponse> GetHealthAsync(CancellationToken token) => GetAsync("health", ClientJsonContext.Default.HealthResponse, token);
-    public Task<PluginCatalog> GetPluginsAsync(CancellationToken token) => GetAsync("plugins", ClientJsonContext.Default.PluginCatalog, token);
+    public Task<HealthResponse> GetHealthAsync(CancellationToken token) => GetAsync(ServiceRoutes.Health, ClientJsonContext.Default.HealthResponse, token);
+    public Task<PluginCatalog> GetPluginsAsync(CancellationToken token) => GetAsync(ServiceRoutes.Plugins, ClientJsonContext.Default.PluginCatalog, token);
     public Task<SettingsProfileCatalog> GetSettingsProfilesAsync(CancellationToken token) =>
-        GetAsync("settings-profiles", ClientJsonContext.Default.SettingsProfileCatalog, token);
+        GetAsync(ServiceRoutes.SettingsProfiles, ClientJsonContext.Default.SettingsProfileCatalog, token);
 
     public async Task<SettingsProfileCatalog> ApplySettingsProfileAsync(SettingsProfileRequest request, CancellationToken token)
     {
-        using var response = await http.PutAsJsonAsync("settings-profiles", request, ClientJsonContext.Default.SettingsProfileRequest, token);
+        using var response = await http.PutAsJsonAsync(ServiceRoutes.SettingsProfiles, request, ClientJsonContext.Default.SettingsProfileRequest, token);
         return await ReadSettingsProfilesAsync(response, token);
     }
 
     public async Task<SettingsProfileCatalog> UpdateSettingsProfileAsync(SettingsProfile profile, CancellationToken token)
     {
-        using var response = await http.PutAsJsonAsync($"settings-profiles/{Uri.EscapeDataString(profile.Id)}", profile,
+        using var response = await http.PutAsJsonAsync($"{ServiceRoutes.SettingsProfiles}/{Uri.EscapeDataString(profile.Id)}", profile,
             ClientJsonContext.Default.SettingsProfile, token);
         return await ReadSettingsProfilesAsync(response, token);
     }
 
     public async Task<SettingsProfileCatalog> DeleteSettingsProfileAsync(string id, CancellationToken token)
     {
-        using var response = await http.DeleteAsync($"settings-profiles/{Uri.EscapeDataString(id)}", token);
+        using var response = await http.DeleteAsync($"{ServiceRoutes.SettingsProfiles}/{Uri.EscapeDataString(id)}", token);
         return await ReadSettingsProfilesAsync(response, token);
     }
 
@@ -69,20 +74,20 @@ public sealed class MonitoringApiClient(HttpClient http) : IMonitoringApi
     }
 
     public Task<DeviceWarningProfileCatalog> GetDeviceWarningProfilesAsync(CancellationToken token) =>
-        GetAsync("warning-profiles", ClientJsonContext.Default.DeviceWarningProfileCatalog, token);
+        GetAsync(ServiceRoutes.WarningProfiles, ClientJsonContext.Default.DeviceWarningProfileCatalog, token);
 
     public async Task SaveDeviceWarningProfileAsync(DeviceWarningProfile profile, CancellationToken token)
     {
-        using var response = await http.PutAsJsonAsync("warning-profiles", profile, ClientJsonContext.Default.DeviceWarningProfile, token);
+        using var response = await http.PutAsJsonAsync(ServiceRoutes.WarningProfiles, profile, ClientJsonContext.Default.DeviceWarningProfile, token);
         await EnsureSuccessAsync(response, token);
     }
 
     public Task DeleteDeviceWarningProfileAsync(string id, CancellationToken token) =>
-        DeleteAsync($"warning-profiles/{Uri.EscapeDataString(id)}", token);
+        DeleteAsync($"{ServiceRoutes.WarningProfiles}/{Uri.EscapeDataString(id)}", token);
 
     public async Task<WarningShutdownReason?> GetWarningShutdownAsync(CancellationToken token)
     {
-        using var response = await http.GetAsync("warning-shutdown", token);
+        using var response = await http.GetAsync(ServiceRoutes.WarningShutdown, token);
         if (response.StatusCode is System.Net.HttpStatusCode.NoContent or System.Net.HttpStatusCode.NotFound)
         {
             return null;
@@ -93,7 +98,7 @@ public sealed class MonitoringApiClient(HttpClient http) : IMonitoringApi
     }
 
     public Task AcknowledgeWarningShutdownAsync(string id, CancellationToken token) =>
-        DeleteAsync($"warning-shutdown/{Uri.EscapeDataString(id)}", token);
+        DeleteAsync($"{ServiceRoutes.WarningShutdown}/{Uri.EscapeDataString(id)}", token);
 
     private async Task DeleteAsync(string path, CancellationToken token)
     {
@@ -102,12 +107,12 @@ public sealed class MonitoringApiClient(HttpClient http) : IMonitoringApi
     }
 
     public async Task<ConfigurationSnapshot> GetConfigurationAsync(CancellationToken token) =>
-        NormalizeConfiguration(await GetAsync("configuration", ClientJsonContext.Default.ConfigurationSnapshot, token));
+        NormalizeConfiguration(await GetAsync(ServiceRoutes.Configuration, ClientJsonContext.Default.ConfigurationSnapshot, token));
     public Task<DeviceConfig> GetWireViewConfigurationAsync(CancellationToken token) =>
-        GetAsync("plugins/wireview-pro2/device/config", ClientJsonContext.Default.DeviceConfig, token);
+        GetAsync(WireViewIdentity.Route + WireViewIdentity.DeviceConfigPath, ClientJsonContext.Default.DeviceConfig, token);
     public async Task<DeviceConfig> ApplyWireViewConfigurationAsync(DeviceConfig changes, CancellationToken token)
     {
-        using var response = await http.PutAsJsonAsync("plugins/wireview-pro2/device/config", changes,
+        using var response = await http.PutAsJsonAsync(WireViewIdentity.Route + WireViewIdentity.DeviceConfigPath, changes,
             ClientJsonContext.Default.DeviceConfig, token);
 
         await EnsureSuccessAsync(response, token);
@@ -116,18 +121,18 @@ public sealed class MonitoringApiClient(HttpClient http) : IMonitoringApi
     }
 
     public Task<AsusDeviceInfo[]> GetAsusDevicesAsync(CancellationToken token) =>
-        GetAsync("plugins/asus-astral/devices", ClientJsonContext.Default.AsusDeviceInfoArray, token);
+        GetAsync(AsusIdentity.Route + "/devices", ClientJsonContext.Default.AsusDeviceInfoArray, token);
     public Task<NvidiaDeviceInfo[]> GetNvidiaDevicesAsync(CancellationToken token) => GetNvidiaDevicesAsync(true, token);
 
     public Task<NvidiaDeviceInfo[]> GetNvidiaDevicesAsync(bool refresh, CancellationToken token) =>
-        GetAsync(refresh ? "plugins/generic-nvidia/devices" : "plugins/generic-nvidia/devices?refresh=false",
+        GetAsync(refresh ? NvidiaIdentity.Route + "/devices" : NvidiaIdentity.Route + "/devices?refresh=false",
             ClientJsonContext.Default.NvidiaDeviceInfoArray, token);
 
     public Task<MsiDeviceInfo[]> GetMsiDevicesAsync(CancellationToken token) =>
-        GetAsync("plugins/msi-psu/devices", ClientJsonContext.Default.MsiDeviceInfoArray, token);
+        GetAsync(MsiIdentity.Route + "/devices", ClientJsonContext.Default.MsiDeviceInfoArray, token);
 
     public Task<RTXLens.Plugins.Msi.Contracts.Telemetry.MsiSnapshot> GetMsiSnapshotAsync(CancellationToken token) =>
-        GetAsync("plugins/msi-psu/device", ClientJsonContext.Default.MsiSnapshot, token);
+        GetAsync(MsiIdentity.Route + "/device", ClientJsonContext.Default.MsiSnapshot, token);
 
     public async Task<ConfigurationSnapshot> SetConfigurationAsync(ServiceConfiguration configuration, string version, CancellationToken token)
     {
@@ -161,18 +166,18 @@ public sealed class MonitoringApiClient(HttpClient http) : IMonitoringApi
 
     public async Task ClearWireViewFaultsAsync(ClearFaultsRequest request, CancellationToken token)
     {
-        using var response = await http.PostAsJsonAsync("plugins/wireview-pro2/faults/clear", request, ClientJsonContext.Default.ClearFaultsRequest, token);
+        using var response = await http.PostAsJsonAsync(WireViewIdentity.Route + WireViewIdentity.ClearFaultsPath, request, ClientJsonContext.Default.ClearFaultsRequest, token);
         await EnsureSuccessAsync(response, token);
     }
 
-    public Task RestartPluginAsync(string pluginId, CancellationToken token) => PostAsync($"plugins/{Uri.EscapeDataString(pluginId)}/restart", token);
-    public Task RestartServiceAsync(CancellationToken token) => PostAsync("restart", token);
+    public Task RestartPluginAsync(string pluginId, CancellationToken token) => PostAsync($"{ServiceRoutes.Plugins}/{Uri.EscapeDataString(pluginId)}/restart", token);
+    public Task RestartServiceAsync(CancellationToken token) => PostAsync(ServiceRoutes.Restart, token);
 
     public async IAsyncEnumerable<SensorSnapshot> ReadSensorsAsync([EnumeratorCancellation] CancellationToken token)
     {
         using var socket = new ClientWebSocket();
         socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
-        var address = new UriBuilder(new Uri(Address, "sensors")) { Scheme = Address.Scheme == "https" ? "wss" : "ws" }.Uri;
+        var address = new UriBuilder(new Uri(Address, ServiceRoutes.Sensors)) { Scheme = Address.Scheme == "https" ? "wss" : "ws" }.Uri;
         await socket.ConnectAsync(address, token);
         await foreach (var frame in SensorFrameReader.ReadAsync(socket, token))
         {

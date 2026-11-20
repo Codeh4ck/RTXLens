@@ -11,6 +11,7 @@ public interface ISensorPluginFactory
     IWarningSource? WarningSource => null;
     string Id { get; }
     string Name { get; }
+    PluginHardwareMetadata Hardware => new(Name);
     PluginCapability[] Capabilities => [PluginCapability.Telemetry, PluginCapability.Configuration, PluginCapability.Restart];
     ServiceConfiguration MigrateConfiguration(ServiceConfiguration configuration) => configuration;
 

@@ -1,3 +1,7 @@
+using RTXLens.Plugins.GenericNvidia.Contracts;
+using RTXLens.Plugins.Msi.Contracts;
+using RTXLens.Plugins.WireView.Contracts;
+using RTXLens.Plugins.Asus.Contracts;
 using System.Text.Json;
 using RTXLens.Plugins.GenericNvidia.Contracts.Configuration;
 using RTXLens.Client.Serialization;
@@ -17,11 +21,11 @@ public sealed class PluginSettingsEditorViewModel : EditableObject
 
     public string Id { get; }
     public string Name { get; }
-    public bool IsAsus => Id == "asus-astral";
-    public bool IsNvidia => Id == "generic-nvidia";
+    public bool IsAsus => Id == AsusIdentity.Id;
+    public bool IsNvidia => Id == NvidiaIdentity.Id;
     public GenericNvidiaSettingsEditorViewModel Nvidia { get; }
-    public bool IsWireView => Id == "wireview-pro2";
-    public bool IsMsi => Id == "msi-psu";
+    public bool IsWireView => Id == WireViewIdentity.Id;
+    public bool IsMsi => Id == MsiIdentity.Id;
     public int MinimumPollMs => IsMsi ? 1000 : 100;
     public MsiSettingsEditorViewModel Msi { get; }
     public AsusSettingsEditorViewModel Asus { get; }
@@ -32,7 +36,7 @@ public sealed class PluginSettingsEditorViewModel : EditableObject
     public PluginSettingsEditorViewModel(string id, string name, PluginSettings settings)
     {
         Id = id;
-        Name = id == "generic-nvidia" ? "Nvidia" : name;
+        Name = id == NvidiaIdentity.Id ? "Nvidia" : name;
         _original = settings;
         _enabled = settings.Enabled;
         _poll = settings.PollIntervalMs;

@@ -1,3 +1,4 @@
+using RTXLens.Presentation.Settings;
 using System.Globalization;
 using System.Text.Json;
 using Avalonia;
@@ -55,8 +56,8 @@ internal sealed class EventLogPage : UserControl
 
         var filters = ToolbarGroup("Filters", _level, _source, _sort);
         var actions = ToolbarGroup("Actions",
-            ActionButton("Export logs", "chart-export", ExportAsync),
-            ActionButton("Clear events", "chart-clear", ClearAsync),
+            ActionButton("Export logs", DesktopIcons.ChartExport, ExportAsync),
+            ActionButton("Clear events", DesktopIcons.ChartClear, ClearAsync),
             ActionButton("Load older", "refresh", LoadOlderAsync));
         var toolbar = new WrapPanel
         {

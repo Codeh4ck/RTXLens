@@ -112,7 +112,7 @@ internal static class WarningConfigurationTests
         var wireViewWarnings = plugins.Single(plugin => plugin.GetProperty("id").GetString() == "wireview-pro2").GetProperty("warnings");
         TestAssert.Equal(7, wireViewWarnings.GetArrayLength());
         TestAssert.True(wireViewWarnings.EnumerateArray().Any(warning =>
-            warning.GetProperty("id").GetString() == ActiveSettingsProfile.WireViewProfileOvercurrent),
+            warning.GetProperty("id").GetString() == WireViewWarningIds.ProfilePinOvercurrent),
             "The software pin warning must be available in the notification catalog.");
         TestAssert.Equal(0, plugins.Single(plugin => plugin.GetProperty("id").GetString() == "msi-psu").GetProperty("warnings").GetArrayLength());
     }

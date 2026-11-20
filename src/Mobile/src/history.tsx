@@ -1,3 +1,4 @@
+import { mobileProtocol } from './mobileProtocol.ts';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -37,7 +38,7 @@ export function IncidentHistory({ computer, destination, live, target, onNotific
       throw new Error('Pair with your PC again to load history.');
     }
     if (response.status === 404) {
-      throw new Error(path === '/incidents' ? 'Update the RTX Lens service to view history.' : 'This report is no longer available.');
+      throw new Error(path === mobileProtocol.Incidents ? 'Update the RTX Lens service to view history.' : 'This report is no longer available.');
     }
     if (response.status !== 200) {
       throw new Error('The PC could not load this report. Try again.');
@@ -53,7 +54,7 @@ export function IncidentHistory({ computer, destination, live, target, onNotific
     setError(null);
 
     try {
-      const page = decodeIncidentPage(await request(cursor ? `/incidents?before=${cursor}` : '/incidents'));
+      const page = decodeIncidentPage(await request(cursor ? `${mobileProtocol.Incidents}?before=${cursor}` : mobileProtocol.Incidents));
       if (generation.current !== current) return;
       setItems(previous => cursor ? [...new Map([...previous, ...page.items].map(item => [entryKey(item), item])).values()] : page.items);
       setNext(page.next);
@@ -81,7 +82,7 @@ export function IncidentHistory({ computer, destination, live, target, onNotific
     inFlight.current = true;
     setBusy(true);
     setError(null);
-    void request(`/incidents/${selected.kind}/${selected.id}`).then(body => {
+    void request(`${mobileProtocol.Incidents}/${selected.kind}/${selected.id}`).then(body => {
       if (generation.current === current) setDetail(decodeIncident(body, selected));
     }).catch(failure => {
       if (generation.current === current) setError(message(failure));

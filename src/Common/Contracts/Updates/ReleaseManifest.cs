@@ -16,8 +16,16 @@ public sealed record ReleaseManifest
     public const string RepositoryUrl = "https://github.com/Codeh4ck/RTXLens";
     public const string ManifestUrl = "https://rtxlens.com/updates/version.json";
 
+    public const string TagPath = "/releases/tag/";
+    public const string DownloadPath = "/releases/download/";
+    public const string ArchiveName = "RTXLens-win-x64.zip";
+    public const string LegacyRepositoryUrl = "https://github.com/Codeh4ck/RTX5090Monitor";
+
+    public static bool IsReleaseUrl(string url, string tag) =>
+        url == RepositoryUrl + TagPath + tag || url == LegacyRepositoryUrl + TagPath + tag;
+
     [JsonIgnore]
-    public string ReleaseUrl => PublishedReleaseUrl ?? RepositoryUrl + "/releases/tag/" + Uri.EscapeDataString(ReleaseTag);
+    public string ReleaseUrl => PublishedReleaseUrl ?? RepositoryUrl + TagPath + Uri.EscapeDataString(ReleaseTag);
 
     public bool IsValid() => SchemaVersion == 1
         && SemanticVersion.TryParse(Desktop, out _)
@@ -26,6 +34,5 @@ public sealed record ReleaseManifest
         && ReleaseTag is { Length: > 1 } && ReleaseTag.StartsWith('v')
         && SemanticVersion.TryParse(ReleaseTag[1..], out _)
         && (PublishedReleaseUrl is null
-            || PublishedReleaseUrl == RepositoryUrl + "/releases/tag/" + ReleaseTag
-            || PublishedReleaseUrl == "https://github.com/Codeh4ck/RTX5090Monitor/releases/tag/" + ReleaseTag);
+            || IsReleaseUrl(PublishedReleaseUrl, ReleaseTag));
 }

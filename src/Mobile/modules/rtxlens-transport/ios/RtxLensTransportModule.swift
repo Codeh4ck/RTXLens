@@ -58,7 +58,7 @@ public final class RtxLensTransportModule: Module {
                 do {
                     let endpoint = try PinnedEndpoint(address, fingerprint: pin)
                     let request = try PinnedHttpRequest(
-                        endpoint: endpoint, path: "/notification-registration/v2", json: json, token: token, queue: self.queue)
+                        endpoint: endpoint, path: MobileRoutes.registrationV2, json: json, token: token, queue: self.queue)
                     request.start { result in
                         switch result {
                         case .success(let reply): promise.resolve(reply)

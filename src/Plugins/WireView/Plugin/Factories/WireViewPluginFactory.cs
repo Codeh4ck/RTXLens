@@ -1,3 +1,4 @@
+using RTXLens.Plugins.WireView.Contracts;
 using RTXLens.Contracts.Enums;
 using RTXLens.Contracts.Sensors;
 using RTXLens.Plugins.WireView.Analysis.Warnings;
@@ -14,8 +15,9 @@ namespace RTXLens.Plugins.WireView.Factories;
 public sealed class WireViewPluginFactory(TimeProvider clock, WireViewStream stream, ILogger<WireViewPlugin> logger) : ISensorPluginFactory, IConnectorSourceProvider
 {
     public IWarningSource WarningSource { get; } = new WireViewWarningSource();
+    public PluginHardwareMetadata Hardware => WireViewIdentity.Hardware;
     public string Id => WireViewPlugin.PluginId;
-    public string Name => "WireView Pro II";
+    public string Name => WireViewIdentity.PluginName;
     public PluginCapability[] Capabilities => [PluginCapability.Telemetry, PluginCapability.Configuration,
         PluginCapability.Restart, PluginCapability.DeviceConfigurationRead, PluginCapability.FaultClear];
 

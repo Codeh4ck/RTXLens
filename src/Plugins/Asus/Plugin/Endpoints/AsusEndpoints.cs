@@ -1,3 +1,4 @@
+using RTXLens.Plugins.Asus.Contracts;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -14,7 +15,7 @@ public static class AsusEndpoints
 {
     public static void MapAsusEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/plugins/asus-astral").AddEndpointFilter<ApiExceptionFilter>();
+        var group = endpoints.MapGroup("/" + AsusIdentity.Route).AddEndpointFilter<ApiExceptionFilter>();
         group.MapGet("/health", (SensorStateStore store, TimeProvider clock) =>
         {
             var health = store.Snapshot(clock.GetUtcNow(), []).Plugins.Single(plugin => plugin.PluginId == AsusPlugin.PluginId);

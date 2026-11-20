@@ -1,3 +1,4 @@
+using RTXLens.Contracts.Discovery;
 using System.Text.Json.Serialization;
 
 namespace RTXLens.Service.Mobile;
@@ -23,7 +24,7 @@ internal sealed record MobileNotificationPreferences(
 
     public bool Allows(MobileWarningCategory category) => (Categories & category) == category;
 
-    public static MobileWarningCategory CategoryFor(string pluginId, string icon) => icon == "temperature"
+    public static MobileWarningCategory CategoryFor(PluginHardwareMetadata? hardware, string icon) => icon == "temperature"
         ? MobileWarningCategory.Temperature
-        : pluginId is "asus-astral" or "wireview-pro2" ? MobileWarningCategory.Connector : MobileWarningCategory.Other;
+        : hardware?.Association is GpuAssociation.GpuDevice or GpuAssociation.InlineMonitor ? MobileWarningCategory.Connector : MobileWarningCategory.Other;
 }

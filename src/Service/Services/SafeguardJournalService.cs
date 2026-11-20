@@ -1,3 +1,5 @@
+using RTXLens.Contracts.Discovery;
+using RTXLens.Core.Plugins;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
@@ -14,9 +16,9 @@ using RTXLens.Service.Mobile;
 namespace RTXLens.Service.Services;
 
 internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<SafeguardJournalService> logger,
-    MobilePushDelivery? mobilePush = null) : BackgroundService
+    MobilePushDelivery? mobilePush = null, IEnumerable<ISensorPluginFactory>? plugins = null) : BackgroundService
 {
-    private readonly SafeguardTelemetryBuffer _telemetry = new();
+    private readonly SafeguardTelemetryBuffer _telemetry = new(plugins?.ToDictionary(plugin => plugin.Id, plugin => new PluginHardwareMetadata(plugin.Hardware.DisplayName, plugin.Hardware.Association)));
     private readonly Lock _telemetryFiles = new();
     private SafeguardExecutionNotice[]? _notices;
     private readonly DateTimeOffset _startedAt = clock.GetUtcNow();
@@ -40,7 +42,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
         try
         {
             var storage = new SafeguardStorage();
-            if (storage.Read<SafeguardExecution>("history", id) is not { } execution || execution.Id != id)
+            if (storage.Read<SafeguardExecution>(SafeguardArea.History, id) is not { } execution || execution.Id != id)
             {
                 return null;
             }
@@ -51,8 +53,8 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
                 return null;
             }
 
-            var telemetry = storage.Read<SafeguardTelemetry>("telemetry", id);
-            var delivery = storage.Read<SafeguardDelivery>("delivery", id);
+            var telemetry = storage.Read<SafeguardTelemetry>(SafeguardArea.Telemetry, id);
+            var delivery = storage.Read<SafeguardDelivery>(SafeguardArea.Delivery, id);
             var status = SafeguardStorage.DisplayStatus(execution, now);
 
             return new MobileIncident(id, "safeguard", execution.Name, "Safeguard+", execution.StartedAt, execution.FinishedAt, status)
@@ -141,7 +143,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
         var notices = new List<SafeguardExecutionNotice>();
         var newExecutions = new List<SafeguardExecutionNotice>();
 
-        var retained = storage.Ids("history").ToHashSet();
+        var retained = storage.Ids(SafeguardArea.History).ToHashSet();
 
         foreach (var id in retained)
         {
@@ -167,7 +169,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
                     continue;
                 }
 
-                if (now - execution.StartedAt <= SafeguardTelemetryBuffer.MaximumCaptureAge && !File.Exists(storage.Location("telemetry", id)))
+                if (now - execution.StartedAt <= SafeguardTelemetryBuffer.MaximumCaptureAge && !File.Exists(storage.Location(SafeguardArea.Telemetry, id)))
                 {
                     CaptureTelemetry(storage, id, execution.StartedAt);
                 }
@@ -216,7 +218,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
 
     private SafeguardExecution? ReadHistory(ISafeguardJournalStorage storage, Guid id)
     {
-        var file = new FileInfo(storage.Location("history", id));
+        var file = new FileInfo(storage.Location(SafeguardArea.History, id));
         var lastWrite = file.LastWriteTimeUtc;
         var length = file.Length;
 
@@ -228,7 +230,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
         _historyCache.Remove(id);
         try
         {
-            var record = storage.Read<SafeguardExecution>("history", id);
+            var record = storage.Read<SafeguardExecution>(SafeguardArea.History, id);
 
             if (record?.FinishedAt is not null)
             {
@@ -268,17 +270,17 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
 
         switch (status)
         {
-            case "Simulated":
+            case SafeguardStatus.Simulated:
                 logger.LogActivity(LogLevel.Information, "safeguard.simulated", "Safeguard+", "Simulation completed.", detail);
                 break;
-            case "Shutdown requested":
+            case SafeguardStatus.ShutdownRequested:
                 logger.LogActivity(LogLevel.Information, "safeguard.shutdown-requested", "Safeguard+", "The action requested Windows shutdown.", detail);
                 break;
-            case "Shutdown request failed":
-            case "Shutdown request unconfirmed":
-            case "Script verification failed":
-            case "Simulation email queue failed":
-            case "Interrupted":
+            case SafeguardStatus.ShutdownRequestFailed:
+            case SafeguardStatus.ShutdownRequestUnconfirmed:
+            case SafeguardStatus.ScriptVerificationFailed:
+            case SafeguardStatus.SimulationEmailQueueFailed:
+            case SafeguardStatus.Interrupted:
                 logger.LogActivity(LogLevel.Error, "safeguard.action-failed", "Safeguard+", status + ".", detail, eventViewer: true);
                 break;
         }
@@ -287,7 +289,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
     [SupportedOSPlatform("windows")]
     private void CapturePendingTelemetry(ISafeguardJournalStorage storage, CancellationToken token)
     {
-        foreach (var id in storage.Ids("outbox"))
+        foreach (var id in storage.Ids(SafeguardArea.Outbox))
         {
             if (token.IsCancellationRequested)
             {
@@ -296,7 +298,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
 
             try
             {
-                if (!File.Exists(storage.Location("telemetry", id)) && storage.Read<SafeguardMailEvent>("outbox", id) is { } job && job.ExecutionId == id)
+                if (!File.Exists(storage.Location(SafeguardArea.Telemetry, id)) && storage.Read<SafeguardMailEvent>(SafeguardArea.Outbox, id) is { } job && job.ExecutionId == id)
                 {
                     CaptureTelemetry(storage, id, job.StartedAt);
                 }
@@ -316,19 +318,19 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
         {
             lock (_telemetryFiles)
             {
-                var saved = storage.Read<SafeguardTelemetry>("telemetry", id);
+                var saved = storage.Read<SafeguardTelemetry>(SafeguardArea.Telemetry, id);
                 if (saved is not null)
                 {
-                    return saved;
+                    return _telemetry.WithSources(saved);
                 }
 
                 frame = _telemetry.CaptureAt(startedAt);
                 if (frame is not null && HasExecutionOrMail())
                 {
-                    storage.Write("telemetry", id, frame);
+                    storage.Write(SafeguardArea.Telemetry, id, frame);
                     if (!HasExecutionOrMail())
                     {
-                        storage.Delete("telemetry", id);
+                        storage.Delete(SafeguardArea.Telemetry, id);
                     }
                 }
             }
@@ -341,20 +343,20 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
 
         return frame;
 
-        bool HasExecutionOrMail() => File.Exists(storage.Location("history", id)) || File.Exists(storage.Location("outbox", id));
+        bool HasExecutionOrMail() => File.Exists(storage.Location(SafeguardArea.History, id)) || File.Exists(storage.Location(SafeguardArea.Outbox, id));
     }
 
     [SupportedOSPlatform("windows")]
     internal async Task ProcessMailAsync(ISafeguardJournalStorage storage, CancellationToken token)
     {
         var now = clock.GetUtcNow();
-        foreach (var id in storage.Ids("requests"))
+        foreach (var id in storage.Ids(SafeguardArea.Requests))
         {
             token.ThrowIfCancellationRequested();
             await HandleMailRequestAsync(storage, id, now, token);
         }
 
-        foreach (var id in storage.Ids("outbox"))
+        foreach (var id in storage.Ids(SafeguardArea.Outbox))
         {
             token.ThrowIfCancellationRequested();
             await DeliverAlarmAsync(storage, id, now, token);
@@ -365,21 +367,21 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
             return;
         }
 
-        foreach (var id in storage.Ids("results"))
+        foreach (var id in storage.Ids(SafeguardArea.Results))
         {
-            if (File.GetLastWriteTimeUtc(storage.Location("results", id)) < now.UtcDateTime.AddHours(-1))
+            if (File.GetLastWriteTimeUtc(storage.Location(SafeguardArea.Results, id)) < now.UtcDateTime.AddHours(-1))
             {
-                storage.Delete("results", id);
+                storage.Delete(SafeguardArea.Results, id);
             }
         }
 
         var cutoff = now.AddDays(-storage.RetentionDays);
-        foreach (var id in storage.Ids("delivery"))
+        foreach (var id in storage.Ids(SafeguardArea.Delivery))
         {
-            if (File.GetLastWriteTimeUtc(storage.Location("delivery", id)) < cutoff.UtcDateTime
-                && !File.Exists(storage.Location("history", id)) && !File.Exists(storage.Location("outbox", id)))
+            if (File.GetLastWriteTimeUtc(storage.Location(SafeguardArea.Delivery, id)) < cutoff.UtcDateTime
+                && !File.Exists(storage.Location(SafeguardArea.History, id)) && !File.Exists(storage.Location(SafeguardArea.Outbox, id)))
             {
-                storage.Delete("delivery", id);
+                storage.Delete(SafeguardArea.Delivery, id);
             }
         }
         _nextMailCleanup = now.AddMinutes(1);
@@ -392,19 +394,19 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
 
         try
         {
-            var request = storage.Read<SafeguardMailRequest>("requests", id);
+            var request = storage.Read<SafeguardMailRequest>(SafeguardArea.Requests, id);
             if (request is null)
             {
                 return;
             }
 
-            if (request.CreatedAt < now.AddMinutes(-2) || File.Exists(storage.Location("results", id)))
+            if (request.CreatedAt < now.AddMinutes(-2) || File.Exists(storage.Location(SafeguardArea.Results, id)))
             {
-                storage.Delete("requests", id);
+                storage.Delete(SafeguardArea.Requests, id);
                 return;
             }
 
-            var previous = request.PreviousMailId is { } previousId ? storage.Read<SafeguardMailCredential>("mail", previousId) : null;
+            var previous = request.PreviousMailId is { } previousId ? storage.Read<SafeguardMailCredential>(SafeguardArea.Mail, previousId) : null;
 
             string? encryptedPassword = null;
 
@@ -460,7 +462,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
             }
             else
             {
-                storage.Write("mail", id, credentials);
+                storage.Write(SafeguardArea.Mail, id, credentials);
                 result = new(true, "SMTP settings validated and saved.", id);
             }
         }
@@ -469,8 +471,8 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
             result = new(false, DescribeMailError(error));
         }
 
-        storage.Write("results", id, result);
-        storage.Delete("requests", id);
+        storage.Write(SafeguardArea.Results, id, result);
+        storage.Delete(SafeguardArea.Requests, id);
     }
 
     [SupportedOSPlatform("windows")]
@@ -479,14 +481,14 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
         var attempt = 1;
         try
         {
-            var delivery = storage.Read<SafeguardDelivery>("delivery", id);
-            if (delivery?.Status is "Accepted by SMTP server" or "Delivery expired")
+            var delivery = storage.Read<SafeguardDelivery>(SafeguardArea.Delivery, id);
+            if (delivery?.Status is SafeguardStatus.AcceptedBySmtpServer or SafeguardStatus.DeliveryExpired)
             {
                 DeleteMailJob(storage, id);
                 return;
             }
 
-            var job = storage.Read<SafeguardMailEvent>("outbox", id);
+            var job = storage.Read<SafeguardMailEvent>(SafeguardArea.Outbox, id);
             if (job is null)
             {
                 return;
@@ -496,7 +498,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
 
             if (job.StartedAt < now.AddDays(-7))
             {
-                storage.Write("delivery", id, new SafeguardDelivery("Delivery expired", attempt - 1, now));
+                storage.Write(SafeguardArea.Delivery, id, new SafeguardDelivery(SafeguardStatus.DeliveryExpired, attempt - 1, now));
 
                 logger.LogActivity(LogLevel.Error, "safeguard.email-expired", "Safeguard+",
                     "Email delivery expired after retrying.", $"Execution {id:N}.", eventViewer: true);
@@ -510,7 +512,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
                 return;
             }
 
-            var binding = storage.Read<SafeguardBinding>("bindings", job.BindingId);
+            var binding = storage.Read<SafeguardBinding>(SafeguardArea.Bindings, job.BindingId);
             if (job.ExecutionId != id || binding is null || binding.Id != job.BindingId || binding.MailId is not { } mailId)
             {
                 throw new InvalidDataException("The email request has no saved notification binding.");
@@ -520,8 +522,8 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
 
             var script = SafeguardScripts.Get(binding.ScriptId);
 
-            var mail = storage.Read<SafeguardMailCredential>("mail", mailId) ?? throw new InvalidDataException("Saved SMTP configuration is unavailable.");
-            var execution = storage.Read<SafeguardExecution>("history", id);
+            var mail = storage.Read<SafeguardMailCredential>(SafeguardArea.Mail, mailId) ?? throw new InvalidDataException("Saved SMTP configuration is unavailable.");
+            var execution = storage.Read<SafeguardExecution>(SafeguardArea.History, id);
             var status = execution is null ? "Triggered" : SafeguardStorage.DisplayStatus(execution, now);
 
             var telemetry = CaptureTelemetry(storage, id, job.StartedAt);
@@ -533,7 +535,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
             var subject = script.IsSimulation ? "RTX Lens Safeguard+ simulation" : "RTX Lens Safeguard+ triggered";
             await SendAsync(mail, subject, CreateReportBody(report), id, token);
 
-            storage.Write("delivery", id, new SafeguardDelivery("Accepted by SMTP server", attempt, now));
+            storage.Write(SafeguardArea.Delivery, id, new SafeguardDelivery(SafeguardStatus.AcceptedBySmtpServer, attempt, now));
 
             logger.LogActivity(LogLevel.Information, "safeguard.email-accepted", "Safeguard+", "SMTP server accepted the Safeguard+ email.",
                 $"Execution {id:N}.");
@@ -549,7 +551,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
         catch (Exception error) when (!token.IsCancellationRequested && IsMailError(error))
         {
             var wait = TimeSpan.FromMinutes(Math.Min(60, Math.Pow(2, Math.Min(attempt - 1, 6))));
-            storage.Write("delivery", id, new SafeguardDelivery("Retry pending", attempt, now + wait, DescribeMailError(error)));
+            storage.Write(SafeguardArea.Delivery, id, new SafeguardDelivery("Retry pending", attempt, now + wait, DescribeMailError(error)));
 
             if (attempt == 1)
             {
@@ -566,10 +568,10 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
         {
             lock (_telemetryFiles)
             {
-                storage.Delete("outbox", id);
-                if (!File.Exists(storage.Location("history", id)))
+                storage.Delete(SafeguardArea.Outbox, id);
+                if (!File.Exists(storage.Location(SafeguardArea.History, id)))
                 {
-                    storage.Delete("telemetry", id);
+                    storage.Delete(SafeguardArea.Telemetry, id);
                 }
             }
         }
@@ -613,7 +615,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
 
         using var client = new SmtpClient();
 
-        var mode = settings.Security == "Implicit TLS" ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
+        var mode = settings.Security == SafeguardMailMode.ImplicitTls ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
         await client.ConnectAsync(settings.Host, settings.Port, mode, deadline.Token);
 
         if (settings.Authenticate)

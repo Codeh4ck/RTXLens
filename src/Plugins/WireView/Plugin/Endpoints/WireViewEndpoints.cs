@@ -1,3 +1,4 @@
+using RTXLens.Plugins.WireView.Contracts;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -15,7 +16,7 @@ public static class WireViewEndpoints
     public static void MapWireViewEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints
-            .MapGroup("/plugins/wireview-pro2")
+            .MapGroup("/" + WireViewIdentity.Route)
             .AddEndpointFilter<ApiExceptionFilter>();
 
         group.MapGet("/health", (SensorStateStore store, TimeProvider clock) =>

@@ -1,3 +1,4 @@
+using RTXLens.Plugins.Msi.Contracts;
 using System.Diagnostics;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
@@ -56,7 +57,7 @@ public static class AfterburnerSafeguard
 
     public static SafeguardBinding Create(string installation, int connector, SafeguardScriptDefinition script, int delay, Guid? mailId)
     {
-        var executable = Path.Combine(Path.GetFullPath(installation), "MSIAfterburner.exe");
+        var executable = Path.Combine(Path.GetFullPath(installation), AfterburnerFiles.Executable);
         var entry = Path.Combine(ScriptDirectory, script.FileName);
         var workflow = Path.Combine(ScriptDirectory, Workflow);
         ProtectedInstallationFile.Require(executable);
@@ -122,12 +123,12 @@ public static class AfterburnerSafeguard
         }
 
         var store = new SafeguardStorage();
-        if (binding.MailId is { } id && store.Read<SafeguardMailCredential>("mail", id) is null)
+        if (binding.MailId is { } id && store.Read<SafeguardMailCredential>(SafeguardArea.Mail, id) is null)
         {
             throw new InvalidOperationException("Save SMTP settings through the service before applying this action.");
         }
 
-        var existing = store.Read<SafeguardBinding>("bindings", binding.Id);
+        var existing = store.Read<SafeguardBinding>(SafeguardArea.Bindings, binding.Id);
         if (existing is not null)
         {
             if (existing != binding)
@@ -139,9 +140,9 @@ public static class AfterburnerSafeguard
         }
 
         await ProbeAsync(script);
-        _ = store.Location("history", Guid.Empty);
-        _ = store.Location("outbox", Guid.Empty);
-        store.Write("bindings", binding.Id, binding);
+        _ = store.Location(SafeguardArea.History, Guid.Empty);
+        _ = store.Location(SafeguardArea.Outbox, Guid.Empty);
+        store.Write(SafeguardArea.Bindings, binding.Id, binding);
     }
 
     private static string Hash(string path)

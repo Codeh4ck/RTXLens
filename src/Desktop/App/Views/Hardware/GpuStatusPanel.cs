@@ -1,3 +1,4 @@
+using RTXLens.Presentation.Settings;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -73,7 +74,7 @@ internal static class GpuStatusPanel
         BindTo(hotspot, Visual.IsVisibleProperty, gpu, nameof(gpu.HasHotspotTemperature));
 
         var temperatures = Pair(Column("Core temp", gpu.CoreTemperature), Column("VRAM temp", gpu.MemoryTemperature));
-        return Group("Temperatures", "vtemp", new StackPanel { Spacing = 5, Children = { temperatures, hotspot } });
+        return Group("Temperatures", DesktopIcons.Temperature, new StackPanel { Spacing = 5, Children = { temperatures, hotspot } });
     }
 
     private static Border CreateFans(GpuStatusViewModel gpu)
@@ -81,7 +82,7 @@ internal static class GpuStatusPanel
         var fans = Pair(Column("Fan 1", gpu.Fan1), Column("Fan 2", gpu.Fan2));
         BindTo(fans.Children[1], Visual.IsVisibleProperty, gpu, nameof(gpu.HasSecondFan));
 
-        return Group("Fans", "vfan", fans);
+        return Group("Fans", DesktopIcons.Fan, fans);
     }
 
     public static SectionPanel CreatePower(GpuDiagnosticsViewModel diagnostics)
@@ -89,7 +90,7 @@ internal static class GpuStatusPanel
         var detailsButton = new Button
         {
             Classes = { "desktop-action" },
-            Content = new Image { Source = Icon("info-action"), Width = 16, Height = 16 },
+            Content = new Image { Source = Icon(DesktopIcons.Info), Width = 16, Height = 16 },
             Padding = new Thickness(7, 4),
             Flyout = new Flyout { Content = CreateBoostTable(diagnostics), FlyoutPresenterClasses = { "boost-details" } }
         };
@@ -137,7 +138,7 @@ internal static class GpuStatusPanel
         var track = new RangeMarkerTrack { Height = 20 };
         track[!RangeMarkerTrack.TrackBrushProperty] = new DynamicResourceExtension("TrackBrush");
         track[!RangeMarkerTrack.ActiveBrushProperty] = new DynamicResourceExtension("PrimaryBrush");
-        track[!RangeMarkerTrack.ReferenceBrushProperty] = new DynamicResourceExtension("MutedTextBrush");
+        track[!RangeMarkerTrack.ReferenceBrushProperty] = new DynamicResourceExtension(DesktopBrushes.MutedText);
 
         Watch(track, diagnostics, () =>
         {
@@ -183,7 +184,7 @@ internal static class GpuStatusPanel
         }
         else
         {
-            marker[!Border.BorderBrushProperty] = new DynamicResourceExtension("MutedTextBrush");
+            marker[!Border.BorderBrushProperty] = new DynamicResourceExtension(DesktopBrushes.MutedText);
             marker.BorderThickness = new Thickness(1.5);
         }
 
@@ -285,7 +286,7 @@ internal static class GpuStatusPanel
     private static Grid Pair(Control first, Control second)
     {
         var divided = new Border { BorderThickness = new Thickness(1, 0, 0, 0), Child = second };
-        divided[!Border.BorderBrushProperty] = new DynamicResourceExtension("PanelBorderBrush");
+        divided[!Border.BorderBrushProperty] = new DynamicResourceExtension(DesktopBrushes.PanelBorder);
 
         var pair = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*"), Children = { first, divided } };
         Grid.SetColumn(divided, 1);
@@ -311,14 +312,14 @@ internal static class GpuStatusPanel
             Child = content
         };
         card[!Border.BackgroundProperty] = new DynamicResourceExtension("InsetBrush");
-        card[!Border.BorderBrushProperty] = new DynamicResourceExtension("PanelBorderBrush");
+        card[!Border.BorderBrushProperty] = new DynamicResourceExtension(DesktopBrushes.PanelBorder);
         return card;
     }
 
     private static Border Divider(double gap = 0)
     {
         var rule = new Border { Height = 1, Margin = new Thickness(0, 0, 0, gap) };
-        rule[!Border.BackgroundProperty] = new DynamicResourceExtension("PanelBorderBrush");
+        rule[!Border.BackgroundProperty] = new DynamicResourceExtension(DesktopBrushes.PanelBorder);
         return rule;
     }
 
@@ -339,7 +340,7 @@ internal static class GpuStatusPanel
     private static ReadingText Reading(object source, string path, double fontSize = 18, bool accent = true)
     {
         var value = new ReadingText { FontSize = fontSize, FontWeight = FontWeight.SemiBold };
-        value[!ReadingText.UnitBrushProperty] = new DynamicResourceExtension("MutedTextBrush");
+        value[!ReadingText.UnitBrushProperty] = new DynamicResourceExtension(DesktopBrushes.MutedText);
         if (accent)
         {
             value[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("PrimaryBrush");

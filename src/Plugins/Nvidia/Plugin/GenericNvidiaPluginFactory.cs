@@ -1,3 +1,4 @@
+using RTXLens.Plugins.GenericNvidia.Contracts;
 using RTXLens.Contracts.Enums;
 using RTXLens.Contracts.Sensors;
 using System.Text.Json;
@@ -15,10 +16,11 @@ using RTXLens.Warnings;
 
 namespace RTXLens.Plugins.GenericNvidia;
 
-public sealed class GenericNvidiaPluginFactory(NvidiaTelemetryReader reader, INvidiaDiagnosticsReader? diagnostics = null) : ISensorPluginFactory, IConnectorSourceProvider
+public sealed class GenericNvidiaPluginFactory(NvidiaTelemetryReader reader, INvidiaDiagnosticsReader? diagnostics = null) : ISensorPluginFactory, IConnectorSourceProvider, IGpuProfileContributor
 {
+    public PluginHardwareMetadata Hardware => NvidiaIdentity.Hardware;
     public string Id => GenericNvidiaPlugin.PluginId;
-    public string Name => "Nvidia";
+    public string Name => NvidiaIdentity.PluginName;
     public IWarningSource WarningSource { get; } = new GenericNvidiaWarningSource();
     public PluginCapability[] Capabilities => [PluginCapability.Telemetry, PluginCapability.Configuration, PluginCapability.Restart, PluginCapability.DeviceSelection];
 
@@ -48,6 +50,14 @@ public sealed class GenericNvidiaPluginFactory(NvidiaTelemetryReader reader, INv
     public void ValidateSettings(PluginSettings settings) => GenericNvidiaSettings.GetOptions(settings);
 
     public ISensorPlugin Create(PluginSettings settings) => new GenericNvidiaPlugin(settings, reader, diagnostics);
+
+    public string? SelectedDevice(PluginSettings settings) => GenericNvidiaSettings.GetOptions(settings).DeviceId;
+
+    public SettingsProfile ApplyProfileDefaults(SettingsProfile profile, PluginSettings settings)
+    {
+        var options = GenericNvidiaSettings.GetOptions(settings);
+        return profile with { CoreTemperature = options.CoreTemperatureWarningC, MemoryTemperature = options.MemoryTemperatureWarningC };
+    }
 
     public int? Priority(SensorMetric metric) => metric switch
     {

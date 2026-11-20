@@ -1,3 +1,4 @@
+import { mobileProtocol } from './mobileProtocol.ts';
 import { useThemeStyles, type Colors } from './appearance';
 import { AppearanceSettings } from './appearanceSettings';
 import { ThemeContext, decodeAppearance, defaultAppearance, isLight, themeColors, type Appearance } from './appearance';
@@ -190,7 +191,7 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
 
     async function probe() {
       try {
-        const reply = await native.get(address, publicKeyFingerprint, '/session', token);
+        const reply = await native.get(address, publicKeyFingerprint, mobileProtocol.Session, token);
         if (disposed) return;
         if (sessionResult(reply) === 'connect') {
           setOfferLocalConnection(true);

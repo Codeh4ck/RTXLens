@@ -1,3 +1,4 @@
+using RTXLens.Contracts.Monitoring;
 using RTXLens.Core.Configuration;
 using RTXLens.Contracts.Health;
 using RTXLens.Core;
@@ -8,7 +9,7 @@ namespace RTXLens.Service.Endpoints;
 internal static class Health
 {
     public static RouteHandlerBuilder MapHealthEndpoint(this IEndpointRouteBuilder app) =>
-        app.MapGet("/health", (SensorStateStore store, MonitoringServiceLifetime lifetime, TimeProvider clock, IRuntimeConfiguration configuration) =>
+        app.MapGet("/" + ServiceRoutes.Health, (SensorStateStore store, MonitoringServiceLifetime lifetime, TimeProvider clock, IRuntimeConfiguration configuration) =>
         {
             var now = clock.GetUtcNow();
             var current = configuration.Current;

@@ -15,6 +15,7 @@ if (args.Contains("--verify-msi-curve-hardware"))
     return 0;
 }
 
+using var profileServices = TestHardwareCatalog.Services;
 GenericNvidiaTests.Run(runner);
 ConnectorProfileTests.Run(runner);
 SettingsProfileTests.Run(runner);

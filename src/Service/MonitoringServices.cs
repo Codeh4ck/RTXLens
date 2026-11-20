@@ -26,6 +26,7 @@ public static class MonitoringServices
         services.AddSingleton(_ => new SensorStateStore([]));
         services.AddSingleton<SensorStreamHub>();
         services.AddSingleton<PluginRuntimeManager>();
+        services.AddSingleton<HardwareCatalog>();
         services.AddSingleton<ActivityLoggerProvider>();
         services.AddSingleton<ILoggerProvider>(provider => provider.GetRequiredService<ActivityLoggerProvider>());
         services.AddLogging(logging => logging.AddFilter<ActivityLoggerProvider>(null, LogLevel.Information));

@@ -1,3 +1,4 @@
+import { mobileProtocol } from './mobileProtocol.ts';
 import { useColors } from './appearance';
 import * as SecureStore from 'expo-secure-store';
 import { createContext, useEffect, useRef, useState } from 'react';
@@ -151,7 +152,7 @@ export function TestRemoteAccess({ computer, wifi }: { computer: PairedComputer;
 
     try {
       const { remoteAddress, publicKeyFingerprint, token } = computer;
-      const reply = await transport.get(remoteAddress, publicKeyFingerprint, '/session', token);
+      const reply = await transport.get(remoteAddress, publicKeyFingerprint, mobileProtocol.Session, token);
       const status = sessionResult(reply);
       const message = {
         connect: reply.status === 204 ? 'The PC accepted this pairing through its remote address.'

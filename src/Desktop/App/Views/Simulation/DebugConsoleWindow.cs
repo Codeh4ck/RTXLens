@@ -1,3 +1,5 @@
+using RTXLens.Presentation.Settings;
+using RTXLens.Plugins.GenericNvidia.Contracts;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -391,7 +393,7 @@ internal sealed class DebugConsoleWindow : LensWindow
             flags.Items.Add(item);
         }
 
-        var button = IconButton("Select fault bits", "info-action", () => { });
+        var button = IconButton("Select fault bits", DesktopIcons.Info, () => { });
         button.Flyout = flags;
         BindTo(button, IsEnabledProperty, metric, nameof(metric.IsValueEditable));
         return button;
@@ -401,6 +403,6 @@ internal sealed class DebugConsoleWindow : LensWindow
         (metric.Definition.Component is SensorComponent.GpuPin or SensorComponent.PsuPin)
         && (metric.Definition.Metric is SensorMetric.Current or SensorMetric.Power or SensorMetric.Voltage);
 
-    private static string PluginName(DebugPluginViewModel plugin) => plugin.Id == "generic-nvidia" ? "Nvidia" : plugin.Name;
+    private static string PluginName(DebugPluginViewModel plugin) => plugin.Id == NvidiaIdentity.Id ? "Nvidia" : plugin.Name;
 
 }

@@ -1,35 +1,36 @@
+using RTXLens.Plugins.Msi.Contracts;
 using System.Globalization;
 
 namespace RTXLens.Presentation.Msi.Afterburner;
 
 public static class AfterburnerConfiguration
 {
-    public const string PluginFile = "Plugins/Monitoring/PSU.cfg";
-    public const string ProfileFile = "Profiles/MSIAfterburner.cfg";
+    public const string PluginFile = AfterburnerFiles.PluginRelativePath;
+    public const string ProfileFile = AfterburnerFiles.ProfileRelativePath;
     public static IReadOnlyList<string> FileNames { get; } = Array.AsReadOnly([PluginFile, ProfileFile]);
 
     public static AfterburnerInspection Inspect(byte[] pluginBytes, byte[] profileBytes)
     {
         var plugin = new IniDocument(pluginBytes);
         var profile = new IniDocument(profileBytes);
-        if (!plugin.HasSection("Settings") || !profile.HasSection("Settings") || profile.Get("Settings", "Sources") is null)
+        if (!plugin.HasSection(AfterburnerKeys.Settings) || !profile.HasSection(AfterburnerKeys.Settings) || profile.Get(AfterburnerKeys.Settings, AfterburnerKeys.Sources) is null)
         {
             throw new InvalidDataException("The active Afterburner configuration is incomplete. Configure Afterburner once, or restore a working backup.");
         }
 
-        if (plugin.Get("Settings", "DataLayout") is { } and not ("0" or "3"))
+        if (plugin.Get(AfterburnerKeys.Settings, AfterburnerKeys.DataLayout) is { } and not ("0" or "3"))
         {
             throw new InvalidDataException("The PSU plugin is forced to a non-TS data layout. Select automatic detection in Afterburner's PSU configuration first.");
         }
 
-        foreach (var key in new[] { "DataLayout", "GPUSafeguard", "SoftwareAlarm", "MaxCurrent", "CurrentDif" })
+        foreach (var key in new[] { AfterburnerKeys.DataLayout, AfterburnerKeys.GPUSafeguard, AfterburnerKeys.SoftwareAlarm, AfterburnerKeys.MaxCurrent, AfterburnerKeys.CurrentDif })
         {
-            _ = plugin.Get("Settings", key);
+            _ = plugin.Get(AfterburnerKeys.Settings, key);
         }
 
         foreach (var connectorNumber in new[] { 1, 2 })
         {
-            foreach (var key in new[] { "AlarmThresholdMin", "AlarmThresholdMax", "AlarmFlags", "AlarmTimeout", "AlarmApp", "AlarmAppCmdLine", "Formula" })
+            foreach (var key in new[] { AfterburnerKeys.AlarmThresholdMin, AfterburnerKeys.AlarmThresholdMax, AfterburnerKeys.AlarmFlags, AfterburnerKeys.AlarmTimeout, AfterburnerKeys.AlarmApp, AfterburnerKeys.AlarmAppCmdLine, AfterburnerKeys.Formula })
             {
                 _ = profile.Get(AlarmSection(connectorNumber), key);
             }
@@ -40,13 +41,13 @@ public static class AfterburnerConfiguration
 
         var settings = new AfterburnerSettings(
             Boolean(profile, "Monitoring", "PSU.dll", false),
-            Boolean(plugin, "Settings", "GPUSafeguard", true) && IsConfigured(profile, connector),
-            Boolean(plugin, "Settings", "SoftwareAlarm", true),
-            Number(plugin, "Settings", "MaxCurrent", 9.5),
-            Number(plugin, "Settings", "CurrentDif", 5),
+            Boolean(plugin, AfterburnerKeys.Settings, AfterburnerKeys.GPUSafeguard, true) && IsConfigured(profile, connector),
+            Boolean(plugin, AfterburnerKeys.Settings, AfterburnerKeys.SoftwareAlarm, true),
+            Number(plugin, AfterburnerKeys.Settings, AfterburnerKeys.MaxCurrent, 9.5),
+            Number(plugin, AfterburnerKeys.Settings, AfterburnerKeys.CurrentDif, 5),
             connector,
             IsLowPowerAction(profile, section));
-        var action = (profile.Get(section, "AlarmApp") ?? "") + " " + (profile.Get(section, "AlarmAppCmdLine") ?? "");
+        var action = (profile.Get(section, AfterburnerKeys.AlarmApp) ?? "") + " " + (profile.Get(section, AfterburnerKeys.AlarmAppCmdLine) ?? "");
 
         return new(settings, IsConfigured(profile, 1), IsConfigured(profile, 2), action.Trim(),
             "Existing Afterburner sound flags are preserved; alarm timeout is connector-specific.");
@@ -66,12 +67,12 @@ public static class AfterburnerConfiguration
         {
             var anyEnabled = new[] { 1, 2 }.Any(connector =>
                 alarms.FirstOrDefault(alarm => alarm.Connector == connector)?.Enabled ?? IsConfigured(profile, connector));
-            plugin.Set("Settings", "GPUSafeguard", anyEnabled ? "1" : "0");
+            plugin.Set(AfterburnerKeys.Settings, AfterburnerKeys.GPUSafeguard, anyEnabled ? "1" : "0");
         }
 
-        plugin.Set("Settings", "SoftwareAlarm", settings.SoftwareAlarm ? "1" : "0");
-        plugin.Set("Settings", "MaxCurrent", ((float)settings.MaxCurrent).ToString("G", CultureInfo.InvariantCulture));
-        plugin.Set("Settings", "CurrentDif", ((float)settings.CurrentDifference).ToString("G", CultureInfo.InvariantCulture));
+        plugin.Set(AfterburnerKeys.Settings, AfterburnerKeys.SoftwareAlarm, settings.SoftwareAlarm ? "1" : "0");
+        plugin.Set(AfterburnerKeys.Settings, AfterburnerKeys.MaxCurrent, ((float)settings.MaxCurrent).ToString("G", CultureInfo.InvariantCulture));
+        plugin.Set(AfterburnerKeys.Settings, AfterburnerKeys.CurrentDif, ((float)settings.CurrentDifference).ToString("G", CultureInfo.InvariantCulture));
         profile.Set("Monitoring", "PSU.dll", settings.MonitoringEnabled ? "1" : "0");
 
         foreach (var alarm in alarms)
@@ -80,7 +81,7 @@ public static class AfterburnerConfiguration
             var section = AlarmSection(alarm.Connector);
             if (alarm.AlarmTimeoutMs is { } timeout && timeout != saved.AlarmTimeoutMs)
             {
-                profile.Set(section, "AlarmTimeout", timeout.ToString(CultureInfo.InvariantCulture));
+                profile.Set(section, AfterburnerKeys.AlarmTimeout, timeout.ToString(CultureInfo.InvariantCulture));
             }
 
             var actionChanged = alarm.UseLowPowerAction != saved.LowPowerAction
@@ -92,7 +93,7 @@ public static class AfterburnerConfiguration
                 continue;
             }
 
-            var flags = Integer(profile, section, "AlarmFlags", 0);
+            var flags = Integer(profile, section, AfterburnerKeys.AlarmFlags, 0);
             if (flags is not (0 or 3))
             {
                 throw new InvalidDataException("Connector " + alarm.Connector
@@ -104,11 +105,11 @@ public static class AfterburnerConfiguration
                 if (alarm.Enabled)
                 {
                     EnableSource(profile, "PSU 12VHPWR" + alarm.Connector + " alarm");
-                    profile.Set(section, "AlarmFlags", "3");
+                    profile.Set(section, AfterburnerKeys.AlarmFlags, "3");
                 }
 
-                profile.Set(section, "AlarmThresholdMin", "");
-                profile.Set(section, "AlarmThresholdMax", alarm.Enabled ? "1" : "");
+                profile.Set(section, AfterburnerKeys.AlarmThresholdMin, "");
+                profile.Set(section, AfterburnerKeys.AlarmThresholdMax, alarm.Enabled ? "1" : "");
             }
 
             if (actionChanged)
@@ -121,22 +122,22 @@ public static class AfterburnerConfiguration
                         throw new InvalidDataException("The selected script does not match this connector.");
                     }
 
-                    profile.Set(section, "AlarmFlags", "3");
-                    profile.Set(section, "AlarmApp", AfterburnerSafeguard.PowerShell);
-                    profile.Set(section, "AlarmAppCmdLine", AfterburnerSafeguard.Arguments(
+                    profile.Set(section, AfterburnerKeys.AlarmFlags, "3");
+                    profile.Set(section, AfterburnerKeys.AlarmApp, AfterburnerSafeguard.PowerShell);
+                    profile.Set(section, AfterburnerKeys.AlarmAppCmdLine, AfterburnerSafeguard.Arguments(
                         Plugins.Msi.Contracts.Safeguard.SafeguardScripts.Get(script.ScriptId), script.Id));
                 }
                 else if (alarm.UseLowPowerAction)
                 {
-                    profile.Set(section, "AlarmFlags", "3");
-                    profile.Set(section, "AlarmApp", "%AB%");
-                    profile.Set(section, "AlarmAppCmdLine", "-lowpowerprofile -message GPUSafeguard");
+                    profile.Set(section, AfterburnerKeys.AlarmFlags, "3");
+                    profile.Set(section, AfterburnerKeys.AlarmApp, "%AB%");
+                    profile.Set(section, AfterburnerKeys.AlarmAppCmdLine, "-lowpowerprofile -message GPUSafeguard");
                 }
                 else
                 {
                     // Only remove our recognized native preset. An existing custom command is preserved.
-                    profile.Set(section, "AlarmApp", "");
-                    profile.Set(section, "AlarmAppCmdLine", "");
+                    profile.Set(section, AfterburnerKeys.AlarmApp, "");
+                    profile.Set(section, AfterburnerKeys.AlarmAppCmdLine, "");
                 }
             }
         }
@@ -158,16 +159,16 @@ public static class AfterburnerConfiguration
         var profile = new IniDocument(profileBytes);
         var section = AlarmSection(connector);
         var source = "PSU 12VHPWR" + connector + " alarm";
-        var enabled = (profile.Get("Settings", "Sources") ?? "").Split(',')
+        var enabled = (profile.Get(AfterburnerKeys.Settings, AfterburnerKeys.Sources) ?? "").Split(',')
             .Any(item => item.Trim().Equals("+" + source, StringComparison.OrdinalIgnoreCase));
 
-        var application = profile.Get(section, "AlarmApp") ?? "";
-        var arguments = profile.Get(section, "AlarmAppCmdLine") ?? "";
+        var application = profile.Get(section, AfterburnerKeys.AlarmApp) ?? "";
+        var arguments = profile.Get(section, AfterburnerKeys.AlarmAppCmdLine) ?? "";
         var script = OperatingSystem.IsWindows() ? AfterburnerSafeguard.Inspect(application, arguments) : null;
         return new(connector, enabled, IsConfigured(profile, connector), IsLowPowerAction(profile, section),
-            profile.Get(section, "AlarmThresholdMin") ?? "", profile.Get(section, "AlarmThresholdMax") ?? "",
-            profile.Get(section, "AlarmFlags") ?? "0", profile.Get(section, "AlarmTimeout") ?? "Default",
-            application, arguments, profile.Get(section, "Formula") ?? "")
+            profile.Get(section, AfterburnerKeys.AlarmThresholdMin) ?? "", profile.Get(section, AfterburnerKeys.AlarmThresholdMax) ?? "",
+            profile.Get(section, AfterburnerKeys.AlarmFlags) ?? "0", profile.Get(section, AfterburnerKeys.AlarmTimeout) ?? "Default",
+            application, arguments, profile.Get(section, AfterburnerKeys.Formula) ?? "")
         {
             BuiltInScriptFileName = script?.FileName,
             ScriptBindingId = script?.Id
@@ -180,18 +181,18 @@ public static class AfterburnerConfiguration
     {
         var name = "PSU 12VHPWR" + connector + " alarm";
         var section = AlarmSection(connector);
-        var sources = (profile.Get("Settings", "Sources") ?? "").Split(',');
+        var sources = (profile.Get(AfterburnerKeys.Settings, AfterburnerKeys.Sources) ?? "").Split(',');
 
         return Boolean(profile, "Monitoring", "PSU.dll", false)
             && sources.Any(source => source.Trim().Equals("+" + name, StringComparison.OrdinalIgnoreCase))
-            && profile.Get(section, "AlarmThresholdMax") == "1"
-            && string.IsNullOrWhiteSpace(profile.Get(section, "Formula"))
-            && Integer(profile, section, "AlarmFlags", 0) == 3;
+            && profile.Get(section, AfterburnerKeys.AlarmThresholdMax) == "1"
+            && string.IsNullOrWhiteSpace(profile.Get(section, AfterburnerKeys.Formula))
+            && Integer(profile, section, AfterburnerKeys.AlarmFlags, 0) == 3;
     }
 
     private static void EnableSource(IniDocument profile, string name)
     {
-        var current = profile.Get("Settings", "Sources");
+        var current = profile.Get(AfterburnerKeys.Settings, AfterburnerKeys.Sources);
         if (string.IsNullOrWhiteSpace(current))
         {
             throw new InvalidDataException("The active Afterburner monitoring source list is missing. Open and configure Afterburner once first.");
@@ -213,22 +214,22 @@ public static class AfterburnerConfiguration
             var start = source.Length - source.TrimStart().Length;
             var length = source.Trim().Length;
             sources[index] = source[..start] + "+" + name + source[(start + length)..];
-            profile.Set("Settings", "Sources", string.Join(',', sources));
+            profile.Set(AfterburnerKeys.Settings, AfterburnerKeys.Sources, string.Join(',', sources));
         }
         else
         {
-            profile.Set("Settings", "Sources", current + ",+" + name);
+            profile.Set(AfterburnerKeys.Settings, AfterburnerKeys.Sources, current + ",+" + name);
         }
 
-        if (!string.IsNullOrWhiteSpace(profile.Get(AlarmSection(name.Contains('1') ? 1 : 2), "Formula")))
+        if (!string.IsNullOrWhiteSpace(profile.Get(AlarmSection(name.Contains('1') ? 1 : 2), AfterburnerKeys.Formula)))
         {
             throw new InvalidDataException("The selected alarm has a custom formula. Remove it in Afterburner before enabling Safeguard+ here.");
         }
     }
 
     private static bool IsLowPowerAction(IniDocument profile, string section) =>
-        string.Equals(profile.Get(section, "AlarmApp"), "%AB%", StringComparison.OrdinalIgnoreCase)
-        && profile.Get(section, "AlarmAppCmdLine") == "-lowpowerprofile -message GPUSafeguard";
+        string.Equals(profile.Get(section, AfterburnerKeys.AlarmApp), "%AB%", StringComparison.OrdinalIgnoreCase)
+        && profile.Get(section, AfterburnerKeys.AlarmAppCmdLine) == "-lowpowerprofile -message GPUSafeguard";
 
     private static bool Boolean(IniDocument document, string section, string key, bool fallback)
     {

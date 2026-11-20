@@ -1,3 +1,4 @@
+using RTXLens.Plugins.Msi.Contracts;
 using RTXLens.Contracts.Enums;
 using RTXLens.Contracts.Sensors;
 using System.Text.Json;
@@ -15,8 +16,9 @@ namespace RTXLens.Plugins.Msi.Factories;
 
 public sealed class MsiPluginFactory(TimeProvider clock, ILoggerFactory loggerFactory) : ISensorPluginFactory, IConnectorSourceProvider
 {
+    public PluginHardwareMetadata Hardware => MsiIdentity.Hardware;
     public string Id => MsiPlugin.PluginId;
-    public string Name => "MSI MPG Ai1300TS / Ai1600TS";
+    public string Name => MsiIdentity.PluginName;
     public PluginCapability[] Capabilities => [PluginCapability.Telemetry, PluginCapability.Configuration, PluginCapability.Restart, PluginCapability.DeviceSelection];
     public PluginSettings CreateDefaultSettings() => MsiSettings.WithOptions(new PluginSettings(), new MsiOptions());
     public void ValidateSettings(PluginSettings settings) => MsiSettings.GetOptions(settings);

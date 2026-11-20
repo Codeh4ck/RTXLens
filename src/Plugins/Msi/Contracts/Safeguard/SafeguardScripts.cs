@@ -12,7 +12,7 @@ public sealed record SafeguardScriptDefinition(string Id, string Name, string Fi
     IReadOnlyDictionary<string, SafeguardParameterDefinition> Parameters)
 {
     public static int Version => 1;
-    public bool SendsMail => Parameters.ContainsKey("Host");
+    public bool SendsMail => Parameters.ContainsKey(SafeguardParameterNames.Host);
     public bool IsSimulation => Id == SafeguardScripts.Simulation;
     public override string ToString() => Name;
 }
@@ -27,18 +27,18 @@ public static class SafeguardScripts
     public const int MaximumDelayMs = 3_600_000;
 
     private static readonly SafeguardParameterDefinition Delay =
-        new("DelayMs", "Shutdown delay (ms)", SafeguardParameterType.Integer, DefaultDelayMs, 0, MaximumDelayMs);
+        new(SafeguardParameterNames.DelayMs, "Shutdown delay (ms)", SafeguardParameterType.Integer, DefaultDelayMs, 0, MaximumDelayMs);
 
     private static readonly IReadOnlyDictionary<string, SafeguardParameterDefinition> NotificationParameters = Parameters(
         Delay,
-        new("Host", "SMTP server", SafeguardParameterType.Host),
-        new("Port", "SMTP port", SafeguardParameterType.Integer, 587, 1, 65535),
-        new("Security", "Connection security", SafeguardParameterType.Choice, "STARTTLS", Choices: ["STARTTLS", "Implicit TLS"]),
-        new("Authentication", "Authentication", SafeguardParameterType.Choice, "Username/password", Choices: ["Username/password", "Unauthenticated relay"]),
-        new("Username", "Username", SafeguardParameterType.Text),
-        new("Password", "Password or app password", SafeguardParameterType.Secret),
-        new("Sender", "Sender", SafeguardParameterType.Mailbox),
-        new("Recipients", "Recipients (comma separated)", SafeguardParameterType.Mailboxes, Minimum: 1, Maximum: 10));
+        new(SafeguardParameterNames.Host, "SMTP server", SafeguardParameterType.Host),
+        new(SafeguardParameterNames.Port, "SMTP port", SafeguardParameterType.Integer, 587, 1, 65535),
+        new(SafeguardParameterNames.Security, "Connection security", SafeguardParameterType.Choice, SafeguardMailMode.StartTls, Choices: [SafeguardMailMode.StartTls, SafeguardMailMode.ImplicitTls]),
+        new(SafeguardParameterNames.Authentication, "Authentication", SafeguardParameterType.Choice, SafeguardMailMode.Password, Choices: [SafeguardMailMode.Password, SafeguardMailMode.Relay]),
+        new(SafeguardParameterNames.Username, "Username", SafeguardParameterType.Text),
+        new(SafeguardParameterNames.Password, "Password or app password", SafeguardParameterType.Secret),
+        new(SafeguardParameterNames.Sender, "Sender", SafeguardParameterType.Mailbox),
+        new(SafeguardParameterNames.Recipients, "Recipients (comma separated)", SafeguardParameterType.Mailboxes, Minimum: 1, Maximum: 10));
 
     public static IReadOnlyList<SafeguardScriptDefinition> All { get; } = Array.AsReadOnly([
         new SafeguardScriptDefinition(LowPower, "Low power profile & shutdown", "LowPowerAndShutdown.ps1", Parameters(Delay)),
@@ -54,7 +54,7 @@ public static class SafeguardScripts
     public static void ValidateMail(SafeguardMailSettings mail, bool hasPassword)
     {
         var definitions = Get(Notify).Parameters;
-        CheckRange(definitions["Port"], mail.Port);
+        CheckRange(definitions[SafeguardParameterNames.Port], mail.Port);
 
         if (string.IsNullOrWhiteSpace(mail.Host) || mail.Host.Length > 253
             || (Uri.CheckHostName(mail.Host) != UriHostNameType.Dns && !IPAddress.TryParse(mail.Host, out _)))
@@ -62,7 +62,7 @@ public static class SafeguardScripts
             throw new ArgumentException("Enter a valid SMTP hostname or IP address.");
         }
 
-        if (!definitions["Security"].Choices!.Contains(mail.Security))
+        if (!definitions[SafeguardParameterNames.Security].Choices!.Contains(mail.Security))
         {
             throw new ArgumentException("Select STARTTLS or implicit TLS.");
         }
@@ -73,7 +73,7 @@ public static class SafeguardScripts
             throw new ArgumentException("Enter an SMTP username and password.");
         }
 
-        CheckRange(definitions["Recipients"], mail.Recipients?.Length ?? 0);
+        CheckRange(definitions[SafeguardParameterNames.Recipients], mail.Recipients?.Length ?? 0);
         if (!IsMailbox(mail.Sender) || !mail.Recipients!.All(IsMailbox))
         {
             throw new ArgumentException("Enter valid sender and recipient email addresses.");

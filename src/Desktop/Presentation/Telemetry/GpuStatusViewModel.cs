@@ -1,3 +1,6 @@
+using RTXLens.Plugins.GenericNvidia.Contracts.Warnings;
+using RTXLens.Plugins.GenericNvidia.Contracts;
+using RTXLens.Plugins.WireView.Contracts;
 using System.Globalization;
 using System.Text.Json;
 using RTXLens.Client.Serialization;
@@ -13,7 +16,7 @@ namespace RTXLens.Presentation.Telemetry;
 
 public sealed class GpuStatusViewModel : ObservableObject
 {
-    public const string PluginId = "generic-nvidia";
+    public const string PluginId = NvidiaIdentity.Id;
 
     private DateTimeOffset? _lastObservedAt;
     private int _staleAfterMs = 5000;
@@ -35,11 +38,11 @@ public sealed class GpuStatusViewModel : ObservableObject
     public MetricViewModel CoreClock { get; } = new("Core clock", iconName: "vcore");
     public MetricViewModel MemoryClock { get; } = new("Memory clock", iconName: "vram");
     public MetricViewModel VramUsage { get; } = new("VRAM usage", iconName: "vramusage");
-    public MetricViewModel CoreTemperature { get; } = new("Core temp", iconName: "vtemp");
-    public MetricViewModel MemoryTemperature { get; } = new("VRAM temp", iconName: "vtemp");
-    public MetricViewModel HotspotTemperature { get; } = new("Hotspot temp", iconName: "vtemp");
-    public MetricViewModel Fan1 { get; } = new("Fans", iconName: "vfan");
-    public MetricViewModel Fan2 { get; } = new("Fan 2", iconName: "vfan");
+    public MetricViewModel CoreTemperature { get; } = new("Core temp", iconName: DesktopIcons.Temperature);
+    public MetricViewModel MemoryTemperature { get; } = new("VRAM temp", iconName: DesktopIcons.Temperature);
+    public MetricViewModel HotspotTemperature { get; } = new("Hotspot temp", iconName: DesktopIcons.Temperature);
+    public MetricViewModel Fan1 { get; } = new("Fans", iconName: DesktopIcons.Fan);
+    public MetricViewModel Fan2 { get; } = new("Fan 2", iconName: DesktopIcons.Fan);
 
     public double VramUsagePercent { get; private set => Set(ref field, value); }
     public bool HasVramUsage { get; private set => Set(ref field, value); }
@@ -82,13 +85,13 @@ public sealed class GpuStatusViewModel : ObservableObject
         var electrical = options.ElectricalSource switch
         {
             "None" => [],
-            "WireView" when snapshot.Plugins.Any(plugin => plugin is { PluginId: "wireview-pro2", State: PluginState.Ready }) =>
-                [.. snapshot.Sensors.Where(reading => reading.Identity.PluginId == "wireview-pro2")],
+            "WireView" when snapshot.Plugins.Any(plugin => plugin is { PluginId: WireViewIdentity.Id, State: PluginState.Ready }) =>
+                [.. snapshot.Sensors.Where(reading => reading.Identity.PluginId == WireViewIdentity.Id)],
             "WireView" => [],
             _ => readings
         };
         var electricalAge = options.ElectricalSource == "WireView"
-            ? configuration?.Configuration.Plugins.GetValueOrDefault("wireview-pro2")?.StaleAfterMs ?? 5000 : _staleAfterMs;
+            ? configuration?.Configuration.Plugins.GetValueOrDefault(WireViewIdentity.Id)?.StaleAfterMs ?? 5000 : _staleAfterMs;
 
         PowerText = Format(Input(SensorMetric.Power), "W", 1);
         CurrentText = Format(Input(SensorMetric.Current), "A", 2);
@@ -120,9 +123,9 @@ public sealed class GpuStatusViewModel : ObservableObject
         HasHotspotTemperature = hotspot.HasValue;
 
         CoreTemperature.IsWarning = snapshot.Warnings?.States.Any(warning => warning.PluginId == PluginId
-            && warning.DeviceId == devices[0] && warning is { Phase: Contracts.Warnings.WarningPhase.Active, TypeId: "generic-nvidia/core-temperature" }) == true;
+            && warning.DeviceId == devices[0] && warning is { Phase: Contracts.Warnings.WarningPhase.Active, TypeId: GenericNvidiaWarningIds.CoreTemperature }) == true;
         MemoryTemperature.IsWarning = snapshot.Warnings?.States.Any(warning => warning.PluginId == PluginId
-            && warning.DeviceId == devices[0] && warning is { Phase: Contracts.Warnings.WarningPhase.Active, TypeId: "generic-nvidia/memory-temperature" }) == true;
+            && warning.DeviceId == devices[0] && warning is { Phase: Contracts.Warnings.WarningPhase.Active, TypeId: GenericNvidiaWarningIds.MemoryTemperature }) == true;
 
         var fans = readings.Where(reading => reading.Identity is { Component: SensorComponent.GpuFan, Metric: SensorMetric.FanSpeed, Channel: > 0 })
             .OrderBy(reading => reading.Identity.Channel).Take(2).ToArray();

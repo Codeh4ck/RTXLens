@@ -1,3 +1,5 @@
+using RTXLens.Contracts.Monitoring;
+using System.Text.Json;
 using System.Net;
 using RTXLens.Contracts.Configuration;
 using RTXLens.Core.Configuration;
@@ -11,19 +13,19 @@ internal static class WarningProfileEndpoints
 {
     public static void MapWarningProfileEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var profiles = endpoints.MapGroup("/warning-profiles");
+        var profiles = endpoints.MapGroup("/" + ServiceRoutes.WarningProfiles);
 
         profiles.MapGet("", (DeviceWarningProfileStore store, SettingsProfileResolver settings, IRuntimeConfiguration config) =>
             Results.Json(store.Catalog(settings.Automatic, config.Current.Configuration), AppJsonContext.Default.DeviceWarningProfileCatalog));
 
-        profiles.MapPut("", (DeviceWarningProfile profile, HttpContext context, DeviceWarningProfileStore store) =>
+        profiles.MapPut("", (JsonElement profile, HttpContext context, DeviceWarningProfileStore store) =>
         {
             if (!IsLocalClient(context.Request))
             {
                 return Results.StatusCode(StatusCodes.Status403Forbidden);
             }
 
-            store.Save(profile);
+            store.Save(store.ReadProfile(profile));
             return Results.NoContent();
         }).AddEndpointFilter<ApiExceptionFilter>();
 
@@ -38,7 +40,7 @@ internal static class WarningProfileEndpoints
             return Results.NoContent();
         }).AddEndpointFilter<ApiExceptionFilter>();
 
-        endpoints.MapGet("/warning-shutdown", (HttpContext context, WarningShutdownCoordinator shutdown) =>
+        endpoints.MapGet("/" + ServiceRoutes.WarningShutdown, (HttpContext context, WarningShutdownCoordinator shutdown) =>
         {
             if (!IsLocalClient(context.Request))
             {
@@ -49,7 +51,7 @@ internal static class WarningProfileEndpoints
             return reason is null ? Results.NoContent() : Results.Json(reason, AppJsonContext.Default.WarningShutdownReason);
         });
 
-        endpoints.MapDelete("/warning-shutdown/{id}", (string id, HttpContext context, WarningShutdownCoordinator shutdown) =>
+        endpoints.MapDelete("/" + ServiceRoutes.WarningShutdown + "/{id}", (string id, HttpContext context, WarningShutdownCoordinator shutdown) =>
         {
             if (!IsLocalClient(context.Request))
             {

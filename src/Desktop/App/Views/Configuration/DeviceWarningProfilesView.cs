@@ -1,3 +1,6 @@
+using RTXLens.Presentation.Telemetry;
+using RTXLens.Presentation.Settings;
+using RTXLens.Contracts.Discovery;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -16,10 +19,11 @@ namespace RTXLens.App.Views.Configuration;
 
 internal sealed class DeviceWarningProfilesView : ProfileRequestView
 {
-    private static readonly (string Id, string Label)[] Sources =
-    [
-        ("asus-astral", "ROG Astral"), ("msi-psu", "MSI PSU"), ("wireview-pro2", "WireView Pro II")
-    ];
+    private KeyValuePair<string, PluginHardwareMetadata>[] _sources = [];
+    private KeyValuePair<string, PluginHardwareMetadata>? SelectedSource =>
+        _source.SelectedIndex >= 0 && _source.SelectedIndex < _sources.Length ? _sources[_source.SelectedIndex] : null;
+
+    private PinProfileSupport? SelectedSupport => SelectedSource?.Value.PinProfiles;
 
     private readonly ComboBox _profiles = new()
     {
@@ -34,9 +38,9 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
     };
 
     private readonly ToggleSwitch _enabled = Switch("Enabled");
-    private readonly ComboBox _source = new() { ItemsSource = Sources.Select(source => source.Label).ToArray() };
+    private readonly ComboBox _source = new();
     private readonly ComboBox _device = new();
-    private readonly ComboBox _connector = new() { ItemsSource = new[] { "Connector 1", "Connector 2" } };
+    private readonly ComboBox _connector = new();
     private readonly ToggleSwitch _useDefaults = Switch("Use detected GPU defaults");
     private readonly NumericUpDown _overcurrent = Number(6, 10.5m, 0.1m);
     private readonly NumericUpDown _overcurrentDuration = Number(100, 30000, 1);
@@ -78,14 +82,14 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
             if (TopLevel.GetTopLevel(this) is Window owner &&
                 await RequestProfileNameAsync(owner, "New warning profile") is { } name)
             {
-                var draft = new DeviceWarningProfile { Id = Guid.NewGuid().ToString("N"), Name = name };
+                var draft = new DeviceWarningProfile { PluginId = _sources[0].Key, Id = Guid.NewGuid().ToString("N"), Name = name };
                 _profiles.ItemsSource = _catalog!.Profiles.Append(draft).Select(profile => new ProfileOption(profile)).ToArray();
                 _profiles.SelectedIndex = _profiles.ItemCount - 1;
                 Report(null);
             }
         });
 
-        _delete = IconButton("Delete warning profile", "chart-clear", async () =>
+        _delete = IconButton("Delete warning profile", DesktopIcons.ChartClear, async () =>
         {
             if (_draft is { } profile && TopLevel.GetTopLevel(this) is Window owner
                 && await ConfirmAsync(owner, "Delete warning profile", $"Delete {profile.Name}?", "Delete"))
@@ -121,7 +125,7 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
 
         var advanced = Section("Notifications and shutdown", Stack(_overridePolicy, _policyFields, _shutdown, _shutdownFields));
 
-        var info = IconButton("How warning profiles work", "info-action", async () =>
+        var info = IconButton("How warning profiles work", DesktopIcons.Info, async () =>
         {
             if (TopLevel.GetTopLevel(this) is Window owner)
             {
@@ -196,6 +200,7 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
             if (!_loading && _source.SelectedIndex >= 0)
             {
                 PopulateDevices(null);
+                PopulateConnectors(null);
                 if (_useDefaults.IsChecked == true)
                 {
                     SetLimits(DefaultLimits());
@@ -241,21 +246,22 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
         };
     }
 
-    private string? PluginId => _source.SelectedIndex < 0 ? null : Sources[_source.SelectedIndex].Id;
+    private string? PluginId => SelectedSource?.Key;
 
     protected override void UpdateAvailability()
     {
-        _add.IsEnabled = _profiles.IsEnabled = !IsBusy && _catalog is not null;
+        _add.IsEnabled = !IsBusy && _sources.Length > 0;
+        _profiles.IsEnabled = !IsBusy && _catalog is not null;
         _editor.IsEnabled = _deviceFields.IsEnabled = _enabled.IsEnabled = !IsBusy && _draft is not null;
         _delete.IsEnabled = !IsBusy && _draft is not null;
 
-        var msi = PluginId == "msi-psu";
-        _connectorField.IsVisible = msi;
-        _voltageFields.IsVisible = !msi;
-        _sourceFields.ColumnDefinitions[1].Width = msi ? new GridLength(1.25, GridUnitType.Star) : GridLength.Star;
-        _sourceFields.ColumnDefinitions[2].Width = msi ? new GridLength(0.8, GridUnitType.Star) : new GridLength(0);
+        var hasConnectors = SelectedSupport?.Connectors.Length > 0;
+        _connectorField.IsVisible = hasConnectors;
+        _voltageFields.IsVisible = SelectedSupport?.SupportsVoltage == true;
+        _sourceFields.ColumnDefinitions[1].Width = hasConnectors ? new GridLength(1.25, GridUnitType.Star) : GridLength.Star;
+        _sourceFields.ColumnDefinitions[2].Width = hasConnectors ? new GridLength(0.8, GridUnitType.Star) : new GridLength(0);
 
-        Grid.SetColumnSpan(_deviceField, msi ? 1 : 2);
+        Grid.SetColumnSpan(_deviceField, hasConnectors ? 1 : 2);
 
         foreach (var input in new[] { _overcurrent, _overcurrentDuration, _activation, _imbalance, _imbalanceDuration, _low, _high })
         {
@@ -306,6 +312,10 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
 
         _catalog = catalog;
         _loading = true;
+        _sources = [.. (catalog.Sources ?? LegacyHardwareCatalog.Sources).Where(source => source.Value.PinProfiles is not null)
+            .OrderByDescending(source => source.Value.PinProfiles?.DefaultProfile is not null)
+            .ThenBy(source => source.Value.DisplayName, StringComparer.Ordinal)];
+        _source.ItemsSource = _sources.Select(source => source.Value.DisplayName).ToArray();
         _profiles.ItemsSource = options;
         _profiles.SelectedItem = selected;
         _loading = false;
@@ -323,9 +333,9 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
             try
             {
                 _enabled.IsChecked = profile.Enabled;
-                _source.SelectedIndex = Array.FindIndex(Sources, source => source.Id == profile.PluginId);
+                _source.SelectedIndex = Array.FindIndex(_sources, source => source.Key == profile.PluginId);
                 PopulateDevices(profile.DeviceId);
-                _connector.SelectedIndex = profile.ConnectorId == "2" ? 1 : 0;
+                PopulateConnectors(profile.ConnectorId);
                 _useDefaults.IsChecked = profile.Limits is null;
                 SetLimits(profile.Limits ?? DefaultLimits());
                 _overridePolicy.IsChecked = profile.NotificationPolicy is not null;
@@ -344,6 +354,13 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
         UpdateAvailability();
     }
 
+    private void PopulateConnectors(string? selected)
+    {
+        var connectors = SelectedSupport?.Connectors ?? [];
+        _connector.ItemsSource = connectors.Select(id => $"Connector {id}").ToArray();
+        _connector.SelectedIndex = connectors.Length == 0 ? -1 : Math.Max(0, Array.IndexOf(connectors, selected));
+    }
+
     private void PopulateDevices(string? selectedId)
     {
         var pluginId = PluginId;
@@ -359,7 +376,7 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
         _device.SelectedIndex = Math.Max(0, Array.FindIndex(_devices, target => target.DeviceId == selectedId));
     }
 
-    private ConnectorWarningLimits DefaultLimits() => PluginId == "asus-astral" ? _catalog!.AstralDefaults : _catalog!.Defaults;
+    private ConnectorWarningLimits DefaultLimits() => SelectedSupport?.UseAutomaticLimits == true ? _catalog!.AstralDefaults : _catalog!.Defaults;
 
     private void SetLimits(ConnectorWarningLimits limits)
     {
@@ -378,13 +395,13 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
         var limits = _useDefaults.IsChecked == true ? null : new ConnectorWarningLimits(ReadNumber(_overcurrent, "per-pin overcurrent"),
             Whole(_overcurrentDuration, "Overcurrent duration"), Whole(_activation, "Imbalance activation"),
             Whole(_imbalance, "Imbalance percentage"), Whole(_imbalanceDuration, "Imbalance duration"),
-            pluginId == "msi-psu" ? draft.Limits?.LowPinVoltage ?? DefaultLimits().LowPinVoltage : ReadNumber(_low, "low pin voltage"),
-            pluginId == "msi-psu" ? draft.Limits?.HighPinVoltage ?? DefaultLimits().HighPinVoltage : ReadNumber(_high, "high pin voltage"));
+            SelectedSupport?.SupportsVoltage != true ? draft.Limits?.LowPinVoltage ?? DefaultLimits().LowPinVoltage : ReadNumber(_low, "low pin voltage"),
+            SelectedSupport?.SupportsVoltage != true ? draft.Limits?.HighPinVoltage ?? DefaultLimits().HighPinVoltage : ReadNumber(_high, "high pin voltage"));
         return draft with
         {
             PluginId = pluginId,
             DeviceId = string.IsNullOrEmpty(device) ? null : device,
-            ConnectorId = pluginId == "msi-psu" ? (_connector.SelectedIndex == 1 ? "2" : "1") : null,
+            ConnectorId = _connector.SelectedIndex >= 0 ? SelectedSupport?.Connectors[_connector.SelectedIndex] : null,
             Enabled = _enabled.IsChecked == true,
             Limits = limits,
             NotificationPolicy = _overridePolicy.IsChecked == true ? _policy.Build() : null,

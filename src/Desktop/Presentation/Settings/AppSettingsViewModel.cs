@@ -1,3 +1,7 @@
+using RTXLens.Plugins.GenericNvidia.Contracts;
+using RTXLens.Plugins.Msi.Contracts;
+using RTXLens.Plugins.WireView.Contracts;
+using RTXLens.Plugins.Asus.Contracts;
 using RTXLens.Presentation.Infrastructure;
 using RTXLens.Presentation.Telemetry;
 
@@ -97,7 +101,7 @@ public sealed class AppSettingsViewModel(AppPreferences preferences) : Observabl
         }
     }
 
-    private static readonly string[] StartupTabs = ["", "wireview-pro2", "asus-astral", "generic-nvidia", "msi-psu", "performance", "event-log"];
+    private static readonly string[] StartupTabs = ["", WireViewIdentity.Id, AsusIdentity.Id, NvidiaIdentity.Id, MsiIdentity.Id, "performance", "event-log"];
 
     public int StartupTabIndex
     {

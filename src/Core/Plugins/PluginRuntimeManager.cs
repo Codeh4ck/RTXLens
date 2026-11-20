@@ -37,6 +37,7 @@ public sealed class PluginRuntimeManager : IAsyncDisposable
         [
             .. installed.Select(factory => new PluginDefinition(factory.Id, factory.Name, factory.Capabilities)
             {
+                Hardware = factory.Hardware,
                 ConnectorMetrics = factory is IConnectorSourceProvider provider
                     ? [.. Enum.GetValues<Contracts.Enums.SensorMetric>().Where(metric => provider.Priority(metric) is not null)] : [],
                 Warnings = [.. WarningRegistry.Definitions.Where(definition => definition.PluginId == factory.Id)]

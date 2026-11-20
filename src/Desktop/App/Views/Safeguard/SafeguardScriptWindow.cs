@@ -31,7 +31,7 @@ internal sealed class SafeguardScriptWindow : LensWindow
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
         var previousMail = script.SendsMail && previous?.MailId is { } id
-            ? new SafeguardStorage().Read<SafeguardMailCredential>("mail", id) : null;
+            ? new SafeguardStorage().Read<SafeguardMailCredential>(SafeguardArea.Mail, id) : null;
         var fields = new StackPanel { Spacing = 10 };
         if (script.IsSimulation)
         {
@@ -46,7 +46,7 @@ internal sealed class SafeguardScriptWindow : LensWindow
             _inputs.Add(parameter.Name, input);
             var field = Field(parameter.Label, input);
 
-            if (script.SendsMail && parameter.Name != "DelayMs")
+            if (script.SendsMail && parameter.Name != SafeguardParameterNames.DelayMs)
             {
                 mailFields.Add(field);
             }
@@ -68,7 +68,7 @@ internal sealed class SafeguardScriptWindow : LensWindow
         {
             var test = ActionButton("Send test email", "mail-action", () => RunAsync(async () =>
             {
-                var preview = new SafeguardMailPreview(script.Id, connector, ReadInteger("DelayMs"));
+                var preview = new SafeguardMailPreview(script.Id, connector, ReadInteger(SafeguardParameterNames.DelayMs));
                 SafeguardScripts.ValidateDelay(preview.DelayMs);
                 SetAlert(_message, "Sending test email through the Windows service...");
                 var result = await SubmitMailAsync(previousMail, preview);
@@ -84,7 +84,7 @@ internal sealed class SafeguardScriptWindow : LensWindow
 
         async Task SaveAsync()
         {
-            var delay = ReadInteger("DelayMs");
+            var delay = ReadInteger(SafeguardParameterNames.DelayMs);
             SafeguardScripts.ValidateDelay(delay);
             var candidate = await Task.Run(() => AfterburnerSafeguard.Create(installation, connector, script, delay,
                 script.SendsMail ? Guid.NewGuid() : null));
@@ -134,14 +134,14 @@ internal sealed class SafeguardScriptWindow : LensWindow
         var mail = previousMail?.Settings;
         object? current = field.Name switch
         {
-            "DelayMs" => _previous?.DelayMs,
-            "Host" => mail?.Host,
-            "Port" => mail?.Port,
-            "Security" => mail?.Security,
-            "Authentication" => mail is null ? null : mail.Authenticate ? "Username/password" : "Unauthenticated relay",
-            "Username" => mail?.Username,
-            "Sender" => mail?.Sender,
-            "Recipients" => mail is null ? null : string.Join(", ", mail.Recipients),
+            SafeguardParameterNames.DelayMs => _previous?.DelayMs,
+            SafeguardParameterNames.Host => mail?.Host,
+            SafeguardParameterNames.Port => mail?.Port,
+            SafeguardParameterNames.Security => mail?.Security,
+            SafeguardParameterNames.Authentication => mail is null ? null : mail.Authenticate ? SafeguardMailMode.Password : SafeguardMailMode.Relay,
+            SafeguardParameterNames.Username => mail?.Username,
+            SafeguardParameterNames.Sender => mail?.Sender,
+            SafeguardParameterNames.Recipients => mail is null ? null : string.Join(", ", mail.Recipients),
             _ => null
         };
         current ??= field.Default;
@@ -163,10 +163,10 @@ internal sealed class SafeguardScriptWindow : LensWindow
 
     private async Task<SafeguardMailResult> SubmitMailAsync(SafeguardMailCredential? previousMail, SafeguardMailPreview? preview = null)
     {
-        var settings = new SafeguardMailSettings(Read("Host"), ReadInteger("Port"), Choice("Security"),
-            Choice("Authentication") == "Username/password", Read("Username"), Read("Sender"),
-            Read("Recipients").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
-        var password = ((TextBox)_inputs["Password"]).Text ?? string.Empty;
+        var settings = new SafeguardMailSettings(Read(SafeguardParameterNames.Host), ReadInteger(SafeguardParameterNames.Port), Choice(SafeguardParameterNames.Security),
+            Choice(SafeguardParameterNames.Authentication) == SafeguardMailMode.Password, Read(SafeguardParameterNames.Username), Read(SafeguardParameterNames.Sender),
+            Read(SafeguardParameterNames.Recipients).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
+        var password = ((TextBox)_inputs[SafeguardParameterNames.Password]).Text ?? string.Empty;
         var reusePassword = previousMail?.EncryptedPassword is not null
             && string.Equals(previousMail.Settings.Host, settings.Host, StringComparison.OrdinalIgnoreCase)
             && previousMail.Settings.Username == settings.Username;
@@ -188,7 +188,7 @@ internal sealed class SafeguardScriptWindow : LensWindow
 
         var store = new SafeguardStorage();
         var id = Guid.NewGuid();
-        store.Write("requests", id, new SafeguardMailRequest(DateTimeOffset.UtcNow, settings, encrypted,
+        store.Write(SafeguardArea.Requests, id, new SafeguardMailRequest(DateTimeOffset.UtcNow, settings, encrypted,
             reusePassword ? _previous?.MailId : null, preview is not null) { Preview = preview });
 
         try
@@ -196,9 +196,9 @@ internal sealed class SafeguardScriptWindow : LensWindow
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(25));
             while (!deadline.IsCancellationRequested)
             {
-                if (store.Read<SafeguardMailResult>("results", id) is { } result)
+                if (store.Read<SafeguardMailResult>(SafeguardArea.Results, id) is { } result)
                 {
-                    store.Delete("results", id);
+                    store.Delete(SafeguardArea.Results, id);
                     return result;
                 }
 
@@ -211,7 +211,7 @@ internal sealed class SafeguardScriptWindow : LensWindow
         }
         finally
         {
-            store.Delete("requests", id);
+            store.Delete(SafeguardArea.Requests, id);
         }
 
         return new(false, "No SMTP response from the Windows service. Check that it is running and try again.");

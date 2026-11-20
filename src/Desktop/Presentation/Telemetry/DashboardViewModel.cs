@@ -1,3 +1,7 @@
+using RTXLens.Plugins.GenericNvidia.Contracts;
+using RTXLens.Plugins.Msi.Contracts;
+using RTXLens.Plugins.WireView.Contracts;
+using RTXLens.Plugins.Asus.Contracts;
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using RTXLens.Client.Serialization;
@@ -109,7 +113,7 @@ public sealed class DashboardViewModel : ObservableObject
     {
         if (_configuration is { } configured)
         {
-            var options = configured.Configuration.Plugins.GetValueOrDefault("asus-astral")?.Options?.Deserialize(ClientJsonContext.Default.AsusOptions)
+            var options = configured.Configuration.Plugins.GetValueOrDefault(AsusIdentity.Id)?.Options?.Deserialize(ClientJsonContext.Default.AsusOptions)
                 ?? new RTXLens.Plugins.Asus.Contracts.Configuration.AsusOptions();
             preferences = preferences with { CoreTemperatureWarningC = options.EffectiveCoreTemperatureWarningC,
                 MemoryTemperatureWarningC = options.EffectiveMemoryTemperatureWarningC };
@@ -134,7 +138,7 @@ public sealed class DashboardViewModel : ObservableObject
         WarningSummary = snapshot.Warnings is null ? "Update the backend service to enable shared warning policies."
             : states.Length == 0 ? "No active warnings" : $"{states.Length} warning conditions - shared service state";
         Raise(nameof(WarningSummary));
-        if (updateDetails && detailPanelId != "msi-psu")
+        if (updateDetails && detailPanelId != MsiIdentity.Id)
         {
             GpuStatus.Apply(snapshot, _configuration, preferences, now);
         }
@@ -146,7 +150,7 @@ public sealed class DashboardViewModel : ObservableObject
         }
 
         RefreshReportingPanels();
-        if (updateDetails && detailPanelId != "msi-psu")
+        if (updateDetails && detailPanelId != MsiIdentity.Id)
         {
             RefreshPsuComparisons(now);
         }
@@ -184,9 +188,9 @@ public sealed class DashboardViewModel : ObservableObject
     private void RefreshPsuComparisons(DateTimeOffset now)
     {
         var source = Panels.FirstOrDefault(panel => panel.IsMsi);
-        var staleAfterMs = _configuration?.Configuration.Plugins.GetValueOrDefault("msi-psu")?.StaleAfterMs ?? 5000;
+        var staleAfterMs = _configuration?.Configuration.Plugins.GetValueOrDefault(MsiIdentity.Id)?.StaleAfterMs ?? 5000;
         var readings = source is { Enabled: true, IsReporting: true, State: "Ready" } && _lastSnapshot is { } snapshot
-            ? snapshot.Sensors.Where(reading => reading is { Identity: { PluginId: "msi-psu", Component: SensorComponent.PsuPin, Metric: SensorMetric.Current }, Unit: SensorUnit.Amperes, Quality: ReadingQuality.Valid, Value: { } value and >= 0 }
+            ? snapshot.Sensors.Where(reading => reading is { Identity: { PluginId: MsiIdentity.Id, Component: SensorComponent.PsuPin, Metric: SensorMetric.Current }, Unit: SensorUnit.Amperes, Quality: ReadingQuality.Valid, Value: { } value and >= 0 }
                                                 && double.IsFinite(value) && now - reading.ObservedAt <= TimeSpan.FromMilliseconds(staleAfterMs)).ToArray()
             : [];
         if (readings.Select(reading => reading.Identity.DeviceId).Distinct().Skip(1).Any())
@@ -207,10 +211,10 @@ public sealed class DashboardViewModel : ObservableObject
         var reporting = available.Where(panel => !panel.IsNvidia || _preferences.ShowSeparateGpuStatusTab || !HasAlternativeGpuStatus)
             .OrderBy(panel => panel.Id switch
             {
-                "wireview-pro2" => 0,
-                "asus-astral" => 1,
-                "msi-psu" => 2,
-                "generic-nvidia" => 3,
+                WireViewIdentity.Id => 0,
+                AsusIdentity.Id => 1,
+                MsiIdentity.Id => 2,
+                NvidiaIdentity.Id => 3,
                 _ => 4
             })
             .ThenBy(panel => panel.Id, StringComparer.Ordinal).ToArray();

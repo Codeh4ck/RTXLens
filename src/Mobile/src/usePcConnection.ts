@@ -1,3 +1,4 @@
+import { mobileProtocol } from './mobileProtocol.ts';
 import { NetworkStateType } from 'expo-network';
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
 
@@ -115,7 +116,7 @@ export function usePcConnection(computer: PairedComputer | null, active: boolean
       if (timeout !== undefined) timer = setTimeout(() => fail('unreachable'), timeout);
 
       try {
-        const reply = await native.get(target.address, publicKeyFingerprint, '/session', token);
+        const reply = await native.get(target.address, publicKeyFingerprint, mobileProtocol.Session, token);
         if (disposed || attempt !== current) return;
         clearTimeout(timer);
         const result = sessionResult(reply);

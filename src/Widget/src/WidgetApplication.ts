@@ -1,3 +1,5 @@
+import { chartSettings } from './settings/chartSettings.ts';
+import { MsiId, WireViewId } from './pluginIds.ts';
 import { UpdateChecker } from './updates/UpdateChecker.ts';
 import { UpdateStateStore } from './updates/UpdateStateStore.ts';
 import { widgetVersion } from './updates/WidgetVersion.ts';
@@ -135,7 +137,7 @@ export class WidgetApplication {
         const oldPage = this.settings.text('smallPanel');
         const oldAutoPage = this.settings.enabled('autoPage');
         const oldPageSeconds = this.settings.number('pageSeconds');
-        const oldPeak = this.settings.enabled('showPeak');
+        const oldPeak = this.settings.enabled(chartSettings.Peak);
         const oldPreview = this.settings.text('warningPreview');
         this.settings.update(read);
         this.updates.configure(updatesReady && this.settings.enabled('checkUpdates'), this.settings.text('updateFrequency'));
@@ -150,7 +152,7 @@ export class WidgetApplication {
             this.lastPageAt = Date.now();
         }
 
-        if (oldPeak !== this.settings.enabled('showPeak')) {
+        if (oldPeak !== this.settings.enabled(chartSettings.Peak)) {
             this.peaks.clear();
         }
 
@@ -226,11 +228,11 @@ export class WidgetApplication {
     private changeMetric(slot: number, metric: string): void {
         const binding = resolvePanel(slot, this.settings, this.store, Date.now());
 
-        if (binding.pluginId === 'msi-psu') {
+        if (binding.pluginId === MsiId) {
             return;
         }
 
-        this.settings.setPinMetric(binding.pluginId === 'wireview-pro2' ? 'wireview' : 'asus', metric);
+        this.settings.setPinMetric(binding.pluginId === WireViewId ? 'wireview' : 'asus', metric);
         this.requestRender();
     }
 
@@ -382,7 +384,7 @@ export class WidgetApplication {
                 showSummary,
                 Boolean(data.comparisonLabel),
                 data.rows.map(row => row.id),
-                ...['showSource', 'showSpread', 'showAxis', 'showHeadroom', 'showPeak'].map((name) => this.settings.enabled(name))
+                ...[chartSettings.Source, chartSettings.Spread, chartSettings.Axis, chartSettings.Headroom, chartSettings.Peak].map((name) => this.settings.enabled(name))
             ]);
 
             if (!this.views[index] || this.viewKeys[index] !== key) {

@@ -1,3 +1,4 @@
+using RTXLens.Plugins.Msi.Contracts;
 namespace RTXLens.Plugins.Msi.Contracts.Safeguard;
 
 public sealed record SafeguardMailSettings(string Host, int Port, string Security, bool Authenticate,
@@ -15,7 +16,7 @@ public sealed record SafeguardBinding(Guid Id, string ScriptId, int Version, int
 
         if (Id == Guid.Empty || Connector is not (1 or 2) || Version != SafeguardScriptDefinition.Version
             || !Path.IsPathFullyQualified(AfterburnerPath)
-            || !string.Equals(Path.GetFileName(AfterburnerPath), "MSIAfterburner.exe", StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(Path.GetFileName(AfterburnerPath), AfterburnerFiles.Executable, StringComparison.OrdinalIgnoreCase)
             || definition.SendsMail != (MailId is { } id && id != Guid.Empty)
             || !ValidHash(ExecutableHash) || !ValidHash(ScriptHash) || !ValidHash(WorkflowHash))
         {

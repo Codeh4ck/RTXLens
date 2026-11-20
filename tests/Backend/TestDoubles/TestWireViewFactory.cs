@@ -1,3 +1,5 @@
+using RTXLens.Contracts.Discovery;
+using RTXLens.Plugins.WireView.Contracts;
 using RTXLens.Plugins.WireView.Analysis.Warnings;
 using RTXLens.Warnings;
 using RTXLens.Contracts.Configuration;
@@ -10,6 +12,7 @@ namespace RTXLens.Tests.TestDoubles;
 internal sealed class TestWireViewFactory(WireViewTestState state, WireViewStream stream) : ISensorPluginFactory
 {
     public IWarningSource WarningSource { get; } = new WireViewWarningSource();
+    public PluginHardwareMetadata Hardware => WireViewIdentity.Hardware;
     public string Id => WireViewPlugin.PluginId;
     public string Name => "Test WireView";
 
