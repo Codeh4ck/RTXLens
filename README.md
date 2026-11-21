@@ -14,35 +14,57 @@
   <a href="https://rtxlens.com/support"><img src="https://img.shields.io/badge/Support-RTX%20Lens-db4e79?style=for-the-badge" alt="Support RTX Lens"></a>
 </p>
 
-RTX Lens is a Windows desktop app and an optional Corsair Xeneon Edge widget for monitoring your GPU, power connector, and PSU. See how the load is shared across the connector pins, record what happens under load, and set alerts for the readings you care about.
+RTX Lens shows how your GPU, its power connector, and your PSU behave under load. The Windows service collects readings and runs your configured protection. Use the desktop app to configure hardware, compare pins, and record a session. You can also follow live readings on a Corsair Xeneon Edge or a paired Android phone or iPhone.
 
-## What you can do
+## Download and install
 
-- **Watch live telemetry.** See connector power, voltage, and per-pin current on supported hardware. Compare readings from the GPU or WireView with readings from the MSI PSU.
-- **Record and review sessions.** Pick the metrics and hardware sources to plot, zoom into a spike, and export an interactive HTML chart. Open saved recordings in the app to review them later.
-- **Set warnings for each device.** Configure thresholds and optional reminders for supported sources, with an opt-in shutdown after a warning persists.
-- **Set an MSI PSU fan curve.** Draw a temperature and fan speed curve with up to six points, and see the live temperature, RPM, and duty while you edit.
-- **Configure MSI Afterburner Safeguard+.** Set independent alarms for each PSU connector, back up settings, and choose an emergency low-power profile or a shutdown action with optional email. Safeguard+ History shows RTX Lens script executions and sensor snapshots.
-- **Monitor on Xeneon Edge.** Arrange and customize live charts and readings in the included read-only iCUE widget.
+The monitoring PC requires 64-bit Windows 11 or Windows 10 build 17763 or later. Choose a file from the [latest GitHub release](https://github.com/Codeh4ck/RTXLens/releases/latest).
+
+| What you want | Release file | How to install |
+| --- | --- | --- |
+| Windows desktop app and service | `RTXLens-Setup-<version>-win-x64.exe` | Run setup, approve the Windows administrator prompt, and keep the desktop app selected to configure hardware or record sessions. |
+| Windows installer and Xeneon Edge widget | `RTXLens-win-x64.zip` | Extract the ZIP and run setup. In iCUE, import `rtxlens.icuewidget` and assign it to a Xeneon Edge slot. |
+| Android companion | `RTX-Lens.apk` | Open the APK on your phone and allow installation from that source if Android asks. |
+| iPhone companion | `RTX-Lens.ipa` | Import the unsigned IPA into AltStore Classic to sign and install it with your Apple Account. |
+
+**Upgrading an existing installation?** Exit RTX Lens from its system tray menu and run the new installer. Setup preserves your settings. If you use the widget, import the updated `.icuewidget` file in iCUE as a separate step.
+
+## First run
+
+1. Open **RTX Lens** from the Windows Start menu. Under **Configuration**, check that the plugin for your hardware is enabled. Select **Apply** after making changes.
+2. Open the device’s dashboard tab once it starts reporting. To capture a gaming or benchmark session, open **Performance Chart** and choose **New recording**.
+3. To pair a phone, connect it to the same network as the PC. On the PC, open **Configuration → Mobile Access**, enable mobile access, select **Apply mobile access**, then **Create pairing code**. On the phone, open **Settings → Scan pairing code**. Scan the QR code and approve the device on the PC.
+
+You can exit the desktop app and keep monitoring on the widget or phone. The Windows service continues collecting readings and running configured protection. Keep the desktop app running during a performance recording or when you want desktop notifications.
 
 ## Supported hardware
 
-| Hardware | Readings |
-| --- | --- |
-| Desktop NVIDIA GeForce RTX GPUs | Clocks, core voltage, GPU and VRAM usage, temperatures, and fans where reported |
-| ASUS ROG Astral RTX 5080 and 5090 | GPU-side per-pin connector readings |
-| Thermal Grizzly WireView Pro II | Per-pin connector readings, cable rating, temperatures, and faults |
-| MSI MPG Ai1300TS and Ai1600TS | PSU-side per-pin current for both connectors, temperature, and fan status |
+| Hardware | Where the readings come from | What you can see |
+| --- | --- | --- |
+| Desktop NVIDIA GeForce RTX GPUs | GPU telemetry | Clocks, core voltage, GPU and VRAM usage, temperatures, and fan speeds where reported. Individual pin currents require one of the sources below. |
+| ASUS ROG Astral RTX 5080 and 5090 | GPU side of the power connector | See how current is shared across the connector pins at the graphics card. |
+| Thermal Grizzly WireView Pro II | Inline power monitor at the GPU connector | Per-pin current, voltage and power, plus connector voltage, cable rating, temperatures, and device faults. |
+| MSI MPG Ai1300TS and Ai1600TS | PSU side of each connector | Per-pin currents for both connectors, PSU temperature, and fan status. With an Astral or WireView Pro II, you can compare both ends of the cable. |
 
 Sensor availability varies by device. All listed hardware has been tested on physical devices, including the MSI Ai1600TS and the WireView Pro II Noctua Edition. A community member tested WireView support.
 
-## Install
+## What you can do
 
-1. Get the ZIP from the [RTX Lens download page](https://rtxlens.com/download), extract it, and run `RTXLens-Setup-<version>-win-x64.exe`.
-2. Install the monitoring service and select the desktop app if you want to configure settings or record sessions.
-3. For Xeneon Edge, import `rtxlens.icuewidget` separately in iCUE. [Widget setup guide](src/Widget/INSTALL.md)
+- **Record and review sessions.** Pick metrics and hardware sources, zoom into a spike, export an interactive HTML chart, or reopen a saved recording.
+- **Set warnings for each device.** Configure thresholds, reminders, and an optional shutdown if a warning persists.
+- **Tune an MSI PSU fan curve.** Set up to six temperature and fan-duty points while viewing live temperature, RPM, and requested duty.
+- **Configure MSI Afterburner Safeguard+.** Set independent alarms for each PSU connector, back up settings, and choose an emergency low-power profile or a shutdown action with optional email. Safeguard+ History shows script executions and sensor snapshots.
+- **Monitor away from the desktop.** Customize live charts in the read-only Xeneon Edge widget, or check readings and warning history on your paired phone.
 
-Requires 64-bit Windows 11 or Windows 10 build 17763 or later. [Setup and compatibility FAQ](https://rtxlens.com/faq)
+## Troubleshooting
+
+| Symptom | First check |
+| --- | --- |
+| Desktop app cannot connect | Open Windows **Services** and check that **RTX Lens Service** is running. On a default installation the desktop app connects to `http://localhost:59273/`. |
+| One device or reading is missing | Check the device’s plugin under **Configuration** and see whether another device is reporting. Use the hardware table above to check which device supplies the reading. |
+| Xeneon Edge widget is blank | Confirm live readings appear in the desktop app on the same PC, then check that the widget is imported and assigned to a slot in iCUE. |
+
+For a reproducible problem, include the RTX Lens version, Windows build, hardware model, and whether other devices still report. The read-only PowerShell diagnostic collector saves a report to your desktop. [Collect diagnostics](scripts/Collect-RTXLensDiagnostics.ps1) · [Report a bug](https://github.com/Codeh4ck/RTXLens/issues/new?template=bug_report.md) · [Setup and compatibility FAQ](https://rtxlens.com/faq)
 
 ## Support RTX Lens
 
@@ -53,15 +75,19 @@ Sponsorship helps fund development and testing on real GPUs, power supplies, and
 <details>
 <summary>Build from source</summary>
 
-Build on Windows with the .NET 10 SDK and PowerShell 7. Widget packaging also requires Node.js 22.18 or later, npm, and the `icuewidget` CLI on your PATH.
+Build on Windows with the .NET 10 SDK and PowerShell 7. From the repository root, run the desktop regression tests with this command.
 
-Open `RTXLens.slnx` in Rider or Visual Studio, or build the complete release from the repository root.
+```powershell
+dotnet run --project tests/Desktop -c Release
+```
+
+To build the complete Windows release, install Node.js 22.18 or later, npm, and the `icuewidget` CLI. Browser verification uses Microsoft Edge by default.
 
 ```powershell
 ./scripts/Build-Release.ps1
 ```
 
-The script reads the version from `version.json`, runs the checks, and writes the installer and widget bundle under `.dist/releases/`.
+The script reads `version.json`, runs the release checks, and writes the Windows installer, widget, and ZIP under `.dist/releases/<version>/`. For development, open `RTXLens.slnx` in Rider or Visual Studio. The Android and iOS packages are built separately through the [mobile build workflow](.github/workflows/mobile-app-build.yml).
 
 </details>
 

@@ -134,7 +134,11 @@ try {
     validateImportMetadata(html, localization);
     await writeFile(join(stage, 'translation.json'), JSON.stringify(localization, null, 2));
     await cp(join(root, 'resources'), join(stage, 'resources'), { recursive: true, filter: source => basename(source) !== 'fonts' });
-    await cp(join(root, 'INSTALL.md'), join(stage, 'INSTALL.md'));
+    await writeFile(join(stage, 'INSTALL.md'), [
+        '# RTX Lens for Xeneon Edge', '',
+        'Install the RTX Lens Windows service on this PC. Import rtxlens.icuewidget in iCUE and assign it to a Xeneon Edge slot.', '',
+        '[Setup and troubleshooting](https://github.com/Codeh4ck/RTXLens#download-and-install)', ''
+    ].join('\n'));
     await cp(join(root, 'THIRD-PARTY-NOTICES.md'), join(stage, 'THIRD-PARTY-NOTICES.md'));
     // CLI 0.2.3 excludes hidden path components, including a .dist ancestor. Package a temporary
     // copy outside .dist, then retain the actual runtime and package only under the requested output.

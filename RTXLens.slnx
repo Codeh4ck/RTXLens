@@ -56,7 +56,6 @@
     <Project Path="src/Service/RTXLens.Service.csproj" />
     <Project Path="tests/Backend/RTXLens.Tests.csproj" />
     <Folder Name="/Xeneon Edge/">
-        <File Path="src/Widget/INSTALL.md" />
         <File Path="src/Widget/package.json" />
         <File Path="src/Widget/manifest.json" />
         <File Path="src/Widget/tsconfig.json" />

@@ -385,6 +385,8 @@ GEMINI.md
 # Local widget Markdown files
 /src/Widget/**/*.md
 
+# Keep the mobile guide local, like the widget guides above.
+/src/Mobile/README.md
+
 # Required widget packaging resources
-!/src/Widget/INSTALL.md
 !/src/Widget/THIRD-PARTY-NOTICES.md
