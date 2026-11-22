@@ -1,3 +1,6 @@
+1.1.5 - MSI PSU configuration fix
+- Opening MSI PSU configuration now works when MSI Afterburner is missing or its saved installation path is invalid
+
 1.1.4 - WireView Pro II dashboard fixes
 - Pin headroom appears automatically when the device starts reporting, with a retry if device settings are temporarily unavailable
 - The Device settings button now uses the same teal gear as other settings actions
