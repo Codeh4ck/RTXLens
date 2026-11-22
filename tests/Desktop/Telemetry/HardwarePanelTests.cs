@@ -144,6 +144,7 @@ internal static class HardwarePanelTests
             Reading(SensorComponent.GpuCore, SensorMetric.Temperature, 85), Reading(SensorComponent.GpuMemory, SensorMetric.Temperature, 70),
             Reading(SensorComponent.GpuMemory, SensorMetric.MemoryUsed, 8192), Reading(SensorComponent.GpuMemory, SensorMetric.MemoryTotal, 32768),
             Reading(SensorComponent.GpuMemory, SensorMetric.Utilization, 25), Reading(SensorComponent.GpuCore, SensorMetric.Utilization, 80),
+            Reading(SensorComponent.GpuCrossbar, SensorMetric.Clock, 2025),
             Reading(SensorComponent.GpuBoard, SensorMetric.Power, 450)] };
         frame = frame with
         {
@@ -156,6 +157,9 @@ internal static class HardwarePanelTests
         TestAssert.Equal("1200 RPM", model.Fan1.Value);
         TestAssert.Equal("1400 RPM", model.Fan2.Value);
         TestAssert.Equal("80%", model.GpuUsageText);
+        TestAssert.True(model.HasCrossbarClock, "The supported clock should appear.");
+        TestAssert.Equal("2025 MHz", model.CrossbarClock.Value);
+        TestAssert.False(model.HasSystemClock, "An unreported clock should be hidden.");
         TestAssert.True(model.HasVramUsage, "The standalone VRAM bar should use the reported utilization.");
         TestAssert.Equal(25d, model.VramUsagePercent);
         TestAssert.True(model.HasSecondFan, "The second fan is shown when the card reports it.");

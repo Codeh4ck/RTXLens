@@ -238,7 +238,7 @@ export function Gpu({ frame, live, connectionCard }: TelemetryProps) {
   const groups = groupMetrics(frame.sensors, 'gpu');
   const selected = groups.find(group => group.key === source) ?? groups.find(group => group.source === NvidiaId) ?? groups[0];
   const readings = selected?.readings ?? [];
-  const diagnostics = ['GpuPowerLimits', 'GpuPerformance', 'GpuPcie'];
+  const diagnostics = ['GpuPowerLimits', 'GpuPerformance', 'GpuPcie', 'GpuCrossbar', 'GpuSystem'];
   const gpuPower = readings.filter(reading => reading.identity.component === 'GpuPowerLimits'
     || (reading.identity.component === 'GpuBoard' && reading.identity.metric === 'Power'));
   const health = readings.filter(reading => !diagnostics.includes(reading.identity.component) && !gpuPower.includes(reading)

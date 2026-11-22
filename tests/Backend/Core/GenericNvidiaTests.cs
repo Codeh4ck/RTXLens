@@ -21,6 +21,7 @@ internal static class GenericNvidiaTests
         runner.Run(MapsSingleAndMultipleFansByCoolerIdWithoutInventingDuty);
         runner.Run(MapsCoreVoltageAndHotspotWithoutPublishingBoardPower);
         runner.Run(StreamsNvmlDiagnosticsForTheSelectedGpu);
+        runner.Run(StreamsIndependentDomainClocksWithTheirMeasurementTime);
         runner.Run(InputVoltagePrefersMeasurementsAndUsesConnectorRatioOnlyAsFallback);
         runner.Run(RecognizesAstralCapabilitiesAndKeepsStableGpuIdentity);
         runner.Run(MigrationPreservesExistingThresholdsAndDefaults);
@@ -83,6 +84,40 @@ internal static class GenericNvidiaTests
         TestAssert.Equal(2, readings.Length);
         TestAssert.Equal(SensorUnit.Volts, readings.Single(reading => reading.Identity.Component == SensorComponent.GpuCore).Unit);
         TestAssert.Equal<double?>(75, readings.Single(reading => reading.Identity.Component == SensorComponent.GpuHotspot).Value);
+    }
+
+    private static void StreamsIndependentDomainClocksWithTheirMeasurementTime()
+    {
+        var clock = new TestTimeProvider();
+        var source = Source();
+        source.DomainClocks = [new("GPU Crossbar", SensorType.Clock, 0, 2010.5f)];
+        using var reader = new NvidiaTelemetryReader(source, clock);
+        var factory = new GenericNvidiaPluginFactory(reader);
+        var settings = factory.CreateDefaultSettings() with { PollIntervalMs = 250 };
+        using var plugin = factory.Create(settings);
+
+        var first = plugin.PollAsync(CancellationToken.None).Result;
+        var crossbar = first.Sensors.Single(item => item.Identity.Component == SensorComponent.GpuCrossbar);
+        TestAssert.Equal("pci-first", crossbar.Identity.DeviceId);
+        TestAssert.Equal(SensorUnit.Megahertz, crossbar.Unit);
+        TestAssert.Equal<double?>(2010.5, crossbar.Value);
+        TestAssert.False(first.Sensors.Any(item => item.Identity.Component == SensorComponent.GpuSystem), "An unsupported clock should be omitted.");
+
+        clock.Advance(TimeSpan.FromMilliseconds(settings.PollIntervalMs));
+        source.DomainClocks = [new("GPU Crossbar", SensorType.Clock, 0, 2100)];
+        var second = plugin.PollAsync(CancellationToken.None).Result;
+        var updated = second.Sensors.Single(item => item.Identity.Component == SensorComponent.GpuCrossbar);
+        TestAssert.Equal<double?>(2100, updated.Value);
+        TestAssert.Equal(clock.GetUtcNow(), updated.ObservedAt);
+        TestAssert.Equal(2, source.ClockReads);
+
+        plugin.ApplySettings(settings with { PollIntervalMs = 100 });
+        clock.Advance(TimeSpan.FromMilliseconds(100));
+        source.DomainClocks = [new("GPU Crossbar", SensorType.Clock, 0, null), new("GPU System", SensorType.Clock, 0, 1700)];
+        var next = plugin.PollAsync(CancellationToken.None).Result;
+        TestAssert.Equal(ReadingQuality.Unavailable, next.Sensors.Single(item => item.Identity.Component == SensorComponent.GpuCrossbar).Quality);
+        TestAssert.Equal<double?>(1700, next.Sensors.Single(item => item.Identity.Component == SensorComponent.GpuSystem).Value);
+        TestAssert.Equal(3, source.ClockReads);
     }
 
     private static void StreamsNvmlDiagnosticsForTheSelectedGpu()

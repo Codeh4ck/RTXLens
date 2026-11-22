@@ -23,6 +23,15 @@ internal sealed class TestNvidiaHardwareSource : INvidiaHardwareSource
         return Sensors;
     }
 
+    public NvidiaSensor[] DomainClocks { get; set; } = [];
+    public int ClockReads { get; private set; }
+
+    public NvidiaSensor[] ReadDomainClocks(NvidiaDevice device)
+    {
+        ClockReads++;
+        return DomainClocks;
+    }
+
     public void Reset() => Resets++;
 
     public void Dispose() { }

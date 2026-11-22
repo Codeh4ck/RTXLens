@@ -34,9 +34,8 @@ public sealed class LibreNvidiaHardwareSource : INvidiaHardwareSource
         foreach (var gpu in _computer.Hardware)
         {
             var legacyId = gpu.Identifier.ToString();
-            if (gpu.HardwareType != HardwareType.GpuNvidia
-                || !gpu.Name.Contains("GeForce RTX", StringComparison.OrdinalIgnoreCase)
-                || !identities.TryGetValue(legacyId, out var id))
+
+            if (gpu.HardwareType != HardwareType.GpuNvidia || !gpu.Name.Contains("GeForce RTX", StringComparison.OrdinalIgnoreCase) || !identities.TryGetValue(legacyId, out var id))
             {
                 continue;
             }
@@ -56,12 +55,16 @@ public sealed class LibreNvidiaHardwareSource : INvidiaHardwareSource
         }
 
         gpu.Update();
+
         return [.. gpu.Sensors.Select(sensor => new NvidiaSensor(sensor.Name, sensor.SensorType, sensor.Index,
             sensor.Value is { } value && float.IsFinite(value) ? value : null))];
     }
 
+    public NvidiaSensor[] ReadDomainClocks(NvidiaDevice device) => _identities.ReadDomainClocks(device.Id);
+
     public void Reset()
     {
+        _identities.ResetClocks();
         var computer = _computer;
         _computer = null;
         _hardware.Clear();

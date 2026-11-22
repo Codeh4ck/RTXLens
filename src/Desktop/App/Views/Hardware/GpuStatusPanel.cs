@@ -16,7 +16,7 @@ namespace RTXLens.App.Views.Hardware;
 
 internal static class GpuStatusPanel
 {
-    public static SectionPanel Create(GpuStatusViewModel gpu, HardwarePanelViewModel? wireView)
+    public static SectionPanel Create(GpuStatusViewModel gpu, HardwarePanelViewModel? wireView, bool showDomainClocks)
     {
         var device = Caption();
         BindTo(device, TextBlock.TextProperty, gpu, nameof(gpu.DeviceText));
@@ -32,7 +32,7 @@ internal static class GpuStatusPanel
             {
                 Inset(ReadingRow(IconLabel("GPU usage", "boost-limit", 24), Reading(gpu, nameof(gpu.GpuUsageText))), 44),
                 Inset(ReadingRow(IconLabel("Core voltage", "voltage", 24), Reading(gpu, nameof(gpu.CoreVoltageText))), 44),
-                Group("Clocks", "vcore", Pair(Column("Core clock", gpu.CoreClock), Column("Memory clock", gpu.MemoryClock))),
+                CreateClocks(gpu, showDomainClocks),
                 CreateVram(gpu),
                 CreateTemperatures(gpu),
                 CreateFans(gpu)
@@ -48,6 +48,35 @@ internal static class GpuStatusPanel
             new StackPanel { Spacing = 12, Children = { device, unavailable, readings } });
     }
 
+    private static Border CreateClocks(GpuStatusViewModel gpu, bool showDomainClocks)
+    {
+        var clocks = Pair(Column(gpu.CoreClock.Label, gpu.CoreClock), Column(gpu.MemoryClock.Label, gpu.MemoryClock));
+
+        if (!showDomainClocks)
+        {
+            return Group("Clocks", "vcore", clocks);
+        }
+
+        var crossbar = Column(gpu.CrossbarClock.Label, gpu.CrossbarClock);
+        var domains = Pair(crossbar, Column(gpu.SystemClock.Label, gpu.SystemClock));
+        var system = (Border)domains.Children[1];
+
+        Watch(domains, gpu, UpdateLayout, nameof(gpu.HasCrossbarClock));
+        Watch(domains, gpu, UpdateLayout, nameof(gpu.HasSystemClock));
+
+        return Group("Clocks", "vcore", new StackPanel { Spacing = 8, Children = { clocks, domains } });
+
+        void UpdateLayout()
+        {
+            domains.IsVisible = gpu.HasCrossbarClock || gpu.HasSystemClock;
+            crossbar.IsVisible = gpu.HasCrossbarClock;
+            system.IsVisible = gpu.HasSystemClock;
+            domains.ColumnDefinitions[0].Width = gpu.HasCrossbarClock ? GridLength.Star : new GridLength(0);
+            domains.ColumnDefinitions[1].Width = gpu.HasSystemClock ? GridLength.Star : new GridLength(0);
+            system.BorderThickness = new Thickness(gpu.HasCrossbarClock ? 1 : 0, 0, 0, 0);
+        }
+    }
+
     private static Border CreateVram(GpuStatusViewModel gpu)
     {
         var value = Reading(gpu.VramUsage, nameof(MetricViewModel.Value));
@@ -59,10 +88,17 @@ internal static class GpuStatusPanel
             HorizontalAlignment = HorizontalAlignment.Right
         };
 
-        var progress = new ProgressBar { Minimum = 0, Maximum = 100, Height = 5, Margin = new Thickness(16, 0, 0, 0) };
-        progress[!TemplatedControl.ForegroundProperty] = new DynamicResourceExtension("PrimaryBrush");
-        progress[!TemplatedControl.BackgroundProperty] = new DynamicResourceExtension("TrackBrush");
-        BindTo(progress, ProgressBar.ValueProperty, gpu, nameof(gpu.VramUsagePercent));
+        var progress = new ProgressBar
+        {
+            Minimum = 0,
+            Maximum = 100,
+            Height = 5,
+            Margin = new Thickness(16, 0, 0, 0),
+            [!TemplatedControl.ForegroundProperty] = new DynamicResourceExtension("PrimaryBrush"),
+            [!TemplatedControl.BackgroundProperty] = new DynamicResourceExtension("TrackBrush")
+        };
+
+        BindTo(progress, RangeBase.ValueProperty, gpu, nameof(gpu.VramUsagePercent));
         BindTo(progress, Visual.IsVisibleProperty, gpu, nameof(gpu.HasVramUsage));
 
         return Group("VRAM usage", "vramusage", new StackPanel { Spacing = 5, Children = { valueBox, progress } });
@@ -94,6 +130,7 @@ internal static class GpuStatusPanel
             Padding = new Thickness(7, 4),
             Flyout = new Flyout { Content = CreateBoostTable(diagnostics), FlyoutPresenterClasses = { "boost-details" } }
         };
+
         AutomationProperties.SetName(detailsButton, "Show boost limit details");
         ToolTip.SetTip(detailsButton, "Show boost limit details");
 
@@ -103,6 +140,7 @@ internal static class GpuStatusPanel
             Spacing = 8,
             Children = { IconLabel(diagnostics.ActiveBoostLimits.Label, "boost-limit", 20, caption: true), detailsButton }
         };
+
         var active = new StackPanel
         {
             Spacing = 5,
@@ -126,8 +164,9 @@ internal static class GpuStatusPanel
         var list = new ItemsControl
         {
             ItemsSource = diagnostics.BoostLimits,
-            ItemTemplate = new FuncDataTemplate<MetricViewModel>((metric, _) => metric is null ? null : Compact(metric, showIcon: false))
+            ItemTemplate = new FuncDataTemplate<MetricViewModel>((metric, _) => Compact(metric, showIcon: false))
         };
+
         var headings = ReadingRow(Caption("Boost limit"), Caption("Time limited"));
 
         return Inset(new StackPanel { Spacing = 6, MinWidth = 290, Children = { headings, Divider(), list } });
@@ -135,10 +174,13 @@ internal static class GpuStatusPanel
 
     private static StackPanel CreatePowerScale(GpuDiagnosticsViewModel diagnostics)
     {
-        var track = new RangeMarkerTrack { Height = 20 };
-        track[!RangeMarkerTrack.TrackBrushProperty] = new DynamicResourceExtension("TrackBrush");
-        track[!RangeMarkerTrack.ActiveBrushProperty] = new DynamicResourceExtension("PrimaryBrush");
-        track[!RangeMarkerTrack.ReferenceBrushProperty] = new DynamicResourceExtension(DesktopBrushes.MutedText);
+        var track = new RangeMarkerTrack
+        {
+            Height = 20,
+            [!RangeMarkerTrack.TrackBrushProperty] = new DynamicResourceExtension("TrackBrush"),
+            [!RangeMarkerTrack.ActiveBrushProperty] = new DynamicResourceExtension("PrimaryBrush"),
+            [!RangeMarkerTrack.ReferenceBrushProperty] = new DynamicResourceExtension(DesktopBrushes.MutedText)
+        };
 
         Watch(track, diagnostics, () =>
         {
@@ -149,6 +191,7 @@ internal static class GpuStatusPanel
 
         var minimum = Caption();
         BindTo(minimum, TextBlock.TextProperty, diagnostics, nameof(diagnostics.MinimumPowerText));
+
         var maximum = Caption();
         BindTo(maximum, TextBlock.TextProperty, diagnostics, nameof(diagnostics.MaximumPowerText));
 
@@ -178,6 +221,7 @@ internal static class GpuStatusPanel
             CornerRadius = new CornerRadius(active ? 2 : 4),
             VerticalAlignment = VerticalAlignment.Center
         };
+
         if (active)
         {
             marker[!Border.BackgroundProperty] = new DynamicResourceExtension("PrimaryBrush");
@@ -190,7 +234,9 @@ internal static class GpuStatusPanel
 
         var heading = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { marker, Caption(label) } };
         var value = Reading(metric, nameof(MetricViewModel.Value), 14, accent: false);
+
         value.HorizontalAlignment = active ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+
         return new StackPanel { Spacing = 2, Children = { heading, value } };
     }
 
@@ -198,6 +244,7 @@ internal static class GpuStatusPanel
     {
         var link = Reading(diagnostics.CurrentLink, nameof(MetricViewModel.Value), 20);
         link.TextTrimming = TextTrimming.CharacterEllipsis;
+
         BindTo(link, ToolTip.TipProperty, diagnostics.CurrentLink, nameof(MetricViewModel.Value));
 
         var speed = Inset(new StackPanel
@@ -237,10 +284,12 @@ internal static class GpuStatusPanel
         var value = Reading(metric, nameof(MetricViewModel.Value), 15, accent);
         value.TextTrimming = TextTrimming.CharacterEllipsis;
         value.MaxWidth = 225;
+
         BindTo(value, ToolTip.TipProperty, metric, nameof(MetricViewModel.Value));
 
         var row = ReadingRow(IconLabel(metric.Label, showIcon ? metric.IconName : null, 20, caption: !showIcon), value);
         row.MinHeight = showIcon ? 30 : 0;
+
         return row;
     }
 
@@ -248,6 +297,7 @@ internal static class GpuStatusPanel
     {
         var panel = new StackPanel { Spacing = 1 };
         panel.Children.Add(Divider(8));
+
         foreach (var row in rows)
         {
             panel.Children.Add(row);
@@ -262,13 +312,16 @@ internal static class GpuStatusPanel
         {
             Width = 7,
             Height = 7,
-            VerticalAlignment = VerticalAlignment.Center
+            VerticalAlignment = VerticalAlignment.Center,
+            [!Avalonia.Controls.Shapes.Shape.FillProperty] = new DynamicResourceExtension("ErrorBrush")
         };
-        marker[!Avalonia.Controls.Shapes.Shape.FillProperty] = new DynamicResourceExtension("ErrorBrush");
+
         BindTo(marker, Visual.IsVisibleProperty, metric, nameof(MetricViewModel.IsWarning));
+
         ToolTip.SetTip(marker, "Temperature warning active");
 
         var title = new TextBlock { Text = label, FontSize = 14, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center };
+
         var heading = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -276,6 +329,7 @@ internal static class GpuStatusPanel
             Spacing = 6,
             Children = { title, marker }
         };
+
         var value = Reading(metric, nameof(MetricViewModel.Value));
         value.TextAlignment = TextAlignment.Center;
         value.TextWrapping = TextWrapping.Wrap;
@@ -285,11 +339,16 @@ internal static class GpuStatusPanel
 
     private static Grid Pair(Control first, Control second)
     {
-        var divided = new Border { BorderThickness = new Thickness(1, 0, 0, 0), Child = second };
-        divided[!Border.BorderBrushProperty] = new DynamicResourceExtension(DesktopBrushes.PanelBorder);
+        var divided = new Border
+        {
+            BorderThickness = new Thickness(1, 0, 0, 0),
+            Child = second,
+            [!Border.BorderBrushProperty] = new DynamicResourceExtension(DesktopBrushes.PanelBorder)
+        };
 
         var pair = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*"), Children = { first, divided } };
         Grid.SetColumn(divided, 1);
+
         return pair;
     }
 
@@ -297,6 +356,7 @@ internal static class GpuStatusPanel
     {
         var heading = IconLabel(label, icon, 24);
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("126,*"), ColumnSpacing = 10, Children = { heading, readings } };
+
         Grid.SetColumn(readings, 1);
         return Inset(grid, 68);
     }
@@ -307,19 +367,25 @@ internal static class GpuStatusPanel
         {
             CornerRadius = new CornerRadius(8),
             BorderThickness = new Thickness(1),
-            Padding = new Thickness(12, minimumHeight == 44 ? 8 : 12),
+            Padding = new Thickness(12, Math.Abs(minimumHeight - 44) < 0.001 ? 8 : 12),
             MinHeight = minimumHeight,
-            Child = content
+            Child = content,
+            [!Border.BackgroundProperty] = new DynamicResourceExtension("InsetBrush"),
+            [!Border.BorderBrushProperty] = new DynamicResourceExtension(DesktopBrushes.PanelBorder)
         };
-        card[!Border.BackgroundProperty] = new DynamicResourceExtension("InsetBrush");
-        card[!Border.BorderBrushProperty] = new DynamicResourceExtension(DesktopBrushes.PanelBorder);
+
         return card;
     }
 
     private static Border Divider(double gap = 0)
     {
-        var rule = new Border { Height = 1, Margin = new Thickness(0, 0, 0, gap) };
-        rule[!Border.BackgroundProperty] = new DynamicResourceExtension(DesktopBrushes.PanelBorder);
+        var rule = new Border
+        {
+            Height = 1,
+            Margin = new Thickness(0, 0, 0, gap),
+            [!Border.BackgroundProperty] = new DynamicResourceExtension(DesktopBrushes.PanelBorder)
+        };
+
         return rule;
     }
 
@@ -332,15 +398,22 @@ internal static class GpuStatusPanel
             VerticalAlignment = VerticalAlignment.Center,
             Children = { label, value }
         };
+
         Grid.SetColumn(value, 1);
         value.VerticalAlignment = VerticalAlignment.Center;
+
         return row;
     }
 
     private static ReadingText Reading(object source, string path, double fontSize = 18, bool accent = true)
     {
-        var value = new ReadingText { FontSize = fontSize, FontWeight = FontWeight.SemiBold };
-        value[!ReadingText.UnitBrushProperty] = new DynamicResourceExtension(DesktopBrushes.MutedText);
+        var value = new ReadingText
+        {
+            FontSize = fontSize,
+            FontWeight = FontWeight.SemiBold,
+            [!ReadingText.UnitBrushProperty] = new DynamicResourceExtension(DesktopBrushes.MutedText)
+        };
+
         if (accent)
         {
             value[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("PrimaryBrush");

@@ -39,8 +39,8 @@ public sealed class NvidiaTelemetryReader(INvidiaHardwareSource source, TimeProv
             try
             {
                 Discover(false);
-                var device = deviceId is null ? _devices.FirstOrDefault()
-                    : _devices.FirstOrDefault(item => item.Id == deviceId || item.LegacyId == deviceId);
+
+                var device = deviceId is null ? _devices.FirstOrDefault() : _devices.FirstOrDefault(item => item.Id == deviceId || item.LegacyId == deviceId);
 
                 if (device is null)
                 {
@@ -48,26 +48,40 @@ public sealed class NvidiaTelemetryReader(INvidiaHardwareSource source, TimeProv
                 }
 
                 var now = clock.GetUtcNow();
-                if (_samples.TryGetValue(device.Id, out var sample)
-                    && now - sample.ObservedAt < TimeSpan.FromMilliseconds(pollIntervalMs))
+                if (_samples.TryGetValue(device.Id, out var sample) && now - sample.ObservedAt < TimeSpan.FromMilliseconds(pollIntervalMs))
                 {
                     return sample;
                 }
 
                 var sensors = source.Read(device);
                 token.ThrowIfCancellationRequested();
+
                 sample = new NvidiaSample(device, clock.GetUtcNow(), sensors);
                 _samples[device.Id] = sample;
+
                 return sample;
             }
             catch
             {
                 _samples.Clear();
+
                 _devices = [];
                 _discoveredAt = DateTimeOffset.MinValue;
+
                 source.Reset();
                 throw;
             }
+        }
+    }
+
+    public NvidiaSample ReadDomainClocks(NvidiaDevice device)
+    {
+        lock (_lock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            var sensors = source.ReadDomainClocks(device);
+            return new NvidiaSample(device, clock.GetUtcNow(), sensors);
         }
     }
 
@@ -84,10 +98,12 @@ public sealed class NvidiaTelemetryReader(INvidiaHardwareSource source, TimeProv
         }
 
         _devices = source.Discover();
+
         if (_devices.Length == 0)
         {
             source.Reset();
         }
+
         _discoveredAt = clock.GetUtcNow();
 
         foreach (var id in _samples.Keys.Where(id => _devices.All(device => device.Id != id)).ToArray())
@@ -106,8 +122,10 @@ public sealed class NvidiaTelemetryReader(INvidiaHardwareSource source, TimeProv
             }
 
             _disposed = true;
+
             _samples.Clear();
             _devices = [];
+
             source.Dispose();
         }
     }

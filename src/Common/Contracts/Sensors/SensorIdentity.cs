@@ -11,7 +11,8 @@ public sealed record SensorIdentity(
     int? Channel = null,
     string? ConnectorId = null)
 {
-    public bool IsGpuDiagnostic() => Component is SensorComponent.GpuPcie or SensorComponent.GpuPerformance or SensorComponent.GpuPowerLimits;
+    public bool IsGpuDiagnostic() => Component is SensorComponent.GpuPcie or SensorComponent.GpuPerformance or SensorComponent.GpuPowerLimits
+        or SensorComponent.GpuCrossbar or SensorComponent.GpuSystem;
 
     public string Key => string.Join('/', Uri.EscapeDataString(PluginId), Uri.EscapeDataString(DeviceId),
         JsonNamingPolicy.CamelCase.ConvertName(Component.ToString()), Uri.EscapeDataString(ConnectorId ?? "default"),

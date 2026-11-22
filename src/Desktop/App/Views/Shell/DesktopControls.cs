@@ -89,8 +89,7 @@ internal static class DesktopControls
 
     private static Button CreateCommitButton(string text)
     {
-        var icon = new PathIcon { Data = CheckIcon, Width = 15, Height = 15 };
-        icon[!TemplatedControl.ForegroundProperty] = new DynamicResourceExtension("IconBrush");
+        var icon = new PathIcon { Data = CheckIcon, Width = 15, Height = 15, [!TemplatedControl.ForegroundProperty] = new DynamicResourceExtension("IconBrush") };
 
         var button = CreateActionButton(text, icon);
         button.Classes.Add("primary-action");

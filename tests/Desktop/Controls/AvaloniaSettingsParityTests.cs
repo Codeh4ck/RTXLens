@@ -46,8 +46,7 @@ internal static class AvaloniaSettingsParityTests
             }
         }, Version: "test-1"));
 
-        var window = new Window { Width = 1280, Height = 1160, RequestedThemeVariant = ThemeVariant.Dark };
-        window.Content = new SettingsPage(shell);
+        var window = new Window { Width = 1280, Height = 1160, RequestedThemeVariant = ThemeVariant.Dark, Content = new SettingsPage(shell) };
         window.Show();
 
         try

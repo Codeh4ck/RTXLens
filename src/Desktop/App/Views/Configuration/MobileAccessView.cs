@@ -533,8 +533,7 @@ internal sealed class MobileAccessView : UserControl
         {
             if (_devices.Children.Count > 0)
             {
-                var divider = new Border { Height = 1 };
-                divider[!Border.BackgroundProperty] = new DynamicResourceExtension(DesktopBrushes.PanelBorder);
+                var divider = new Border { Height = 1, [!Border.BackgroundProperty] = new DynamicResourceExtension(DesktopBrushes.PanelBorder) };
                 _devices.Children.Add(divider);
             }
 
