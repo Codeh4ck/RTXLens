@@ -1,3 +1,8 @@
+1.1.6 - NVIDIA clocks and iCUE widget settings
+- The NVIDIA plugin reports Crossbar (XBAR) and System (SYS) clocks on supported GPUs in the dedicated GPU Status tab.
+- Configure iCUE widget profiles in RTX Lens, including panel layout, readings, alerts and appearance.
+- Enable either optional clock in the widget Clocks card. Compact panels can switch between clock readings.
+
 1.1.5 - MSI PSU configuration fix
 - Opening MSI PSU configuration now works when MSI Afterburner is missing or its saved installation path is invalid
 

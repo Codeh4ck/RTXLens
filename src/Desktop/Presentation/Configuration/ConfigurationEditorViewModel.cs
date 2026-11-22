@@ -13,8 +13,7 @@ using RTXLens.Presentation.Telemetry;
 
 namespace RTXLens.Presentation.Configuration;
 
-public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool localOnly = false,
-    Func<ServiceConfiguration, ServiceConfiguration, Task>? recordChange = null) : ObservableObject
+public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool localOnly = false, Func<ServiceConfiguration, ServiceConfiguration, Task>? recordChange = null) : ObservableObject
 {
     private ConfigurationSnapshot? _baseline;
     private PluginCatalog? _catalog;
@@ -31,11 +30,74 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
     public WarningOptionsEditorViewModel Warnings { get; } = new();
     public ObservableCollection<PluginSettingsEditorViewModel> Plugins { get; } = [];
     public ObservableCollection<SelectionEditorViewModel> Selections { get; } = [];
-    public ObservableCollection<SensorChoice> AvailableSensors { get; } = [];
+    private ObservableCollection<SensorChoice> AvailableSensors { get; } = [];
 
     public GenericNvidiaSettingsEditorViewModel? NvidiaWarnings => Plugins.FirstOrDefault(plugin => plugin.IsNvidia)?.Nvidia;
     public bool HasNvidiaWarnings => NvidiaWarnings is not null;
     public ServiceConfiguration? CurrentConfiguration => _baseline?.Configuration;
+    public WidgetConfiguration Widget { get; private set; } = new();
+
+    public void SetWidgetValue(string profile, string id, string? value)
+    {
+        Widget = Widget.WithValue(profile, id, value);
+        MarkDirty();
+    }
+
+    public bool AddWidgetProfile(string name)
+    {
+        if (!WidgetConfiguration.IsCustomName(name) || Widget.ProfileNames.Contains(name, StringComparer.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        Widget = Widget with { Profiles = new(Widget.Profiles) { [name] = [] } };
+        MarkDirty();
+        return true;
+    }
+
+    public void DeleteWidgetProfile(string name)
+    {
+        if (name == "Default" || !Widget.Profiles.ContainsKey(name)) return;
+        var profiles = new Dictionary<string, Dictionary<string, string>>(Widget.Profiles);
+        profiles.Remove(name);
+        Widget = Widget with { Profiles = profiles, Preview = Widget.Preview?.Profile == name ? null : Widget.Preview };
+        MarkDirty();
+    }
+
+    public async Task<bool> QueueWidgetPreviewAsync(string profile, string scenario, CancellationToken token)
+    {
+        if (!CanEdit || _baseline?.Version is not { } version) return false;
+        var saved = _baseline.Configuration;
+        var request = new WidgetWarningPreview(profile, scenario, DateTimeOffset.UtcNow);
+        var widget = saved.Widget with { Preview = request };
+        if (!widget.IsValid() || !Widget.ProfileNames.Contains(profile)) return false;
+        IsBusy = true;
+        try
+        {
+            _baseline = await api().SetConfigurationAsync(saved with { Widget = widget }, version, token);
+            Widget = Widget with { Preview = _baseline.Configuration.Widget.Preview };
+            _pendingConfiguration = null;
+            HasExternalChanges = false;
+            Raise(nameof(RevisionText));
+            MarkDirty();
+            return true;
+        }
+        catch (MonitoringApiException exception) when (exception.IsConflict)
+        {
+            HasExternalChanges = true;
+            Report(exception.Message, StatusTone.Caution);
+        }
+        catch (Exception exception) when (IsRequestError(exception) || exception is InvalidOperationException or ArgumentException)
+        {
+            Report(exception.Message, StatusTone.Negative);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+        return false;
+    }
+
     public bool CanEdit => !IsBusy && _baseline is not null;
     public string Title => localOnly ? "Local simulation configuration" : "Service configuration";
 
@@ -45,10 +107,10 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
         private set => Set(ref field, value);
     }
 
-    public bool IsBusy
+    private bool IsBusy
     {
         get;
-        private set
+        set
         {
             if (Set(ref field, value))
             {
@@ -190,8 +252,11 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
 
     public void SetAvailableSensors(SensorSnapshot snapshot)
     {
-        var identities = snapshot.Sensors.Select(reading => reading.Identity).Where(identity => !identity.IsGpuDiagnostic())
+        var identities = snapshot.Sensors
+            .Select(reading => reading.Identity)
+            .Where(identity => !identity.IsGpuDiagnostic())
             .OrderBy(identity => identity.Key, StringComparer.Ordinal).ToArray();
+
         if (!AvailableSensors.Select(sensor => sensor.Identity.Key).SequenceEqual(identities.Select(identity => identity.Key)))
         {
             AvailableSensors.Clear();
@@ -207,6 +272,7 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
         {
             var resolved = snapshot.Selections.FirstOrDefault(item => item.Name == selection.Name);
             var source = AvailableSensors.FirstOrDefault(item => item.Identity.Key == resolved?.SensorKey);
+
             selection.Resolution = resolved is null ? "Not applied" : $"{resolved.State} · {source?.Label ?? "No usable source"}";
         }
     }
@@ -214,8 +280,10 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
     public void AddSelection()
     {
         var selection = new SelectionEditorViewModel(new SensorSelection { Name = "New selection" }, AvailableSensors);
+
         selection.Edited += MarkDirty;
         Selections.Add(selection);
+
         MarkDirty();
     }
 
@@ -236,6 +304,7 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
         }
 
         IsBusy = true;
+
         try
         {
             Load(await api().GetConfigurationAsync(token));
@@ -258,6 +327,7 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
         }
 
         IsBusy = true;
+
         try
         {
             var monitoring = new MonitoringOptions
@@ -268,6 +338,7 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
                 EventLogStorageMb = NumericInput.Integer(EventLogStorageMb, "Maximum log storage"),
                 Selections = [.. Selections.Select(selection => selection.Build())]
             };
+
             if (!monitoring.IsValid())
             {
                 throw new ArgumentException("Invalid streaming settings or source selections. Check the configured limits and source priorities.");
@@ -277,19 +348,22 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
             {
                 Warnings = Warnings.Build(),
                 Monitoring = monitoring,
+                Widget = Widget,
                 Plugins = Plugins.ToDictionary(plugin => plugin.Id, plugin => plugin.Build(), StringComparer.Ordinal)
             };
+
             var previous = _baseline.Configuration;
-            var updated = await api().SetConfigurationAsync(candidate,
-                _baseline.Version ?? throw new InvalidOperationException("The service must support versioned configuration writes."), token);
+            var updated = await api().SetConfigurationAsync(candidate, _baseline.Version ??
+                                                                       throw new InvalidOperationException("The service must support versioned configuration writes."), token);
+
             if (recordChange is not null)
             {
                 await recordChange(previous, updated.Configuration);
             }
 
             Load(updated);
-            Report(localOnly ? "Your configuration has been applied to the local simulation." : "Your configuration has been applied.",
-                StatusTone.Positive);
+
+            Report(localOnly ? "Your configuration has been applied to the local simulation." : "Your configuration has been applied.", StatusTone.Positive);
         }
         catch (MonitoringApiException exception) when (exception.IsConflict)
         {
@@ -321,9 +395,11 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
             _baseline = snapshot;
             _pendingConfiguration = null;
             HasExternalChanges = false;
+
             var msi = Plugins.Single(plugin => plugin.IsMsi).Msi;
             msi.SetCurve(curve);
             msi.FanModeIndex = (int)MsiFanControl.Curve;
+
             Raise(nameof(RevisionText));
         }
         finally
@@ -351,24 +427,34 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
 
             Plugins.Clear();
             Selections.Clear();
+
             _baseline = snapshot;
+            Widget = snapshot.Configuration.Widget;
+
+            Raise(nameof(Widget));
+
             ConnectorProfiles.Edited -= MarkDirty;
             ConnectorProfiles.Load(snapshot.Configuration.Monitoring.ConnectorProfiles, _catalog);
             ConnectorProfiles.Edited += MarkDirty;
+
             Warnings.Edited -= MarkDirty;
             Warnings.Load(snapshot.Configuration.Warnings);
             Warnings.Edited += MarkDirty;
+
             _streamInterval = snapshot.Configuration.Monitoring.StreamIntervalMs;
             _eventLogRetentionDays = snapshot.Configuration.Monitoring.EventLogRetentionDays;
             _eventLogStorageMb = snapshot.Configuration.Monitoring.EventLogStorageMb;
+
             foreach (var (id, settings) in snapshot.Configuration.Plugins.OrderBy(plugin => plugin.Key != GpuStatusViewModel.PluginId))
             {
                 var name = _catalog?.Plugins.FirstOrDefault(plugin => plugin.Id == id)?.Name ?? id;
                 var plugin = new PluginSettingsEditorViewModel(id, name, settings);
+
                 plugin.Asus.SetDevices(_devices);
                 plugin.Nvidia.SetDevices(_nvidiaDevices);
                 plugin.Msi.SetDevices(_msiDevices);
                 plugin.Edited += MarkDirty;
+
                 Plugins.Add(plugin);
             }
 
@@ -376,12 +462,14 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
             {
                 var selection = new SelectionEditorViewModel(settings, AvailableSensors);
                 selection.Edited += MarkDirty;
+
                 Selections.Add(selection);
             }
 
             IsDirty = false;
             _pendingConfiguration = null;
             HasExternalChanges = false;
+
             if (snapshot.LastError is { } error)
             {
                 Report(error, StatusTone.Negative);
@@ -390,7 +478,6 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
             {
                 Report(localOnly ? "Changes apply only to this local simulation." : "", StatusTone.Neutral);
             }
-
 
             Raise(nameof(StreamIntervalMs));
             Raise(nameof(EventLogRetentionDays));
@@ -414,8 +501,8 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
         }
 
         var original = _baseline.Configuration;
-        IsDirty = !ConnectorProfiles.Matches(original.Monitoring.ConnectorProfiles) || !Warnings.Matches(original.Warnings) || !double.IsFinite(StreamIntervalMs) || Math.Abs(StreamIntervalMs - original.Monitoring.StreamIntervalMs) > 0.001
-            || EventLogRetentionDays != original.Monitoring.EventLogRetentionDays || EventLogStorageMb != original.Monitoring.EventLogStorageMb
+        IsDirty = !Widget.Matches(original.Widget) || !ConnectorProfiles.Matches(original.Monitoring.ConnectorProfiles) || !Warnings.Matches(original.Warnings) || !double.IsFinite(StreamIntervalMs) || Math.Abs(StreamIntervalMs - original.Monitoring.StreamIntervalMs) > 0.001
+            || Math.Abs(EventLogRetentionDays - original.Monitoring.EventLogRetentionDays) > 0.0001 || Math.Abs(EventLogStorageMb - original.Monitoring.EventLogStorageMb) > 0.0001
             || Plugins.Count != original.Plugins.Count
             || Plugins.Any(plugin => !original.Plugins.TryGetValue(plugin.Id, out var settings) || !plugin.Matches(settings))
             || Selections.Count != original.Monitoring.Selections.Count

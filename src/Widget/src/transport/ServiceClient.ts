@@ -1,6 +1,7 @@
+import type { WidgetProfiles } from '../settings/WidgetProfiles.ts';
 import { serviceRoutes } from './serviceRoutes.ts';
 import { WireViewId } from '../pluginIds.ts';
-import type { ConfigurationSnapshot } from '../contracts/ConfigurationSnapshot.ts';
+import type { ConfigurationSnapshot, WidgetWarningPreview } from '../contracts/ConfigurationSnapshot.ts';
 import type { PluginInfo } from '../contracts/PluginInfo.ts';
 import { TelemetryStore } from '../telemetry/TelemetryStore.ts';
 import { parseSnapshot } from '../telemetry/parseSnapshot.ts';
@@ -28,7 +29,10 @@ export class ServiceClient {
     private limitBusy = false;
     private port = 0;
 
-    constructor(store: TelemetryStore, changed: () => void) {
+    private readonly profilesChanged?: (profiles: WidgetProfiles, preview: WidgetWarningPreview | null) => void;
+
+    constructor(store: TelemetryStore, changed: () => void, profilesChanged?: (profiles: WidgetProfiles, preview: WidgetWarningPreview | null) => void) {
+        this.profilesChanged = profilesChanged;
         this.store = store;
         this.changed = changed;
     }
@@ -277,6 +281,7 @@ export class ServiceClient {
                 ) {
                     this.store.configuration = value;
                     this.revision = value.revision;
+                    this.profilesChanged?.(value.configuration.widget?.profiles ?? {}, value.configuration.widget?.preview ?? null);
                     this.scheduleFrameCheck();
                 }
             }

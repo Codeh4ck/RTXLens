@@ -39,9 +39,9 @@ internal static class AvaloniaChartsTests
         window.Show();
         try
         {
-            Check(new MemoryStream("<html></html>"u8.ToArray()), "The HTML file does not contain an RTX Lens recording.");
-            Check(new MemoryStream("{"u8.ToArray()), "The recording file contains invalid data.");
-            Check(new MemoryStream("""{"schemaVersion":99}"""u8.ToArray()), "This recording file version is unsupported.");
+            Check(new MemoryStream([.. "<html></html>"u8]), "The HTML file does not contain an RTX Lens recording.");
+            Check(new MemoryStream([.. "{"u8]), "The recording file contains invalid data.");
+            Check(new MemoryStream([.. """{"schemaVersion":99}"""u8]), "This recording file version is unsupported.");
             Check(new OversizedStream(), "The recording exceeds the supported file size.");
             var warning = FindWarning();
             AvaloniaControlsTests.InvokeButton(warning.GetVisualDescendants().OfType<Button>().Single());

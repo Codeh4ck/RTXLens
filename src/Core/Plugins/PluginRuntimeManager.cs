@@ -63,7 +63,7 @@ public sealed class PluginRuntimeManager : IAsyncDisposable
 
     public void Validate(ServiceConfiguration configuration)
     {
-        if (!configuration.Warnings.IsValid() || !configuration.Monitoring.IsValid())
+        if (!configuration.Warnings.IsValid() || !configuration.Monitoring.IsValid() || configuration.Widget?.IsValid() != true)
         {
             throw new ArgumentException("Invalid service configuration.");
         }

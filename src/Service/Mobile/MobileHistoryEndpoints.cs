@@ -19,8 +19,7 @@ internal sealed record MobileIncident(Guid Id, string Kind, string Title, string
     public SafeguardStep[] Steps { get; init; } = [];
 }
 
-internal sealed class MobileHistoryEndpoints(MobileWarningHistory warnings, SafeguardJournalService safeguard, TimeProvider clock,
-    Func<int> warningRetention)
+internal sealed class MobileHistoryEndpoints(MobileWarningHistory warnings, SafeguardJournalService safeguard, TimeProvider clock, Func<int> warningRetention)
 {
     public const int MaximumReportBytes = 512 * 1024;
     private const int PageSize = 25;
@@ -33,12 +32,15 @@ internal sealed class MobileHistoryEndpoints(MobileWarningHistory warnings, Safe
     public IResult List(string? before)
     {
         DateTimeOffset? timestamp = null;
-        Guid id = default;
+        Guid id = Guid.Empty;
+
         string? kind = null;
         if (before is not null)
         {
             var parts = before.Split('.');
-            if (parts.Length != 3 || !long.TryParse(parts[0], out var ticks) || ticks < 0 || ticks > DateTimeOffset.MaxValue.Ticks
+
+            if (parts.Length != 3 || !long.TryParse(parts[0], out var ticks) || ticks < 0
+                || ticks > DateTimeOffset.MaxValue.Ticks
                 || !Guid.TryParseExact(parts[1], "N", out id) || parts[2] is not ("warning" or "safeguard"))
             {
                 return Results.BadRequest();
@@ -54,10 +56,11 @@ internal sealed class MobileHistoryEndpoints(MobileWarningHistory warnings, Safe
                 Connector = notice.Connector
             }));
 
-        var page = incidents.Where(record => timestamp is null || record.StartedAt < timestamp
-            || (record.StartedAt == timestamp && (record.Id.CompareTo(id) < 0
-                || (record.Id == id && StringComparer.Ordinal.Compare(record.Kind, kind) < 0))))
-            .OrderByDescending(record => record.StartedAt).ThenByDescending(record => record.Id)
+        var page = incidents
+            .Where(record => timestamp is null || record.StartedAt < timestamp
+                                               || (record.StartedAt == timestamp && (record.Id.CompareTo(id) < 0 || (record.Id == id && StringComparer.Ordinal.Compare(record.Kind, kind) < 0))))
+            .OrderByDescending(record => record.StartedAt)
+            .ThenByDescending(record => record.Id)
             .ThenByDescending(record => record.Kind, StringComparer.Ordinal).Take(PageSize + 1).ToArray();
 
         return Results.Json(new { items = page.Take(PageSize), next = page.Length > PageSize ? Cursor(page[PageSize - 1]) : null }, Json);
@@ -71,18 +74,17 @@ internal sealed class MobileHistoryEndpoints(MobileWarningHistory warnings, Safe
             "safeguard" => safeguard.ReadMobileIncident(id),
             _ => null
         };
+
         if (incident is null)
         {
             return Results.NotFound();
         }
 
         var bytes = JsonSerializer.SerializeToUtf8Bytes(incident, Json);
-        return bytes.Length <= MaximumReportBytes ? Results.Bytes(bytes, "application/json")
-            : Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+        return bytes.Length <= MaximumReportBytes ? Results.Bytes(bytes, "application/json") : Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
     }
 
     private DateTimeOffset Cutoff() => clock.GetUtcNow().AddDays(-warningRetention());
 
-    private static string Cursor(MobileIncident incident) => FormattableString.Invariant(
-        $"{incident.StartedAt.UtcTicks}.{incident.Id:N}.{incident.Kind}");
+    private static string Cursor(MobileIncident incident) => FormattableString.Invariant($"{incident.StartedAt.UtcTicks}.{incident.Id:N}.{incident.Kind}");
 }

@@ -6,6 +6,7 @@ using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
@@ -159,6 +160,97 @@ internal static class AvaloniaSettingsParityTests
             var tabs = window.GetVisualDescendants().OfType<TabControl>().Single();
             TestAssert.True(tabs.Items.OfType<TabItem>().Any(tab => Equals(tab.Header, "Mobile Access")),
                 "Mobile Access should be a Configuration tab.");
+            OpenTab("iCUE Widget");
+            var widgetTabs = window.GetVisualDescendants().OfType<TabControl>().Single(tab => tab.TabStripPlacement == Dock.Left);
+            var panels = window.GetVisualDescendants().OfType<RTXLens.App.Controls.SectionPanel>().ToArray();
+            TestAssert.Equal(3, panels.Count(panel => panel.Header is "Panel 1" or "Panel 2" or "Panel 3"));
+            var panelOne = panels.Single(panel => Equals(panel.Header, "Panel 1"));
+            var sourcePicker = panelOne.GetVisualDescendants().OfType<ComboBox>().Single();
+            var hero = panelOne.GetVisualDescendants().OfType<ToggleSwitch>().Single();
+            foreach (var item in sourcePicker.Items.OfType<WidgetSettingOption>())
+            {
+                sourcePicker.SelectedItem = item;
+                TestAssert.Equal(item.Key is not ("asusPins" or "wireviewPins" or "off"), hero.IsEffectivelyEnabled);
+                TestAssert.True(hero.IsVisible, "Summary control stays visible.");
+            }
+            sourcePicker.SelectedIndex = 0;
+            var widgetHeader = (StackPanel)panels.Single(panel => Equals(panel.Header, "Widget profile")).HeaderActions!;
+            TestAssert.True(widgetHeader.Children[0] is ComboBox && widgetHeader.Children[1] is Button, "Profile picker precedes help.");
+            TestAssert.True(!widgetHeader.Children[2].IsEnabled, "Default cannot be deleted.");
+            TestAssert.False(widgetTabs.GetVisualAncestors().OfType<RTXLens.App.Controls.SectionPanel>().Any(), "Tabs use the page background.");
+            AvaloniaControlsTests.Capture(window, screenshots, "widget-panel-editors.png");
+            NameProfile("Add widget profile", "Recording");
+            PumpUntil(() => shell.Configuration.Widget.ProfileNames.Contains("Recording"));
+            var widgetPicker = window.GetVisualDescendants().OfType<ComboBox>().Single(box => AutomationProperties.GetName(box) == "Widget profile");
+            TestAssert.Equal("Recording", (string)widgetPicker.SelectedItem!);
+            Click("Delete widget profile");
+            Click("Delete", window.OwnedWindows.Single());
+            PumpUntil(() => !shell.Configuration.Widget.ProfileNames.Contains("Recording"));
+            OpenTab("Readings and alerts", widgetTabs);
+            SetToggle("Hide fans and show Crossbar and System clocks", true);
+            foreach (var title in new[] { "Show reported fan duty after RPM", "Show Crossbar clock", "Show System clock" })
+            {
+                var option = window.GetVisualDescendants().OfType<ToggleSwitch>().Single(input => AutomationProperties.GetName(input) == title);
+                TestAssert.False(option.IsEffectivelyEnabled, "The fan replacement card controls these readings.");
+            }
+            SetToggle("Hide fans and show Crossbar and System clocks", false);
+            SetToggle("Always show Crossbar and System clocks", true);
+            TestAssert.Equal("true", shell.Configuration.Widget.Value("Default", WidgetSettingDefinition.ById["alwaysShowInternalClocks"]));
+            foreach (var title in new[] { "Show reported fan duty after RPM", "Show Crossbar clock", "Show System clock" })
+            {
+                var option = window.GetVisualDescendants().OfType<ToggleSwitch>().Single(input => AutomationProperties.GetName(input) == title);
+                TestAssert.Equal(title == "Show reported fan duty after RPM", option.IsEffectivelyEnabled);
+            }
+            SetToggle("Always show Crossbar and System clocks", false);
+            var decimals = window.GetVisualDescendants().OfType<RadioButton>()
+                .Where(button => button.Content is "No decimal places" or "1 decimal place" or "2 decimal places").ToArray();
+            TestAssert.Equal(3, decimals.Length);
+            TestAssert.True(decimals.All(button => button.TranslatePoint(default, window)!.Value.Y ==
+                decimals[0].TranslatePoint(default, window)!.Value.Y), "Decimal choices share a row.");
+            var temperatureUnit = window.GetVisualDescendants().OfType<ComboBox>().Single(box => AutomationProperties.GetName(box) == "Temperature unit");
+            TestAssert.True(Math.Abs(decimals[0].TranslatePoint(default, window)!.Value.X -
+                temperatureUnit.TranslatePoint(default, window)!.Value.X) < 1, "Decimal choices start at the editor column.");
+            var scenario = window.GetVisualDescendants().OfType<ComboBox>().Single(box => AutomationProperties.GetName(box) == "Simulated warning");
+            var queue = window.GetVisualDescendants().OfType<Button>().Single(button => AutomationProperties.GetName(button) == "Queue preview");
+            TestAssert.Equal(temperatureUnit.Bounds.Width, scenario.Bounds.Width);
+            TestAssert.Equal(scenario.Bounds.Width, queue.Bounds.Width);
+            var copy = window.GetVisualDescendants().OfType<Button>().Single(button => AutomationProperties.GetName(button) == "Copy desktop preferences");
+            TestAssert.Equal(HorizontalAlignment.Right, copy.HorizontalAlignment);
+            TestAssert.Equal(DesktopControls.Icon("display-action"), queue.GetVisualDescendants().OfType<Image>().Single().Source!);
+            foreach (var (name, toggle) in new[] { ("Current display axis maximum", "Override GPU chart profile current maximum"),
+                ("Power display range", "Override GPU chart profile fallback power") })
+            {
+                var slider = window.GetVisualDescendants().OfType<Slider>().Single(item => AutomationProperties.GetName(item)?.StartsWith(name) == true);
+                TestAssert.False(slider.IsEffectivelyEnabled, "A chart override begins off.");
+                SetToggle(toggle, true);
+                TestAssert.True(slider.IsEffectivelyEnabled, "Turning on the override enables its slider.");
+                SetToggle(toggle, false);
+                TestAssert.False(slider.IsEffectivelyEnabled, "Turning off the override disables its slider.");
+            }
+            SetToggle("Pulse active service alerts", true);
+            SetToggle("Disable alert animation", true);
+            var pulse = window.GetVisualDescendants().OfType<ToggleSwitch>().Single(input => AutomationProperties.GetName(input) == "Pulse active service alerts");
+            TestAssert.True(!pulse.IsEffectivelyEnabled && pulse.IsChecked == true, "Reduced motion takes precedence and preserves the pulse preference.");
+            SetToggle("Disable alert animation", false);
+            TestAssert.True(pulse.IsEffectivelyEnabled, "Turning animation back on restores pulse control.");
+            SetToggle("Pulse active service alerts", false);
+            decimals[2].IsChecked = true;
+            TestAssert.Equal("2", shell.Configuration.Widget.Value("Default", WidgetSettingDefinition.ById["precision"]));
+            TestAssert.Equal(1, decimals.Count(button => button.IsChecked == true));
+            decimals[1].IsChecked = true;
+            var pinOptions = window.GetVisualDescendants().OfType<ComboBox>().SelectMany(box => box.Items.OfType<WidgetSettingOption>()).ToArray();
+            foreach (var label in new[] { "Amperes", "Volts", "Watts", "MSI Connector 1", "MSI Connector 2" })
+            {
+                TestAssert.Equal(2, pinOptions.Count(option => option.Label == label));
+            }
+            OpenTab("Widget Personalization", widgetTabs);
+            var opacity = window.GetVisualDescendants().OfType<Slider>().Single(input => AutomationProperties.GetName(input) == "Panel opacity (%)");
+            var oldOpacity = opacity.Value;
+            opacity.Value = opacity.Minimum;
+            TestAssert.Equal("20", shell.Configuration.Widget.Value("Default", WidgetSettingDefinition.ById["panelOpacity"]));
+            opacity.Value = oldOpacity;
+            AvaloniaControlsTests.Capture(window, screenshots, "widget-appearance-sliders.png");
+
             OpenTab("Warnings");
             var profilePanel = window.GetVisualDescendants().OfType<RTXLens.App.Controls.SectionPanel>()
                 .Single(panel => Equals(panel.Header, "Device warning profiles"));

@@ -90,7 +90,7 @@ internal static class PreferenceTests
         {
             var store = new PreferencesStore(path);
             var value = new AppPreferences { Theme = AppTheme.Light, StartMinimized = true, ShowWireViewPsuCurrent = true,
-                WireViewPsuConnector = 2, ShowAsusPsuCurrent = true, AsusPsuConnector = 1 };
+                WireViewPsuConnector = 2, ShowAsusPsuCurrent = true, AsusPsuConnector = 1, ShowInternalClocksOnGpuStatusPanels = true };
             await store.SaveAsync(value);
             TestAssert.Equal(value, store.Load());
             await File.WriteAllTextAsync(path, "null");

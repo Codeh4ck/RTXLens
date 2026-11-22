@@ -15,6 +15,7 @@ internal static class EditorTests
         await runner.RunAsync(ConflictsPreserveUnsavedEditsAsync);
         await runner.RunAsync(AppliesTheWholeConfigurationWithItsVersionAsync);
         await runner.RunAsync(InvalidInputNeverReachesTheServiceAsync);
+        await runner.RunAsync(WidgetProfileEditsSurviveApplyAndReloadAsync);
         runner.Run(DeviceRefreshPreservesAnExplicitMissingGpu);
         runner.Run(RefreshDoesNotDirtyTheConfiguration);
     }
@@ -66,6 +67,48 @@ internal static class EditorTests
         await editor.ApplyAsync(default);
         TestAssert.Equal(1L, api.Configuration.Revision);
         TestAssert.True(editor.IsDirty, "Invalid values should remain available for correction.");
+    }
+
+    private static async Task WidgetProfileEditsSurviveApplyAndReloadAsync()
+    {
+        var api = new FakeMonitoringApi();
+        var editor = new ConfigurationEditorViewModel(() => api);
+        editor.Receive(api.Configuration);
+        editor.SetWidgetValue("Default", "showCrossbarClock", "true");
+        editor.SetWidgetValue("Profile 2", "showSystemClock", "true");
+        TestAssert.True(editor.IsDirty && editor.Widget.IsValid(), "Clock toggles must be valid pending edits.");
+        TestAssert.False(editor.Widget.WithValue("Default", "backgroundMedia", "x").IsValid(), "Only desktop-managed settings may be saved.");
+        TestAssert.False(editor.Widget.WithValue("Default", "currentMax", "100").IsValid(), "Reject invalid slider values.");
+        await editor.ApplyAsync(default);
+        await editor.ReloadAsync(default);
+        var catalog = RTXLens.Contracts.Configuration.WidgetSettingDefinition.ById;
+        var migrated = System.Text.Json.JsonSerializer.Deserialize(
+            """{"profiles":{"Desk":{"connectedColor":"#123456","precision":"2"}}}""",
+            RTXLens.Client.Serialization.ClientJsonContext.Default.WidgetConfiguration)!;
+        TestAssert.True(migrated.IsValid() && !migrated.Profiles["Desk"].ContainsKey("connectedColor"),
+            "Retired colors are discarded when loading a saved profile.");
+        TestAssert.Equal("2", migrated.Value("Desk", catalog["precision"]));
+        TestAssert.Equal("true", editor.Widget.Value("Profile 2", catalog["showCrossbarClock"]));
+        TestAssert.Equal("true", editor.Widget.Value("Profile 2", catalog["showSystemClock"]));
+        TestAssert.Equal("false", editor.Widget.Value("Default", catalog["showSystemClock"]));
+        TestAssert.True(editor.AddWidgetProfile("Quiet desk"), "A new profile can inherit every setting.");
+        TestAssert.False(editor.AddWidgetProfile("quiet DESK"), "Duplicate names are ambiguous in iCUE.");
+        TestAssert.False(editor.AddWidgetProfile("Instance"), "The host settings name is reserved.");
+        editor.DeleteWidgetProfile("Default");
+        TestAssert.Equal("true", editor.Widget.Value("Default", catalog["showCrossbarClock"]));
+        editor.StreamIntervalMs = 377;
+        TestAssert.True(await editor.QueueWidgetPreviewAsync("Quiet desk", "thermal", default), "Queue immediately.");
+        var saved = api.Configuration.Configuration;
+        TestAssert.Equal("thermal", saved.Widget.Preview!.Scenario);
+        TestAssert.False(saved.Widget.Profiles.ContainsKey("Quiet desk"), "Preview cannot commit profile drafts.");
+        TestAssert.True(saved.Monitoring.StreamIntervalMs != 377 && editor.IsDirty, "Preview preserves unrelated edits.");
+        await editor.ApplyAsync(default);
+        await editor.ReloadAsync(default);
+        TestAssert.True(editor.Widget.Profiles.ContainsKey("Quiet desk"), "Empty named profiles survive reload.");
+        TestAssert.Equal("true", editor.Widget.Value("Quiet desk", catalog["showCrossbarClock"]));
+        editor.DeleteWidgetProfile("Quiet desk");
+        await editor.ApplyAsync(default);
+        TestAssert.False(api.Configuration.Configuration.Widget.Profiles.ContainsKey("Quiet desk"), "Deleted profiles stay deleted.");
     }
 
     private static void DeviceRefreshPreservesAnExplicitMissingGpu()

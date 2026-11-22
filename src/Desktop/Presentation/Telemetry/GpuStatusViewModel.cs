@@ -39,6 +39,7 @@ public sealed class GpuStatusViewModel : ObservableObject
     public MetricViewModel MemoryClock { get; } = new("Memory clock", iconName: "vram");
     public MetricViewModel CrossbarClock { get; } = new("Crossbar clock", iconName: "vcore");
     public MetricViewModel SystemClock { get; } = new("GPU system clock", iconName: "vcore");
+    public bool ShowInternalClocksOnGpuStatusPanels { get; private set => Set(ref field, value); }
     public bool HasCrossbarClock { get; private set => Set(ref field, value); }
     public bool HasSystemClock { get; private set => Set(ref field, value); }
     public MetricViewModel VramUsage { get; } = new("VRAM usage", iconName: "vramusage");
@@ -63,6 +64,7 @@ public sealed class GpuStatusViewModel : ObservableObject
 
     public void Apply(SensorSnapshot snapshot, ConfigurationSnapshot? configuration, AppPreferences preferences, DateTimeOffset now)
     {
+        ShowInternalClocksOnGpuStatusPanels = preferences.ShowInternalClocksOnGpuStatusPanels;
         var settings = configuration?.Configuration.Plugins.GetValueOrDefault(PluginId);
         var options = settings?.Options?.Deserialize(ClientJsonContext.Default.GenericNvidiaOptions) ?? new GenericNvidiaOptions();
 
@@ -203,7 +205,7 @@ public sealed class GpuStatusViewModel : ObservableObject
         {
             var reading = readings.FirstOrDefault(item => item.Identity.Component == component && item.Identity.Metric == SensorMetric.Clock);
             metric.Value = reading is not null && Valid(reading) ? Format(reading.Value, "MHz", 0) : "—";
-            
+
             return reading is not null;
         }
 

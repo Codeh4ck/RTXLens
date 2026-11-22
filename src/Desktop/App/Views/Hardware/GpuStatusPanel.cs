@@ -16,7 +16,7 @@ namespace RTXLens.App.Views.Hardware;
 
 internal static class GpuStatusPanel
 {
-    public static SectionPanel Create(GpuStatusViewModel gpu, HardwarePanelViewModel? wireView, bool showDomainClocks)
+    public static SectionPanel Create(GpuStatusViewModel gpu, HardwarePanelViewModel? wireView, bool isDedicatedTab)
     {
         var device = Caption();
         BindTo(device, TextBlock.TextProperty, gpu, nameof(gpu.DeviceText));
@@ -32,7 +32,7 @@ internal static class GpuStatusPanel
             {
                 Inset(ReadingRow(IconLabel("GPU usage", "boost-limit", 24), Reading(gpu, nameof(gpu.GpuUsageText))), 44),
                 Inset(ReadingRow(IconLabel("Core voltage", "voltage", 24), Reading(gpu, nameof(gpu.CoreVoltageText))), 44),
-                CreateClocks(gpu, showDomainClocks),
+                CreateClocks(gpu, isDedicatedTab),
                 CreateVram(gpu),
                 CreateTemperatures(gpu),
                 CreateFans(gpu)
@@ -48,19 +48,18 @@ internal static class GpuStatusPanel
             new StackPanel { Spacing = 12, Children = { device, unavailable, readings } });
     }
 
-    private static Border CreateClocks(GpuStatusViewModel gpu, bool showDomainClocks)
+    private static Border CreateClocks(GpuStatusViewModel gpu, bool isDedicatedTab)
     {
         var clocks = Pair(Column(gpu.CoreClock.Label, gpu.CoreClock), Column(gpu.MemoryClock.Label, gpu.MemoryClock));
-
-        if (!showDomainClocks)
-        {
-            return Group("Clocks", "vcore", clocks);
-        }
 
         var crossbar = Column(gpu.CrossbarClock.Label, gpu.CrossbarClock);
         var domains = Pair(crossbar, Column(gpu.SystemClock.Label, gpu.SystemClock));
         var system = (Border)domains.Children[1];
 
+        if (!isDedicatedTab)
+        {
+            Watch(domains, gpu, UpdateLayout, nameof(gpu.ShowInternalClocksOnGpuStatusPanels));
+        }
         Watch(domains, gpu, UpdateLayout, nameof(gpu.HasCrossbarClock));
         Watch(domains, gpu, UpdateLayout, nameof(gpu.HasSystemClock));
 
@@ -68,7 +67,7 @@ internal static class GpuStatusPanel
 
         void UpdateLayout()
         {
-            domains.IsVisible = gpu.HasCrossbarClock || gpu.HasSystemClock;
+            domains.IsVisible = (isDedicatedTab || gpu.ShowInternalClocksOnGpuStatusPanels) && (gpu.HasCrossbarClock || gpu.HasSystemClock);
             crossbar.IsVisible = gpu.HasCrossbarClock;
             system.IsVisible = gpu.HasSystemClock;
             domains.ColumnDefinitions[0].Width = gpu.HasCrossbarClock ? GridLength.Star : new GridLength(0);

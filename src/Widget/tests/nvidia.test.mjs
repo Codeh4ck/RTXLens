@@ -65,6 +65,31 @@ test('fan duty follows its RPM and can be hidden without changing fan labels', (
     assert.equal(singleFan[0].text, '1220 RPM (50%)');
 });
 
+test('optional internal clocks are independently scoped to reported sensors on the selected GPU', () => {
+    const flags = { showCrossbarClock: true, showSystemClock: true };
+    const domain = data => data.rows.filter(row => ['GpuSystem', 'GpuCrossbar'].includes(row.id));
+    assert.deepEqual(domain(context().present()), []);
+    assert.deepEqual(domain(context({ showSystemClock: true }).present()).map(row => row.text), ['1650 MHz']);
+    const frame = fixture();
+    frame.sensors.find(sensor => sensor.identity.component === 'GpuCrossbar').identity.deviceId = 'other';
+    const sys = frame.sensors.find(sensor => sensor.identity.component === 'GpuSystem');
+    sys.value = null;
+    sys.quality = 'Unavailable';
+    assert.deepEqual(domain(context(flags, frame).present()).map(row => [row.id, row.text]), [['GpuSystem', '-']]);
+});
+
+test('hiding GPU fans shows the reported internal clocks even with both clock preferences off', () => {
+    const frame = fixture();
+    const options = { hideGpuFans: true };
+    for (const remaining of [['GpuCrossbar', 'GpuSystem'], ['GpuSystem'], []]) {
+        frame.sensors = frame.sensors.filter(sensor => !['GpuCrossbar', 'GpuSystem'].includes(sensor.identity.component)
+            || remaining.includes(sensor.identity.component));
+        const rows = context(options, frame).present().rows;
+        assert.deepEqual(rows.filter(row => row.id.startsWith('Gpu')).map(row => row.id), remaining);
+        assert.ok(!rows.some(row => row.id.startsWith('fan')));
+    }
+});
+
 test('input values are measured, with WireView association only when explicitly configured', () => {
     const frame = fixture();
     frame.sensors.find(reading => reading.identity.pluginId === 'wireview-pro2'

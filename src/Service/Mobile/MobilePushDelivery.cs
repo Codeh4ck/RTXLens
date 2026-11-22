@@ -7,11 +7,9 @@ namespace RTXLens.Service.Mobile;
 
 internal sealed record MobilePushTarget(Guid Id, string Token, CancellationToken Revoked);
 
-internal sealed record MobilePushAlert(string Title, Guid? IncidentId = null, string? IncidentKind = null,
-    MobileWarningCategory? Category = null, string? PrivateTitle = null);
+internal sealed record MobilePushAlert(string Title, Guid? IncidentId = null, string? IncidentKind = null, MobileWarningCategory? Category = null, string? PrivateTitle = null);
 
-internal sealed class MobilePushDelivery(MobilePairing pairing, ExpoMobilePushProvider provider, TimeProvider clock,
-    ILogger<MobilePushDelivery> logger, HardwareCatalog? hardware = null) : BackgroundService
+internal sealed class MobilePushDelivery(MobilePairing pairing, ExpoMobilePushProvider provider, TimeProvider clock, ILogger<MobilePushDelivery> logger, HardwareCatalog? hardware = null) : BackgroundService
 {
     private static readonly TimeSpan AlertLifetime = TimeSpan.FromMinutes(5);
     private readonly Channel<RecipientQueue> _newRecipients = Bounded<RecipientQueue>(MobilePairing.DeviceLimit);
@@ -35,30 +33,31 @@ internal sealed class MobilePushDelivery(MobilePairing pairing, ExpoMobilePushPr
 
             var previous = _sequence;
             _sequence = Math.Max(_sequence, snapshot.Sequence);
+
             if (!snapshot.NotificationsEnabled || _sequence == previous)
             {
                 return;
             }
 
             var targets = pairing.GetPushTargets();
+
             foreach (var warning in snapshot.States)
             {
-                if (warning.Phase == WarningPhase.Active && warning.NotificationSequence > previous
-                    && Guid.TryParseExact(warning.EpisodeId, "N", out var incidentId))
+                if (warning.Phase != WarningPhase.Active || warning.NotificationSequence <= previous || !Guid.TryParseExact(warning.EpisodeId, "N", out var incidentId))
                 {
-                    var category = MobileNotificationPreferences.CategoryFor(hardware?.Find(warning.PluginId), warning.Icon);
-                    Enqueue(new MobilePushAlert(warning.Title, incidentId, "warning", category), targets);
+                    continue;
                 }
+
+                var category = MobileNotificationPreferences.CategoryFor(hardware?.Find(warning.PluginId), warning.Icon);
+                Enqueue(new MobilePushAlert(warning.Title, incidentId, "warning", category), targets);
             }
         }
     }
 
-    public void SendSimulation(string title) =>
-        Enqueue(new MobilePushAlert("Simulation · " + title, PrivateTitle: "RTX Lens simulation"), pairing.GetPushTargets());
+    public void SendSimulation(string title) => Enqueue(new MobilePushAlert("Simulation · " + title, PrivateTitle: "RTX Lens simulation"), pairing.GetPushTargets());
 
-    public void SendSafeguard(Guid id, int connector, DateTimeOffset startedAt) => Enqueue(
-        new MobilePushAlert($"Safeguard+ triggered on connector {connector}", id, "safeguard", MobileWarningCategory.Safeguard),
-        pairing.GetPushTargets(), startedAt);
+    public void SendSafeguard(Guid id, int connector, DateTimeOffset startedAt) =>
+        Enqueue(new MobilePushAlert($"Safeguard+ triggered on connector {connector}", id, "safeguard", MobileWarningCategory.Safeguard), pairing.GetPushTargets(), startedAt);
 
     public bool SendTest(Guid id)
     {
@@ -76,14 +75,16 @@ internal sealed class MobilePushDelivery(MobilePairing pairing, ExpoMobilePushPr
     }
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        Task.WhenAll(Parallel.ForEachAsync(_newRecipients.Reader.ReadAllAsync(stoppingToken),
-            new ParallelOptions { MaxDegreeOfParallelism = MobilePairing.DeviceLimit, CancellationToken = stoppingToken },
-            DeliverToRecipientAsync), CheckReceiptsAsync(stoppingToken));
+        Task.WhenAll(
+            Parallel.ForEachAsync(_newRecipients.Reader.ReadAllAsync(stoppingToken), new ParallelOptions { MaxDegreeOfParallelism = MobilePairing.DeviceLimit, CancellationToken = stoppingToken },
+            DeliverToRecipientAsync),
+            CheckReceiptsAsync(stoppingToken));
 
     private bool Enqueue(MobilePushAlert alert, MobilePushTarget[] targets, DateTimeOffset? startedAt = null)
     {
         var now = clock.GetUtcNow();
         var expiresAt = (startedAt ?? now) + AlertLifetime;
+
         if (targets.Length == 0 || expiresAt <= now)
         {
             return false;
@@ -91,8 +92,10 @@ internal sealed class MobilePushDelivery(MobilePairing pairing, ExpoMobilePushPr
 
         var title = alert.Title.Length <= 160 ? alert.Title : alert.Title[..160];
         alert = alert with { Title = title };
+
         var queued = 0;
         var missed = 0;
+
         lock (_gate)
         {
             foreach (var target in targets)
@@ -125,8 +128,7 @@ internal sealed class MobilePushDelivery(MobilePairing pairing, ExpoMobilePushPr
         }
         if (missed > 0)
         {
-            logger.LogActivity(LogLevel.Warning, "mobile.push-queue-full", "Mobile access",
-                "The mobile notification queue is full.", $"Skipped recipients: {missed}.");
+            logger.LogActivity(LogLevel.Warning, "mobile.push-queue-full", "Mobile access", "The mobile notification queue is full.", $"Skipped recipients: {missed}.");
         }
         return queued > 0;
     }
@@ -159,8 +161,7 @@ internal sealed class MobilePushDelivery(MobilePairing pairing, ExpoMobilePushPr
     {
         for (var attempt = 0; attempt < 3; attempt++)
         {
-            if (clock.GetUtcNow() >= pending.ExpiresAt || pairing.GetPushPreferences(target) is not { } preferences
-                || pending.Alert.Category is { } category && !preferences.Allows(category))
+            if (clock.GetUtcNow() >= pending.ExpiresAt || pairing.GetPushPreferences(target) is not { } preferences || (pending.Alert.Category is { } category && !preferences.Allows(category)))
             {
                 return;
             }
@@ -172,12 +173,15 @@ internal sealed class MobilePushDelivery(MobilePairing pairing, ExpoMobilePushPr
             }
 
             var result = await provider.SendAsync(target.Token, alert, cancellationToken);
+
             if (result is { Outcome: MobilePushOutcome.Accepted, TicketId: { } ticketId })
             {
                 QueueReceipt(new PendingReceipt(target, ticketId, clock.GetUtcNow().AddMinutes(15)));
+
                 logger.LogActivity(LogLevel.Information, "mobile.push-accepted", "Mobile access", "Expo accepted a mobile notification.");
                 return;
             }
+
             if (result.Outcome != MobilePushOutcome.Retry || attempt == 2)
             {
                 HandleOutcome(target, result.Outcome);
@@ -205,6 +209,7 @@ internal sealed class MobilePushDelivery(MobilePairing pairing, ExpoMobilePushPr
             {
                 logger.LogActivity(LogLevel.Information, "mobile.push-receipt-queue-recovered", "Mobile access",
                     "The mobile receipt queue has space again.", $"Skipped checks: {_missedReceipts}.");
+
                 _missedReceipts = 0;
             }
         }
@@ -215,44 +220,48 @@ internal sealed class MobilePushDelivery(MobilePairing pairing, ExpoMobilePushPr
         await foreach (var receipt in _receipts.Reader.ReadAllAsync(stoppingToken))
         {
             var delay = receipt.CheckAt - clock.GetUtcNow();
+
             if (delay > TimeSpan.Zero)
             {
                 await Task.Delay(delay, clock, stoppingToken);
             }
-            if (pairing.GetPushPreferences(receipt.Target) is not null)
+
+            if (pairing.GetPushPreferences(receipt.Target) is null)
             {
-                var result = await provider.CheckAsync(receipt.TicketId, stoppingToken);
-                HandleOutcome(receipt.Target, result.Outcome);
+                continue;
             }
+
+            var result = await provider.CheckAsync(receipt.TicketId, stoppingToken);
+            HandleOutcome(receipt.Target, result.Outcome);
         }
     }
 
     private void HandleOutcome(MobilePushTarget target, MobilePushOutcome outcome)
     {
-        if (outcome == MobilePushOutcome.Unregistered)
+        switch (outcome)
         {
-            try
-            {
-                pairing.SetPushToken(target.Id, null, expected: target.Token);
-            }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
-            {
-                logger.LogActivity(LogLevel.Warning, "mobile.push-cleanup-failed", "Mobile access",
-                    "Could not clear an expired mobile notification registration.");
-            }
-            return;
-        }
+            case MobilePushOutcome.Unregistered:
+                try
+                {
+                    pairing.SetPushToken(target.Id, null, expected: target.Token);
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
+                {
+                    logger.LogActivity(LogLevel.Warning, "mobile.push-cleanup-failed", "Mobile access", "Could not clear an expired mobile notification registration.");
+                }
 
-        if (outcome is MobilePushOutcome.InvalidCredentials or MobilePushOutcome.Rejected or MobilePushOutcome.Retry)
-        {
-            var detail = outcome == MobilePushOutcome.InvalidCredentials
-                ? "Check the Apple or Firebase push credentials configured for this build." : null;
-            logger.LogActivity(LogLevel.Warning, "mobile.push-delivery-failed", "Mobile access", "A mobile notification could not be delivered.", detail);
+                return;
+            case MobilePushOutcome.InvalidCredentials or MobilePushOutcome.Rejected or MobilePushOutcome.Retry:
+                {
+                    var detail = outcome == MobilePushOutcome.InvalidCredentials ? "Check the Apple or Firebase push credentials configured for this build." : null;
+                    logger.LogActivity(LogLevel.Warning, "mobile.push-delivery-failed", "Mobile access", "A mobile notification could not be delivered.", detail);
+
+                    break;
+                }
         }
     }
 
-    private static Channel<T> Bounded<T>(int capacity) =>
-        Channel.CreateBounded<T>(new BoundedChannelOptions(capacity) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
+    private static Channel<T> Bounded<T>(int capacity) => Channel.CreateBounded<T>(new BoundedChannelOptions(capacity) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
 
     private sealed record RecipientQueue(Guid Id, CancellationToken Revoked, Channel<PendingAlert> Alerts);
     private sealed record PendingAlert(MobilePushAlert Alert, MobilePushTarget Target, DateTimeOffset ExpiresAt);

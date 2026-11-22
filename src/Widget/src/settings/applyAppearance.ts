@@ -19,7 +19,6 @@ export function applyAppearance(root: HTMLElement, settings: Settings): void {
         spreadColor: ['spread', '#7954b3'],
         headroomColor: ['headroom', '#147344'],
         comparisonColor: ['comparison', '#506d7a'],
-        connectedColor: ['connected', '#147344'],
         pinFillColor: ['pin-fill', '#007f73'],
         warningColor: ['warning', '#915000'],
         errorColor: ['error', '#b52643'],

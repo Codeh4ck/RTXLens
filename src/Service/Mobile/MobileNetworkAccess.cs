@@ -22,14 +22,12 @@ internal sealed class MobileNetworkAccess : IMobileNetworkAccess
     {
         if (rules.OpenFirewall)
         {
-            Run(() => AddFirewallRules(rules),
-                "Windows Firewall could not add the Mobile Access rule. Run the service as administrator and retry.");
+            Run(() => AddFirewallRules(rules), "Windows Firewall could not add the Mobile Access rule. Run the service as administrator and retry.");
         }
 
         if (rules.PortForwarding is { } forwarding)
         {
-            Run(() => AddMapping(rules, forwarding),
-                "The router could not set up automatic forwarding. Check UPnP or configure forwarding manually.");
+            Run(() => AddMapping(rules, forwarding), "The router could not set up automatic forwarding. Check UPnP or configure forwarding manually.");
         }
     }
 
@@ -42,8 +40,7 @@ internal sealed class MobileNetworkAccess : IMobileNetworkAccess
 
         if (rules.PortForwarding is { } forwarding)
         {
-            Run(() => RemoveMapping(rules, forwarding),
-                "The router could not remove the previous automatic forwarding rule. Check UPnP and retry.");
+            Run(() => RemoveMapping(rules, forwarding), "The router could not remove the previous automatic forwarding rule. Check UPnP and retry.");
         }
     }
 
@@ -53,8 +50,7 @@ internal sealed class MobileNetworkAccess : IMobileNetworkAccess
         {
             action();
         }
-        catch (Exception error) when (error is COMException or InvalidOperationException or UnauthorizedAccessException
-            or RuntimeBinderException or System.Security.SecurityException)
+        catch (Exception error) when (error is COMException or InvalidOperationException or UnauthorizedAccessException or RuntimeBinderException or System.Security.SecurityException)
         {
             throw new MobileNetworkException(error is InvalidOperationException ? error.Message : message, error);
         }
@@ -76,6 +72,7 @@ internal sealed class MobileNetworkAccess : IMobileNetworkAccess
     {
         var mappings = GetMappings();
         var mapping = FindMapping(mappings, forwarding.ExternalPort);
+
         if (mapping is not null && OwnsMapping(mapping, rules, forwarding))
         {
             mappings.Remove(forwarding.ExternalPort, "TCP");
@@ -85,6 +82,7 @@ internal sealed class MobileNetworkAccess : IMobileNetworkAccess
     private static void AddFirewallRules(MobileNetworkRules rules)
     {
         var application = Environment.ProcessPath;
+
         if (!string.Equals(Path.GetFileName(application), "RTXLens.Service.exe", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException("Automatic firewall setup requires the RTX Lens service executable.");
@@ -99,6 +97,7 @@ internal sealed class MobileNetworkAccess : IMobileNetworkAccess
             }
 
             dynamic rule = CreateComObject("HNetCfg.FWRule");
+
             rule.Name = settings.Name;
             rule.Description = "Inbound RTX Lens mobile streaming and pairing.";
             rule.ApplicationName = application;
@@ -109,6 +108,7 @@ internal sealed class MobileNetworkAccess : IMobileNetworkAccess
             rule.RemoteAddresses = settings.RemoteAddresses;
             rule.Action = 1; // Allow
             rule.Enabled = true;
+
             firewall.Rules.Add(rule);
         }
     }
@@ -117,6 +117,7 @@ internal sealed class MobileNetworkAccess : IMobileNetworkAccess
     {
         const int domainAndPrivate = 3;
         const int publicProfile = 4;
+
         var name = RuleName(rules);
 
         return
@@ -129,6 +130,7 @@ internal sealed class MobileNetworkAccess : IMobileNetworkAccess
     private static void AddMapping(MobileNetworkRules rules, MobilePortForwarding forwarding)
     {
         var address = IPAddress.Parse(forwarding.LocalAddress);
+
         var localAddress = NetworkInterface.GetAllNetworkInterfaces()
             .Where(adapter => adapter.OperationalStatus == OperationalStatus.Up)
             .SelectMany(adapter => adapter.GetIPProperties().UnicastAddresses)
@@ -186,8 +188,7 @@ internal sealed class MobileNetworkAccess : IMobileNetworkAccess
     private static dynamic GetMappings()
     {
         dynamic router = CreateComObject("HNetCfg.NATUPnP");
-        return router.StaticPortMappingCollection
-            ?? throw new InvalidOperationException("The router does not provide automatic port forwarding.");
+        return router.StaticPortMappingCollection ?? throw new InvalidOperationException("The router does not provide automatic port forwarding.");
     }
 
     private static object CreateComObject(string programId) => Activator.CreateInstance(Type.GetTypeFromProgID(programId, true)!)!;

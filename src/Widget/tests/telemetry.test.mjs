@@ -181,8 +181,8 @@ test('unknown headroom is never inferred from an axis; matching device limit is 
     assert.equal(presenter.present(binding, now).pins[0].headroom, '-');
 });
 
-test('settings fit two categories with contiguous numbered panel sections and no advanced text selectors', () => {
-    assert.deepEqual([...new Set(definitions.map(definition => definition.group))], ['Panels and telemetry', 'GPU Status settings', 'Widget Personalization']);
+test('desktop widget settings fit three categories with contiguous numbered panel sections', () => {
+    assert.deepEqual([...new Set(definitions.map(definition => definition.group))], ['Panels and layout', 'Readings and alerts', 'Widget Personalization']);
     for (let panel = 1; panel <= 3; panel++) {
         const controls = definitions.filter(definition => new RegExp(`^panel${panel}(?:[A-Z]|$)`).test(definition.id));
         assert.deepEqual(controls.map(definition => definition.id), [`panel${panel}`, `panel${panel}Title`, `panel${panel}Hero`]);

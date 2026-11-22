@@ -13,9 +13,7 @@ internal enum MobileWarningCategory
     All = Connector | Temperature | Safeguard | Other
 }
 
-internal sealed record MobileNotificationPreferences(
-    [property: JsonRequired] MobileWarningCategory Categories,
-    [property: JsonRequired] bool ShowTitle)
+internal sealed record MobileNotificationPreferences([property: JsonRequired] MobileWarningCategory Categories, [property: JsonRequired] bool ShowTitle)
 {
     public static MobileNotificationPreferences Default { get; } = new(MobileWarningCategory.All, true);
 

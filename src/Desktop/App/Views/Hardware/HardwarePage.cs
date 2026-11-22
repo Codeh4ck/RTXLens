@@ -264,7 +264,7 @@ internal sealed class HardwarePage : UserControl
     private static Grid CreateDetails(HardwarePanelViewModel panel, ShellViewModel shell)
     {
         var gpu = shell.Dashboard.GpuStatus;
-        var status = GpuStatusPanel.Create(gpu, panel.IsWireView ? panel : null, showDomainClocks: panel.IsNvidia);
+        var status = GpuStatusPanel.Create(gpu, panel.IsWireView ? panel : null, isDedicatedTab: panel.IsNvidia);
 
         if (panel.IsNvidia)
         {

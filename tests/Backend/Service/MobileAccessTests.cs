@@ -49,7 +49,7 @@ internal static class MobileAccessTests
         store.Save(MobileAccessData.Empty with
         {
             Settings = new MobileAccessSettings(Enabled: true),
-            Devices = tokens.Select(token => new MobileDeviceCredential(Guid.NewGuid(), token, new byte[32], token)).ToArray()
+            Devices = [.. tokens.Select(token => new MobileDeviceCredential(Guid.NewGuid(), token, new byte[32], token))]
         });
         var pairing = new MobilePairing(store, TimeProvider.System, NullLogger.Instance);
         pairing.Load();

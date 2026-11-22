@@ -11,11 +11,7 @@ using RTXLens.Contracts.Mobile;
 namespace RTXLens.Service.Mobile;
 
 [SupportedOSPlatform("windows")]
-internal sealed class MobileAccessAdminPipe(
-    string pipeName,
-    MobileAccessService service,
-    MobilePairing pairing,
-    ILogger<MobileAccessAdminPipe> logger) : BackgroundService
+internal sealed class MobileAccessAdminPipe(string pipeName, MobileAccessService service, MobilePairing pairing, ILogger<MobileAccessAdminPipe> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -27,6 +23,7 @@ internal sealed class MobileAccessAdminPipe(
             {
                 await using var pipe = NamedPipeServerStreamAcl.Create(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
                     PipeOptions.Asynchronous | PipeOptions.FirstPipeInstance, 0, 0, security);
+
                 while (!stoppingToken.IsCancellationRequested)
                 {
                     await pipe.WaitForConnectionAsync(stoppingToken);
@@ -58,6 +55,7 @@ internal sealed class MobileAccessAdminPipe(
         try
         {
             await pipe.ReadExactlyAsync(header, deadline.Token);
+
             var size = BinaryPrimitives.ReadInt32LittleEndian(header);
             if (size is <= 0 or > MobileAccessProtocol.MaxRequestSize)
             {
@@ -66,6 +64,7 @@ internal sealed class MobileAccessAdminPipe(
 
             contents = new byte[size];
             await pipe.ReadExactlyAsync(contents, deadline.Token);
+
             var request = JsonSerializer.Deserialize<MobileAccessRequest>(contents, MobileAccessProtocol.Json);
 
             // Finish an accepted local command even if its caller disconnects.
@@ -87,7 +86,7 @@ internal sealed class MobileAccessAdminPipe(
         }
         catch (Exception error) when (error is OperationCanceledException or IOException or JsonException)
         {
-            // A dropped, malformed or timed-out local request does not affect the service.
+            // A dropped, malformed or timed-out local request does not affect the service
         }
         finally
         {
@@ -138,8 +137,7 @@ internal sealed class MobileAccessAdminPipe(
         {
             return new MobileAccessResponse(false, Error: "The mobile access settings are invalid.");
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException
-            or CryptographicException or InvalidOperationException)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or CryptographicException or InvalidOperationException)
         {
             logger.LogActivity(LogLevel.Warning, "mobile.admin-command-failed", "Mobile access", "A mobile access setup command failed.");
             return new MobileAccessResponse(false, Error: "The service could not complete the mobile access command.");
@@ -150,8 +148,10 @@ internal sealed class MobileAccessAdminPipe(
     {
         var security = new PipeSecurity();
         security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+
         using var identity = WindowsIdentity.GetCurrent();
         security.SetOwner(identity.User!);
+
         var network = new SecurityIdentifier(WellKnownSidType.NetworkSid, null);
         security.AddAccessRule(new PipeAccessRule(network, PipeAccessRights.FullControl, AccessControlType.Deny));
 
