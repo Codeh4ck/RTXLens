@@ -29,28 +29,33 @@ internal sealed class MobileSimulationWarnings(TimeProvider clock)
     public byte[] AddToFrame(byte[] frame)
     {
         Warning[] warnings;
+
         lock (_lock)
         {
             Expire(clock.GetUtcNow());
+
             if (_recent.Count == 0)
             {
                 return frame;
             }
 
-            warnings = _recent.ToArray();
+            warnings = [.. _recent];
         }
 
-        // Only the paired Debug mobile stream gets this optional field.
+        // Only the paired Debug mobile stream gets this optional field
         using var snapshot = JsonDocument.Parse(frame);
         var buffer = new ArrayBufferWriter<byte>(frame.Length + 512);
+
         using var writer = new Utf8JsonWriter(buffer);
         writer.WriteStartObject();
+
         foreach (var property in snapshot.RootElement.EnumerateObject())
         {
             property.WriteTo(writer);
         }
 
         writer.WriteStartArray("simulationWarnings");
+
         foreach (var warning in warnings)
         {
             writer.WriteStartObject();
@@ -64,7 +69,8 @@ internal sealed class MobileSimulationWarnings(TimeProvider clock)
         writer.WriteEndArray();
         writer.WriteEndObject();
         writer.Flush();
-        return buffer.WrittenSpan.ToArray();
+
+        return [.. buffer.WrittenSpan];
     }
 
     public void Clear()

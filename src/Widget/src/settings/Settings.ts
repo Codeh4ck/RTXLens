@@ -42,6 +42,10 @@ export class Settings {
         return this.values[id] === true;
     }
 
+    get stackGpuClocks(): boolean {
+        return this.enabled('alwaysShowInternalClocks') || this.enabled('hideGpuFans');
+    }
+
     raw(id: string): unknown {
         return this.values[id];
     }

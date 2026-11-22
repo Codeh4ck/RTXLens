@@ -112,8 +112,9 @@ internal sealed class EventLogPage : UserControl
         var scroll = Scroll(table);
         scroll.HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto;
         scroll.VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled;
-        var surface = new Border { CornerRadius = new CornerRadius(7), Margin = new Thickness(1), ClipToBounds = true, Child = scroll };
-        surface[!Border.BackgroundProperty] = new DynamicResourceExtension("PanelBrush");
+        var surface = new Border { CornerRadius = new CornerRadius(7), Margin = new Thickness(1), ClipToBounds = true, Child = scroll,
+            [!Border.BackgroundProperty] = new DynamicResourceExtension("PanelBrush")
+        };
         var outline = new Border { Classes = { "panel-frame" }, Background = Brushes.Transparent, IsHitTestVisible = false };
         var frame = new Grid { Children = { surface, outline } };
         surface.SizeChanged += (_, _) => UpdateTableWidth();

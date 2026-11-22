@@ -29,8 +29,7 @@ internal sealed partial class ExpoMobilePushProvider(HttpClient client)
             data = new { screen = "warnings", incidentId = alert.IncidentId, kind = alert.IncidentKind }
         }, null, cancellationToken);
 
-    public Task<MobilePushResult> CheckAsync(string ticketId, CancellationToken cancellationToken) =>
-        PostAsync(ReceiptsUri, new { ids = new[] { ticketId } }, ticketId, cancellationToken);
+    public Task<MobilePushResult> CheckAsync(string ticketId, CancellationToken cancellationToken) => PostAsync(ReceiptsUri, new { ids = new[] { ticketId } }, ticketId, cancellationToken);
 
     private async Task<MobilePushResult> PostAsync(Uri uri, object payload, string? ticketId, CancellationToken cancellationToken)
     {

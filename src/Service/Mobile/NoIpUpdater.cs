@@ -38,7 +38,6 @@ internal sealed class NoIpUpdater(HttpClient client, TimeProvider clock, ILogger
         _nextCheck = now.AddMinutes(5);
         try
         {
-            // The public IP check carries no credentials. The HTTPS update uses No-IP's observed IPv4 address.
             var contents = await client.GetStringAsync(DetectionAddress, cancellationToken);
             if (!IPAddress.TryParse(contents.Trim(), out var address) || address.AddressFamily != AddressFamily.InterNetwork)
             {
@@ -53,26 +52,28 @@ internal sealed class NoIpUpdater(HttpClient client, TimeProvider clock, ILogger
             }
 
             var hostname = Uri.EscapeDataString(settings.Hostname);
-            using var request = new HttpRequestMessage(HttpMethod.Get, $"{UpdateAddress}?hostname={hostname}");
             var credentials = Encoding.UTF8.GetBytes($"{settings.KeyUsername}:{settings.KeyPassword}");
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{UpdateAddress}?hostname={hostname}");
             request.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(credentials));
 
             using var response = await client.SendAsync(request, cancellationToken);
+
             var body = (await response.Content.ReadAsStringAsync(cancellationToken)).Trim();
             var parts = body.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
             var code = parts.FirstOrDefault();
 
-            if (response.IsSuccessStatusCode && code is ("good" or "nochg")
-                && parts.Length == 2 && IPAddress.TryParse(parts[1], out var updated)
-                && updated.AddressFamily == AddressFamily.InterNetwork)
+            if (response.IsSuccessStatusCode && code is ("good" or "nochg") && parts.Length == 2 && IPAddress.TryParse(parts[1], out var updated) &&
+                updated.AddressFamily == AddressFamily.InterNetwork)
             {
                 _lastAddress = updated;
                 SetStatus(NoIpUpdateState.Current, "The No-IP hostname is current.");
             }
-            else if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
-                     || code is "badauth" or "nohost" or "badagent" or "abuse" or "!donator")
+            else if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden ||
+                     code is "badauth" or "nohost" or "badagent" or "abuse" or "!donator")
             {
                 _nextCheck = DateTimeOffset.MaxValue;
+
                 SetStatus(NoIpUpdateState.ActionRequired, "No-IP rejected the update. Check the hostname and DDNS key.");
             }
             else
@@ -80,8 +81,7 @@ internal sealed class NoIpUpdater(HttpClient client, TimeProvider clock, ILogger
                 ScheduleRetry("No-IP could not update the hostname. The service will retry in 30 minutes.");
             }
         }
-        catch (Exception error) when (error is HttpRequestException or IOException
-            || (error is OperationCanceledException && !cancellationToken.IsCancellationRequested))
+        catch (Exception error) when (error is HttpRequestException or IOException || (error is OperationCanceledException && !cancellationToken.IsCancellationRequested))
         {
             ScheduleRetry("No-IP could not be reached. The service will retry in 30 minutes.");
         }
@@ -104,6 +104,7 @@ internal sealed class NoIpUpdater(HttpClient client, TimeProvider clock, ILogger
 
         var version = typeof(NoIpUpdater).Assembly.GetName().Version;
         client.DefaultRequestHeaders.UserAgent.ParseAdd($"RTX-Lens RTXLens/Windows{Environment.OSVersion.Version}-{version}");
+
         return client;
     }
 

@@ -1226,6 +1226,7 @@ internal static class AvaloniaDashboardTests
         shell.Dashboard.SetCatalog(new PluginCatalog(1,
         [
             new PluginInfo(wireView, "WireView", true, PluginState.Ready, now, null, []),
+            new PluginInfo("asus-astral", "ROG Astral", true, PluginState.Ready, now, null, []),
             new PluginInfo(nvidia, "Nvidia", true, PluginState.Ready, now, null, [])
         ]));
 
@@ -1247,6 +1248,20 @@ internal static class AvaloniaDashboardTests
             TestAssert.Equal(0.4, pin.FillFraction);
             TestAssert.True(window.GetVisualDescendants().OfType<PinBar>().Contains(pin),
                 "A new frame should update the existing pin visual.");
+
+            foreach (var id in new[] { wireView, "asus-astral", nvidia })
+            {
+                window.Content = new HardwarePage(shell.Dashboard.Panels.Single(item => item.Id == id), shell);
+                foreach (var show in new[] { false, true, false })
+                {
+                    shell.Dashboard.Apply(Frame(3, 4), shell.Preferences with { ShowInternalClocksOnGpuStatusPanels = show }, now);
+                    Dispatcher.UIThread.RunJobs();
+                    var labels = window.GetVisualDescendants().OfType<TextBlock>().Where(text => text.IsEffectivelyVisible)
+                        .Select(text => text.Text).ToArray();
+                    TestAssert.Equal(show || id == nvidia, labels.Contains("Crossbar clock"));
+                    TestAssert.Equal(show || id == nvidia, labels.Contains("GPU system clock"));
+                }
+            }
         }
         finally
         {
@@ -1260,7 +1275,11 @@ internal static class AvaloniaDashboardTests
                 new SensorReading(new SensorIdentity(wireView, "device", SensorComponent.GpuPin, SensorMetric.Current, 1),
                     SensorUnit.Amperes, current, now),
                 new SensorReading(new SensorIdentity(nvidia, "Nvidia RTX 5090", SensorComponent.GpuCore, SensorMetric.Clock),
-                    SensorUnit.Megahertz, 1650, now)
+                    SensorUnit.Megahertz, 1650, now),
+                new SensorReading(new SensorIdentity(nvidia, "Nvidia RTX 5090", SensorComponent.GpuCrossbar, SensorMetric.Clock),
+                    SensorUnit.Megahertz, 1800, now),
+                new SensorReading(new SensorIdentity(nvidia, "Nvidia RTX 5090", SensorComponent.GpuSystem, SensorMetric.Clock),
+                    SensorUnit.Megahertz, 1500, now)
             ],
             [
                 new PluginHealth(wireView, PluginState.Ready, now, null),

@@ -15,6 +15,8 @@ export function fixture(now = Date.now()) {
         value, unit, observedAt: frame.timestamp, quality: 'Valid'
     });
 
+    add('GpuCrossbar', 'Clock', 'Megahertz', 2175);
+    add('GpuSystem', 'Clock', 'Megahertz', 1650);
     add('GpuCore', 'Voltage', 'Volts', 0.925);
     add('GpuHotspot', 'Temperature', 'Celsius', 73.28);
     add('GpuFan', 'FanDuty', 'Percent', 50, 1);

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { definitions } from '../src/settings/definitions.ts';
+import { definitions, hostDefinitions } from '../src/settings/definitions.ts';
 import { validateImportMetadata } from './validation/validateImportMetadata.mjs';
 import { readZipEntries } from './validation/readZipEntries.mjs';
 
@@ -115,8 +115,14 @@ try {
         const data = (await readFile(join(root, 'resources', filename))).toString('base64');
         stylesheet = stylesheet.replaceAll(`url('resources/${filename}')`, `url("data:image/svg+xml;base64,${data}")`);
     }
-    const groups = [...new Set(definitions.map(definition => definition.group))].map(group => ({ title: translate(group),
-        properties: definitions.filter(definition => definition.group === group).map(definition => definition.id) }));
+    // Keep the old property IDs declared so iCUE can inject saved instance values on upgrade.
+    // Only host-owned controls belong in iCUE's settings panels.
+    const profileGroup = 'RTX Lens profile';
+    const profileHelp = 'In RTX Lens, open Configuration and select iCUE Widget. Enter the profile name here, or enter Instance to use the settings saved in iCUE for this widget.';
+    const groups = [
+        { title: translate(profileGroup), info: translate(profileHelp), properties: ['widgetProfile'] },
+        { title: translate('Widget Personalization'), properties: hostDefinitions.filter(setting => setting.id !== 'widgetProfile').map(setting => setting.id) }
+    ];
     const metadata = propertyMetadata() + '\n<script type="application/json" id="x-icue-groups">' + JSON.stringify(groups) + '</script>';
     const runtime = bundle.outputFiles[0].text + bridge();
     const template = await readFile(join(root, 'index.html'), 'utf8');
@@ -124,7 +130,7 @@ try {
         .replace('/* WIDGET_RUNTIME */', () => runtime.replaceAll('</script', '<\\/script'));
     await writeFile(join(stage, 'index.html'), html);
     await writeFile(join(stage, 'manifest.json'), JSON.stringify({ ...manifest, version }, null, 2));
-    const translations = { 'RTX Lens': 'RTX Lens' };
+    const translations = { 'RTX Lens': 'RTX Lens', [profileGroup]: profileGroup, [profileHelp]: profileHelp };
     for (const definition of definitions) {
         translations[definition.label] = definition.label;
         translations[definition.group] = definition.group;

@@ -76,7 +76,9 @@ internal sealed class MobilePairing(IMobileAccessStore store, TimeProvider clock
 
             var secret = CreateSecret();
             var expiresAt = clock.GetUtcNow() + InviteLifetime;
+
             _invite = new PendingInvite(Hash(secret), expiresAt);
+
             return new MobilePairingInvite(secret, fingerprint, expiresAt);
         }
     }
@@ -99,6 +101,7 @@ internal sealed class MobilePairing(IMobileAccessStore store, TimeProvider clock
 
             var secret = CreateSecret();
             var claim = new PendingClaim(Guid.NewGuid(), name, Hash(secret));
+
             invite.Claim = claim;
 
             logger.LogActivity(LogLevel.Information, "mobile.pairing-requested", "Mobile access", "A phone requested pairing.");
@@ -111,9 +114,7 @@ internal sealed class MobilePairing(IMobileAccessStore store, TimeProvider clock
         lock (_gate)
         {
             var invite = CurrentInvite();
-            return invite?.Claim is { Approved: false } claim
-                ? new MobilePairingApproval(claim.Id, claim.Name, invite.ExpiresAt)
-                : null;
+            return invite?.Claim is { Approved: false } claim ? new MobilePairingApproval(claim.Id, claim.Name, invite.ExpiresAt) : null;
         }
     }
 
@@ -160,15 +161,20 @@ internal sealed class MobilePairing(IMobileAccessStore store, TimeProvider clock
                 return (true, null);
             }
 
-            if (claim.Credential is null)
+            if (claim.Credential is not null)
             {
-                var secret = CreateSecret();
-                var device = new MobileDeviceCredential(Guid.NewGuid(), claim.Name, Hash(secret));
-                Save(_data with { Devices = [.. _data.Devices, device] });
-                _devices.Add(device.Id, new PairedDevice(device));
-                claim.Credential = new MobilePairingCredential(device.Id, $"{device.Id:N}.{secret}");
-                logger.LogActivity(LogLevel.Information, "mobile.paired", "Mobile access", "A phone was paired.");
+                return (true, claim.Credential);
             }
+
+            var secret = CreateSecret();
+            var device = new MobileDeviceCredential(Guid.NewGuid(), claim.Name, Hash(secret));
+
+            Save(_data with { Devices = [.. _data.Devices, device] });
+
+            _devices.Add(device.Id, new PairedDevice(device));
+            claim.Credential = new MobilePairingCredential(device.Id, $"{device.Id:N}.{secret}");
+
+            logger.LogActivity(LogLevel.Information, "mobile.paired", "Mobile access", "A phone was paired.");
 
             // Permit the same claim to recover its response until the invite expires.
             return (true, claim.Credential);
@@ -177,8 +183,9 @@ internal sealed class MobilePairing(IMobileAccessStore store, TimeProvider clock
 
     public bool TryAuthenticate(string? token, out Guid id, out CancellationToken revoked)
     {
-        id = default;
-        revoked = default;
+        id = Guid.Empty;
+        revoked = CancellationToken.None;
+
         if (token is not { Length: 76 } || token[32] != '.' || !Guid.TryParseExact(token.AsSpan(0, 32), "N", out id))
         {
             return false;
@@ -227,7 +234,8 @@ internal sealed class MobilePairing(IMobileAccessStore store, TimeProvider clock
             }
 
             device = existing;
-            Save(_data with { Devices = _data.Devices.Where(value => value.Id != id).ToArray() });
+            Save(_data with { Devices = [.. _data.Devices.Where(value => value.Id != id)] });
+
             _devices.Remove(id);
 
             if (_invite?.Claim?.Credential?.DeviceId == id)
@@ -238,6 +246,7 @@ internal sealed class MobilePairing(IMobileAccessStore store, TimeProvider clock
 
         device.Revoked.Cancel();
         logger.LogActivity(LogLevel.Information, "mobile.revoked", "Mobile access", "A phone’s access was revoked.");
+
         return true;
     }
 
@@ -245,9 +254,11 @@ internal sealed class MobilePairing(IMobileAccessStore store, TimeProvider clock
     {
         lock (_gate)
         {
-            return _devices.Values.Select(device => new MobileDevice(
-                device.Credential.Id, device.Credential.Name, device.LastConnectedAt, device.LastExternalConnectionAt,
-                device.Credential.PushToken is not null)).ToArray();
+            return
+            [
+                .. _devices.Values.Select(device =>
+                    new MobileDevice(device.Credential.Id, device.Credential.Name, device.LastConnectedAt, device.LastExternalConnectionAt, device.Credential.PushToken is not null))
+            ];
         }
     }
 
@@ -265,11 +276,14 @@ internal sealed class MobilePairing(IMobileAccessStore store, TimeProvider clock
                 PushToken = token,
                 NotificationPreferences = preferences ?? device.Credential.NotificationPreferences
             };
-            if (updated != device.Credential)
+
+            if (updated == device.Credential)
             {
-                Save(_data with { Devices = [.. _data.Devices.Select(value => value.Id == id ? updated : value)] });
-                device.Credential = updated;
+                return true;
             }
+
+            Save(_data with { Devices = [.. _data.Devices.Select(value => value.Id == id ? updated : value)] });
+            device.Credential = updated;
 
             return true;
         }
@@ -295,8 +309,7 @@ internal sealed class MobilePairing(IMobileAccessStore store, TimeProvider clock
         }
     }
 
-    private PendingInvite? CurrentInvite() =>
-        _listening && _invite is { } invite && invite.ExpiresAt > clock.GetUtcNow() ? invite : null;
+    private PendingInvite? CurrentInvite() => _listening && _invite is { } invite && invite.ExpiresAt > clock.GetUtcNow() ? invite : null;
 
     private void Save(MobileAccessData data)
     {
@@ -304,13 +317,11 @@ internal sealed class MobilePairing(IMobileAccessStore store, TimeProvider clock
         _data = data;
     }
 
-    private static string CreateSecret() => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
-        .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+    private static string CreateSecret() => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
     private static byte[] Hash(string secret) => SHA256.HashData(Encoding.ASCII.GetBytes(secret));
 
-    private static bool Matches(string? secret, byte[] hash) =>
-        secret is { Length: 43 } && CryptographicOperations.FixedTimeEquals(Hash(secret), hash);
+    private static bool Matches(string? secret, byte[] hash) => secret is { Length: 43 } && CryptographicOperations.FixedTimeEquals(Hash(secret), hash);
 
     private sealed record PendingInvite(byte[] SecretHash, DateTimeOffset ExpiresAt)
     {

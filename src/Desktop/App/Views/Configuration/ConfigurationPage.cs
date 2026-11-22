@@ -24,6 +24,7 @@ internal sealed class ConfigurationPage : UserControl
     private const string MobileAccessTab = "Mobile Access";
     private readonly ShellViewModel _shell;
     private readonly ConfigurationEditorViewModel _editor;
+
     private readonly TabControl _tabs = new()
     {
         ItemsPanel = new FuncTemplate<Panel?>(() => new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 })
@@ -105,6 +106,7 @@ internal sealed class ConfigurationPage : UserControl
             if (ReferenceEquals(args.Source, _tabs))
             {
                 RealizeSelectedTab();
+
                 actions.IsVisible = !IsMobileAccessSelected;
                 UpdateMessage();
             }
@@ -140,6 +142,7 @@ internal sealed class ConfigurationPage : UserControl
             expiry.Stop();
             _editor.Plugins.CollectionChanged -= PluginsChanged;
         };
+
         return;
 
         void UpdateMessage()
@@ -166,6 +169,7 @@ internal sealed class ConfigurationPage : UserControl
 
             var showSuccess = _editor is { HasExternalChanges: false, MessageTone: StatusTone.Positive };
             SetAlert(success, showSuccess ? _editor.Message : null, "success");
+
             if (_editor.HasExternalChanges)
             {
                 SetAlert(message, "Configuration changed elsewhere. Reload before applying.", "warning");
@@ -220,9 +224,12 @@ internal sealed class ConfigurationPage : UserControl
 
         tabs.Add(Tab("Streaming", CreateStreaming));
 
-        var warnings = _tabs.Items.OfType<TabItem>().FirstOrDefault(tab => Equals(tab.Header, "Warnings"));
+        var widget = _tabs.Items.OfType<TabItem>().FirstOrDefault(tab => Equals(tab.Header, "iCUE Widget"));
+        tabs.Add(widget ?? Tab("iCUE Widget", () => new IcueWidgetSettingsView(_shell)));
 
+        var warnings = _tabs.Items.OfType<TabItem>().FirstOrDefault(tab => Equals(tab.Header, "Warnings"));
         tabs.Add(warnings ?? Tab("Warnings", () => new WarningsConfigurationView(_shell)));
+
         tabs.Add(Tab("GPU chart profiles", () => new GpuChartProfilesView(_shell)));
         tabs.Add(Tab("Source selections", CreateSources));
         tabs.Add(Tab("Maintenance", CreateMaintenance));
@@ -287,6 +294,19 @@ internal sealed class ConfigurationPage : UserControl
             };
 
             fields.Children.Add(statusTab);
+
+            var internalClocks = Switch("Show internal clocks on GPU Status panels");
+            internalClocks.IsChecked = _shell.Preferences.ShowInternalClocksOnGpuStatusPanels;
+            ToolTip.SetTip(internalClocks, "Show Crossbar and System clock readings on the WireView Pro II and ROG Astral tabs.");
+            internalClocks.IsCheckedChanged += async (_, _) =>
+            {
+                var show = internalClocks.IsChecked == true;
+                if (!await _shell.ChangePreferencesAsync(preferences => preferences with { ShowInternalClocksOnGpuStatusPanels = show }))
+                {
+                    internalClocks.IsChecked = _shell.Preferences.ShowInternalClocksOnGpuStatusPanels;
+                }
+            };
+            fields.Children.Add(internalClocks);
         }
         else if (plugin.IsAsus)
         {

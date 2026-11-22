@@ -45,10 +45,9 @@ internal sealed class MobileAccessStore(bool debugInstance) : IMobileAccessStore
         try
         {
             var data = JsonSerializer.Deserialize<MobileAccessData>(plaintext);
-            if (data is null || data.Settings is not { IsValid: true } || data.Devices is null
-                || data.Devices.Any(device => device is null || device.TokenHash is not { Length: 32 }
-                    || device.NotificationPreferences is { IsValid: false })
-                || data.Devices.Select(device => device.Id).Distinct().Count() != data.Devices.Length)
+            if (data?.Settings is not { IsValid: true } || data.Devices is null
+                                                        || data.Devices.Any(device => device.TokenHash is not { Length: 32 } || device.NotificationPreferences is { IsValid: false })
+                                                        || data.Devices.Select(device => device.Id).Distinct().Count() != data.Devices.Length)
             {
                 throw new InvalidDataException("Mobile access state is invalid.");
             }
@@ -71,6 +70,7 @@ internal sealed class MobileAccessStore(bool debugInstance) : IMobileAccessStore
         try
         {
             var ciphertext = ProtectedData.Protect(plaintext, null, DataProtectionScope.CurrentUser);
+
             using var key = _root.CreateSubKey(_subkey);
             key.SetValue(ValueName, ciphertext, RegistryValueKind.Binary);
         }

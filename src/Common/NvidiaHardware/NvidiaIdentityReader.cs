@@ -1,3 +1,4 @@
+using LibreHardwareMonitor.Hardware;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -6,6 +7,21 @@ namespace RTXLens.Hardware.Nvidia;
 internal sealed class NvidiaIdentityReader : IDisposable
 {
     private nint _library;
+    private readonly Dictionary<string, nint> _handles = new(StringComparer.Ordinal);
+    private readonly Dictionary<(string DeviceId, nint Handle, uint Domain), bool> _clockSupport = [];
+    private MeasureClock? _measureClock;
+
+    // Private NVAPI CLK_MEASURE_FREQ V1 - the request holds three 32-bit fields
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ClockMeasurement
+    {
+        public uint Version;
+        public uint DomainMask;
+        public uint FrequencyKHz;
+    }
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate int MeasureClock(nint handle, ref ClockMeasurement measurement);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate nint QueryInterface(uint id);
@@ -27,6 +43,8 @@ internal sealed class NvidiaIdentityReader : IDisposable
 
     public Dictionary<string, string> DiscoverDesktopIds()
     {
+        _handles.Clear();
+
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
         if (!OperatingSystem.IsWindows() || (_library == 0 && !NativeLibrary.TryLoad(Path.Combine(Environment.SystemDirectory, "nvapi64.dll"), out _library)))
         {
@@ -47,6 +65,8 @@ internal sealed class NvidiaIdentityReader : IDisposable
             return result;
         }
 
+        _measureClock = Get<MeasureClock>(0x527FC458);
+
         var handles = new nint[64];
         if (enumerate(handles, out var count) != 0)
         {
@@ -57,6 +77,7 @@ internal sealed class NvidiaIdentityReader : IDisposable
         {
             var handle = handles[index];
             var name = new StringBuilder(64);
+
             if (fullName(handle, name) != 0 || !name.ToString().Contains("GeForce RTX", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
@@ -69,7 +90,18 @@ internal sealed class NvidiaIdentityReader : IDisposable
                 continue;
             }
 
-            result[$"/gpu-nvidia/{index}"] = $"nvidia-pci/{busId:x2}/{slotId:x2}/{device:x8}/{subsystem:x8}";
+            var id = $"nvidia-pci/{busId:x2}/{slotId:x2}/{device:x8}/{subsystem:x8}";
+            result[$"/gpu-nvidia/{index}"] = id;
+
+            if (!_handles.TryAdd(id, handle))
+            {
+                _handles[id] = 0;
+            }
+        }
+
+        foreach (var key in _clockSupport.Keys.Where(key => _handles.GetValueOrDefault(key.DeviceId) != key.Handle).ToArray())
+        {
+            _clockSupport.Remove(key);
         }
 
         return result;
@@ -79,6 +111,59 @@ internal sealed class NvidiaIdentityReader : IDisposable
             var address = query(id);
             return address == 0 ? null : Marshal.GetDelegateForFunctionPointer<T>(address);
         }
+    }
+
+    public NvidiaSensor[] ReadDomainClocks(string deviceId)
+    {
+        if (_measureClock is not { } measure || !_handles.TryGetValue(deviceId, out var handle) || handle == 0)
+        {
+            return [];
+        }
+
+        var sensors = new List<NvidiaSensor>(2);
+
+        Read(0x02, "GPU Crossbar");
+        Read(0x04, "GPU System");
+
+        return [.. sensors];
+
+        void Read(uint mask, string name)
+        {
+            var key = (deviceId, handle, mask);
+            var known = _clockSupport.TryGetValue(key, out var supported);
+
+            if (known && !supported)
+            {
+                return;
+            }
+
+            var request = new ClockMeasurement { Version = 0x1000C, DomainMask = mask };
+            var status = measure(handle, ref request);
+
+            switch (status)
+            {
+                // NVAPI_NO_IMPLEMENTATION or NVAPI_NOT_SUPPORTED
+                case -3 or -104:
+                    _clockSupport[key] = false;
+                    return;
+                case 0 when request.FrequencyKHz is > 0 and < uint.MaxValue:
+                    _clockSupport[key] = true;
+                    sensors.Add(new NvidiaSensor(name, SensorType.Clock, 0, request.FrequencyKHz / 1000f));
+                    break;
+                default:
+                    if (supported)
+                    {
+                        sensors.Add(new NvidiaSensor(name, SensorType.Clock, 0, null));
+                    }
+                    break;
+            }
+        }
+    }
+
+    public void ResetClocks()
+    {
+        _handles.Clear();
+        _clockSupport.Clear();
     }
 
     public void Dispose()

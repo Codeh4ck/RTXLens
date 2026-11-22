@@ -10,12 +10,14 @@ namespace RTXLens.Service.Configuration;
 internal sealed class DeviceWarningProfileStore(HardwareCatalog hardware, SettingsProfileStore settings, ILogger<DeviceWarningProfileStore> logger)
 {
     private const int MaximumProfiles = 48;
+
     private static readonly AppJsonContext InputJson = new(new JsonSerializerOptions(AppJsonContext.Default.Options)
     {
         PropertyNameCaseInsensitive = true
     });
 
     private readonly Lock _gate = new();
+
     private DeviceWarningProfile[]? _profiles;
     private WarningProfileTarget[] _targets = [];
 
@@ -111,8 +113,7 @@ internal sealed class DeviceWarningProfileStore(HardwareCatalog hardware, Settin
             }
 
             using var document = JsonDocument.Parse(File.ReadAllText(PathOnDisk));
-            var saved = document.RootElement.ValueKind == JsonValueKind.Array
-                ? document.RootElement.EnumerateArray().Select(ReadProfile).ToArray() : null;
+            var saved = document.RootElement.ValueKind == JsonValueKind.Array ? document.RootElement.EnumerateArray().Select(ReadProfile).ToArray() : null;
 
             if (saved is { Length: <= MaximumProfiles } && saved.All(profile => profile.IsValid() && (hardware.Find(profile.PluginId) is null || ValidTarget(profile))) &&
                 saved.Select(profile => profile.Id).Distinct(StringComparer.Ordinal).Count() == saved.Length)
@@ -120,13 +121,11 @@ internal sealed class DeviceWarningProfileStore(HardwareCatalog hardware, Settin
                 return _profiles = saved;
             }
 
-            logger.LogActivity(LogLevel.Warning, "protection.profiles-invalid", "Configuration",
-                "The service ignored invalid device warning profiles.", eventViewer: true);
+            logger.LogActivity(LogLevel.Warning, "protection.profiles-invalid", "Configuration", "The service ignored invalid device warning profiles.", eventViewer: true);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
         {
-            logger.LogActivity(LogLevel.Error, "protection.profiles-read-failed", "Configuration",
-                "Could not load device warning profiles.", eventViewer: true, exception: error);
+            logger.LogActivity(LogLevel.Error, "protection.profiles-read-failed", "Configuration", "Could not load device warning profiles.", eventViewer: true, exception: error);
         }
 
         return _profiles = [];
@@ -140,13 +139,11 @@ internal sealed class DeviceWarningProfileStore(HardwareCatalog hardware, Settin
     {
         var profile = element.Deserialize(InputJson.DeviceWarningProfile) ?? throw new JsonException("Empty warning profile.");
         var original = hardware.LegacyProfileDefaults;
+
         if (original is null)
         {
             return profile;
         }
-
-        bool Has(string name) => element.EnumerateObject().Any(property =>
-            string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase));
 
         return profile with
         {
@@ -154,12 +151,15 @@ internal sealed class DeviceWarningProfileStore(HardwareCatalog hardware, Settin
             Name = Has("name") ? profile.Name : original.Name,
             Id = Has("id") ? profile.Id : original.Id
         };
+
+        bool Has(string name) => element.EnumerateObject().Any(property => string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase));
     }
 
     private void Write(DeviceWarningProfile[] profiles)
     {
         Directory.CreateDirectory(settings.DirectoryPath);
         SettingsProfileStore.WriteAtomically(PathOnDisk, JsonSerializer.Serialize(profiles, AppJsonContext.Default.DeviceWarningProfileArray));
+        
         _profiles = profiles;
     }
 }

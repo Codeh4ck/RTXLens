@@ -43,11 +43,11 @@ internal sealed class FanCurveWindow : LensWindow
             MinHeight = 180,
             XAxis = new XyAxis(new XyRange(0, 100), "PSU temperature (°C)", value => $"{value:0} °C", 11),
             YAxis = new XyAxis(new XyRange(0, 100), "Fan duty", value => $"{value:0}%", 11),
-            EditingOptions = new XyCurveEditingOptions(1, 1, 1, MaximumPointCount: 6, ExtendEndpoints: true)
+            EditingOptions = new XyCurveEditingOptions(1, 1, 1, MaximumPointCount: 6, ExtendEndpoints: true),
+            [!XyPlot.AccentBrushProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("PrimaryBrush"),
+            [!XyPlot.GridBrushProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(DesktopBrushes.PanelBorder),
+            [!XyPlot.AxisBrushProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(DesktopBrushes.MutedText)
         };
-        curve[!XyPlot.AccentBrushProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("PrimaryBrush");
-        curve[!XyPlot.GridBrushProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(DesktopBrushes.PanelBorder);
-        curve[!XyPlot.AxisBrushProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(DesktopBrushes.MutedText);
 
         var pointList = new ItemsControl
         {

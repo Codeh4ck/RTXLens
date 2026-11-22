@@ -1,1 +1,5 @@
-<Project Sdk="Microsoft.NET.Sdk" />
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <EmbeddedResource Include="Configuration/WidgetSettings.json" LogicalName="WidgetSettings.json" />
+  </ItemGroup>
+</Project>

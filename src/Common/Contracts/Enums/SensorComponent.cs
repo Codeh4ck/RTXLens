@@ -16,5 +16,7 @@ public enum SensorComponent
     GpuHotspot,
     GpuPcie,
     GpuPerformance,
-    GpuPowerLimits
+    GpuPowerLimits,
+    GpuCrossbar,
+    GpuSystem
 }

@@ -62,6 +62,7 @@ internal sealed class PerformancePage : UserControl
             VerticalAlignment = VerticalAlignment.Center,
             Children = { _start, _stop, _clear, _import, _export }
         };
+
         foreach (var button in actions.Children)
         {
             button.Classes.Add("desktop-action");
@@ -72,6 +73,7 @@ internal sealed class PerformancePage : UserControl
             Spacing = 4,
             Children = { new TextBlock { Text = "Performance Chart", Classes = { "heading" } }, _status }
         };
+
         var heading = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("*,Auto"),
@@ -79,7 +81,9 @@ internal sealed class PerformancePage : UserControl
             ColumnSpacing = 12,
             Children = { title, actions }
         };
+
         Grid.SetColumn(actions, 1);
+
         heading.SizeChanged += (_, args) =>
         {
             var compact = args.NewSize.Width < 1150;
@@ -91,6 +95,7 @@ internal sealed class PerformancePage : UserControl
         };
 
         var navigation = new WrapPanel { ItemSpacing = 7 };
+
         AddNavigation("Start", "chart-start", chart => chart.GoToStart());
         AddNavigation("Back", "chart-back", chart => chart.Pan(-0.5));
         AddNavigation("Forward", "chart-forward", chart => chart.Pan(0.5));
@@ -108,6 +113,7 @@ internal sealed class PerformancePage : UserControl
 
             _followLatest = _follow.IsChecked == true;
             _visibleRange = _charts.Values.FirstOrDefault()?.VisibleXRange;
+
             foreach (var chart in _charts.Values)
             {
                 chart.FollowLatest = _followLatest;
@@ -115,6 +121,7 @@ internal sealed class PerformancePage : UserControl
 
             Invalidate();
         };
+
         navigation.Children.Add(_follow);
 
         var info = new Button
@@ -125,8 +132,10 @@ internal sealed class PerformancePage : UserControl
             Padding = new Thickness(8, 6),
             Content = new Image { Source = Icon(DesktopIcons.Info), Width = 16, Height = 16 }
         };
+
         AutomationProperties.SetName(info, "Chart controls");
         ToolTip.SetTip(info, "Chart controls");
+
         info.Click += async (_, _) =>
         {
             if (TopLevel.GetTopLevel(this) is Window owner)
@@ -134,6 +143,7 @@ internal sealed class PerformancePage : UserControl
                 await CreateControlsGuide().ShowDialog(owner);
             }
         };
+
         var tools = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("*,Auto"),
@@ -141,7 +151,9 @@ internal sealed class PerformancePage : UserControl
             ColumnSpacing = 8,
             Children = { navigation, info }
         };
+
         Grid.SetColumn(info, 1);
+
         tools.SizeChanged += (_, args) =>
         {
             var compact = args.NewSize.Width < 980;
@@ -168,6 +180,7 @@ internal sealed class PerformancePage : UserControl
             RowSpacing = 8,
             Children = { _emptySources, sourcesScroll }
         };
+
         Grid.SetRow(sourcesScroll, 1);
 
         var selectors = DashboardSection("Metrics and sources", null, selectorsBody);
@@ -176,16 +189,20 @@ internal sealed class PerformancePage : UserControl
 
         var timeline = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), ColumnSpacing = 8 };
         timeline.Children.Add(Caption("00:00:00"));
+
         Grid.SetColumn(_timeline, 1);
         timeline.Children.Add(_timeline);
+
         Grid.SetColumn(_timelineEnd, 2);
         timeline.Children.Add(_timelineEnd);
 
         var plotHost = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*"), RowSpacing = 8 };
         var plotScroll = Scroll(new Border { Padding = new Thickness(10, 0, 16, 10), Child = _plots });
         var timelineBar = new Border { Padding = new Thickness(10, 0), Child = timeline };
+
         Grid.SetRow(timelineBar, 1);
         Grid.SetRow(plotScroll, 2);
+
         plotHost.Children.Add(new Border { Padding = new Thickness(10, 8, 10, 0), Child = tools });
         plotHost.Children.Add(timelineBar);
         plotHost.Children.Add(plotScroll);
@@ -197,7 +214,9 @@ internal sealed class PerformancePage : UserControl
             ColumnSpacing = 12,
             Children = { selectors, chartFrame }
         };
+
         Grid.SetColumn(chartFrame, 1);
+
         content.SizeChanged += (_, args) =>
         {
             content.ColumnDefinitions[0].Width = new GridLength(Math.Clamp(args.NewSize.Width * 0.35, 280, 380));
@@ -210,6 +229,7 @@ internal sealed class PerformancePage : UserControl
             RowSpacing = 10,
             Children = { new StackPanel { Spacing = 8, Children = { heading, _importAlert } }, content }
         };
+
         Grid.SetRow(content, 1);
         Content = page;
 
@@ -220,17 +240,21 @@ internal sealed class PerformancePage : UserControl
                 RenderFrame();
             }
         };
+
         AttachedToVisualTree += (_, _) =>
         {
             _recorder.Changed += Invalidate;
             RenderFrame();
             _timer.Start();
         };
+
         DetachedFromVisualTree += (_, _) =>
         {
             _recorder.Changed -= Invalidate;
             _timer.Stop();
         };
+
+        return;
 
         void AddNavigation(string label, string icon, Action<XyLineChart> action)
         {
@@ -242,6 +266,7 @@ internal sealed class PerformancePage : UserControl
                     OnRangeChanged(chart);
                 }
             });
+
             button.Classes.Add("desktop-action");
             navigation.Children.Add(button);
         }
@@ -250,6 +275,7 @@ internal sealed class PerformancePage : UserControl
     internal static Window CreateControlsGuide()
     {
         var table = new Grid { ColumnDefinitions = new ColumnDefinitions("178,398"), RowSpacing = 8, ColumnSpacing = 16 };
+
         AddRow("Control", "Description", isHeader: true);
         AddRow("Hover over the plot", "See the timestamp and the recorded value for each trace at that point in time.");
         AddRow("Move through time", "Drag the plot or timeline, or hold Shift while scrolling. Back and Forward move half a view at a time.");
@@ -278,24 +304,28 @@ internal sealed class PerformancePage : UserControl
         {
             var row = table.RowDefinitions.Count;
             table.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+
             AddCell(control, 0, FontWeight.SemiBold);
             AddCell(description, 1, isHeader ? FontWeight.SemiBold : FontWeight.Normal);
 
             if (isHeader)
             {
-                var separator = new Border { Height = 1 };
-                separator[!Border.BackgroundProperty] = new DynamicResourceExtension(DesktopBrushes.PanelBorder);
+                var separator = new Border { Height = 1, [!Border.BackgroundProperty] = new DynamicResourceExtension(DesktopBrushes.PanelBorder) };
                 table.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+
                 Grid.SetRow(separator, row + 1);
                 Grid.SetColumnSpan(separator, 2);
+
                 table.Children.Add(separator);
             }
 
             void AddCell(string text, int column, FontWeight weight)
             {
                 var cell = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, FontSize = 16, FontWeight = weight };
+
                 Grid.SetRow(cell, row);
                 Grid.SetColumn(cell, column);
+
                 table.Children.Add(cell);
             }
         }
@@ -310,7 +340,9 @@ internal sealed class PerformancePage : UserControl
             OffContent = label,
             VerticalAlignment = VerticalAlignment.Center
         };
+
         AutomationProperties.SetName(toggle, label);
+
         return toggle;
     }
 
@@ -320,6 +352,7 @@ internal sealed class PerformancePage : UserControl
     {
         var metadata = _recorder.ReadFrame(_sessionId, _cursors, includeSamples: false);
         var sessionChanged = _sessionId != metadata.SessionId;
+
         if (sessionChanged)
         {
             _sessionId = metadata.SessionId;
@@ -330,13 +363,16 @@ internal sealed class PerformancePage : UserControl
         var viewport = new PerformanceViewport(
             _visibleRange?.Minimum ?? 0, _visibleRange?.Maximum ?? Math.Max(1, metadata.DurationSeconds),
             Math.Max(200, (int)_plots.Bounds.Width), Follow: _followLatest, Fit: !_followLatest && _visibleRange is null);
+
         var frame = _recorder.ReadDisplayFrame(viewport);
         var samples = $"{frame.SampleCount:N0} samples";
         var imported = frame.Status == PerformanceRecorder.ImportedStatus;
+
         if (sessionChanged)
         {
             SetAlert(_importAlert, imported ? $"Imported recording · {samples}" : null, "success");
         }
+
         _status.Text = imported ? samples : $"{frame.Status} · {samples}";
         _status.IsVisible = !(_importAlert.IsVisible && _importAlert.Classes.Contains("success"));
         _start.IsEnabled = !frame.Recording && frame.Series.Any(series => series is { Available: true, Selected: true });
@@ -346,6 +382,7 @@ internal sealed class PerformancePage : UserControl
         _export.IsEnabled = _clear.IsEnabled;
 
         _updating = true;
+
         try
         {
             UpdateSelectors(frame.Series);
@@ -361,11 +398,12 @@ internal sealed class PerformancePage : UserControl
     private void UpdateSelectors(PerformanceSeries[] series)
     {
         _emptySources.IsVisible = series.Length == 0;
+
         var keys = series.Select(item => item.Trace.Key).ToArray();
         if (_selectors.Count != keys.Length || keys.Any(key => !_selectors.ContainsKey(key)))
         {
-            var expanded = _sources.Children.OfType<Expander>()
-                .Where(expander => expander.IsExpanded).Select(expander => expander.Tag).ToHashSet();
+            var expanded = _sources.Children.OfType<Expander>().Where(expander => expander.IsExpanded).Select(expander => expander.Tag).ToHashSet();
+
             _selectors.Clear();
             _bulkSelectors.Clear();
             _sources.Children.Clear();
@@ -388,9 +426,10 @@ internal sealed class PerformancePage : UserControl
             {
                 var group = new StackPanel { Spacing = 4 };
                 group.Children.Add(BulkSelection("Select all", [.. category.Select(item => item.Trace.Key)]));
-                var separator = new Border { Height = 1, Margin = new Thickness(0, 2) };
-                separator[!Border.BackgroundProperty] = new DynamicResourceExtension(DesktopBrushes.PanelBorder);
+
+                var separator = new Border { Height = 1, Margin = new Thickness(0, 2), [!Border.BackgroundProperty] = new DynamicResourceExtension(DesktopBrushes.PanelBorder) };
                 group.Children.Add(separator);
+
                 foreach (var item in category)
                 {
                     var key = item.Trace.Key;
@@ -402,18 +441,23 @@ internal sealed class PerformancePage : UserControl
                         Background = TraceColor(item.Trace),
                         VerticalAlignment = VerticalAlignment.Center
                     };
+
                     var label = new TextBlock { Text = item.Trace.Label, TextTrimming = TextTrimming.CharacterEllipsis };
                     ToolTip.SetTip(label, item.Trace.Label);
+
                     var row = new Grid
                     {
                         ColumnDefinitions = new ColumnDefinitions("Auto,*"),
                         ColumnSpacing = 7,
                         Children = { swatch, label }
                     };
+
                     Grid.SetColumn(label, 1);
 
                     var input = new CheckBox { Content = row, IsChecked = item.Selected };
+
                     AutomationProperties.SetName(input, item.Trace.Label);
+
                     input.IsCheckedChanged += (_, _) =>
                     {
                         if (!_updating)
@@ -421,6 +465,7 @@ internal sealed class PerformancePage : UserControl
                             _recorder.Select(key, input.IsChecked == true);
                         }
                     };
+
                     _selectors[key] = input;
                     group.Children.Add(input);
                 }
@@ -440,6 +485,7 @@ internal sealed class PerformancePage : UserControl
         foreach (var item in series)
         {
             var input = _selectors[item.Trace.Key];
+
             input.IsChecked = item.Selected;
             input.IsEnabled = item.Available || item.Selected;
         }
@@ -453,6 +499,7 @@ internal sealed class PerformancePage : UserControl
         {
             var enabled = 0;
             var selected = 0;
+
             foreach (var key in keys)
             {
                 var selector = _selectors[key];
@@ -471,14 +518,18 @@ internal sealed class PerformancePage : UserControl
     private CheckBox BulkSelection(string label, string[] keys)
     {
         var input = new CheckBox { Content = label };
+
         input.Click += (_, _) =>
         {
             var enabled = keys.Where(key => _selectors[key].IsEnabled).ToArray();
             var select = enabled.Any(key => _selectors[key].IsChecked != true);
+
             _recorder.SelectMany(enabled, select);
             RenderFrame();
         };
+
         _bulkSelectors.Add((input, keys));
+
         return input;
     }
 
@@ -491,6 +542,7 @@ internal sealed class PerformancePage : UserControl
         {
             _charts.Clear();
             _plots.Children.Clear();
+
             foreach (var name in names)
             {
                 var chart = new XyLineChart { Height = 245, FollowLatest = _followLatest, ShowLegendValues = true };
@@ -501,9 +553,12 @@ internal sealed class PerformancePage : UserControl
                         OnRangeChanged(chart);
                     }
                 };
+
                 _charts.Add(name, chart);
+
                 var plot = DashboardSection(name, null, chart);
                 plot.Padding = new Thickness(10);
+
                 _plots.Children.Add(plot);
             }
         }
@@ -514,6 +569,7 @@ internal sealed class PerformancePage : UserControl
             var unit = group.First().Trace.Unit;
             var minimum = double.PositiveInfinity;
             var maximum = double.NegativeInfinity;
+
             foreach (var series in group)
             {
                 foreach (var sample in series.Samples)
@@ -535,9 +591,10 @@ internal sealed class PerformancePage : UserControl
             var padding = Math.Max((maximum - minimum) * 0.08, 0.05);
 
             var duration = Math.Max(10, frame.DurationSeconds);
-            chart.XAxis = new XyAxis(new XyRange(0, duration), Formatter: FormatTime, ReadoutFormatter: FormatHoverTime,
-                TickGranularity: 1);
+
+            chart.XAxis = new XyAxis(new XyRange(0, duration), Formatter: FormatTime, ReadoutFormatter: FormatHoverTime, TickGranularity: 1);
             chart.YAxis = new XyAxis(new XyRange(minimum - padding, maximum + padding), Formatter: value => $"{value:0.##} {unit}");
+
             chart.HoverLookup = CreateHoverLookup(frame.SessionId, [.. group.Select(series => series.Trace.Key)]);
             chart.Series = [.. group.Select(GetChartSeries)];
             chart.VisibleXRange = _followLatest ? new XyRange(Math.Max(0, duration - 60), duration) : _visibleRange;
@@ -563,6 +620,7 @@ internal sealed class PerformancePage : UserControl
         _visibleRange = source.VisibleXRange;
         _followLatest = source.FollowLatest;
         _updating = true;
+
         try
         {
             _follow.IsChecked = _followLatest;
@@ -587,10 +645,11 @@ internal sealed class PerformancePage : UserControl
         var chart = _charts.Values.FirstOrDefault();
         var range = chart?.VisibleXRange;
         var duration = chart?.XAxis.Range.Span ?? 0;
+
         _timeline.Maximum = Math.Max(0, duration - (range?.Span ?? duration));
         _timeline.ViewportSize = range?.Span ?? duration;
         _timeline.Value = range?.Minimum ?? 0;
-_timeline.IsEnabled = _timeline.Maximum > 0;
+        _timeline.IsEnabled = _timeline.Maximum > 0;
         _timelineEnd.Text = FormatTime(duration);
     }
 
@@ -604,6 +663,7 @@ _timeline.IsEnabled = _timeline.Maximum > 0;
 
         var output = new XySeries(trace.Label, series.Samples.Select(sample => new XySample(sample.Seconds, sample.Value)).ToArray(),
             TraceColor(trace), value => $"{value:0.##} {trace.Unit}");
+
         _traceSamples[trace.Key] = (series.Samples, output);
         return output;
     }
@@ -621,8 +681,7 @@ _timeline.IsEnabled = _timeline.Maximum > 0;
 
     private static string FormatTime(double seconds) => TimeSpan.FromSeconds(seconds).ToString(@"hh\:mm\:ss");
 
-    private static string FormatHoverTime(double seconds) =>
-        TimeSpan.FromMilliseconds(Math.Round(seconds * 1000)).ToString(@"hh\:mm\:ss\.fff");
+    private static string FormatHoverTime(double seconds) => TimeSpan.FromMilliseconds(Math.Round(seconds * 1000)).ToString(@"hh\:mm\:ss\.fff");
 
     private Task ImportAsync() => ImportAsync(PickRecordingAsync);
 
@@ -641,6 +700,7 @@ _timeline.IsEnabled = _timeline.Maximum > 0;
                 new FilePickerFileType("RTX Lens recording or HTML export") { Patterns = ["*.json", "*.rtxlens-recording", "*.html"] }
             ]
         });
+
         return files.Count == 0 ? null : await files[0].OpenReadAsync();
     }
 
@@ -649,18 +709,18 @@ _timeline.IsEnabled = _timeline.Maximum > 0;
         try
         {
             await using var stream = await open();
-            if (stream is null)
-            {
-                return;
-            }
 
-            if (stream is { CanSeek: true, Length: > PerformanceRecordingFile.MaximumFileBytes })
+            switch (stream)
             {
-                throw new InvalidDataException("The recording exceeds the supported file size.");
+                case null:
+                    return;
+                case { CanSeek: true, Length: > PerformanceRecordingFile.MaximumFileBytes }:
+                    throw new InvalidDataException("The recording exceeds the supported file size.");
             }
 
             using var reader = new StreamReader(stream);
             _recorder.Import(await Task.Run(async () => PerformanceRecordingFile.Deserialize(await reader.ReadToEndAsync())));
+
             RenderFrame();
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException
@@ -696,30 +756,34 @@ _timeline.IsEnabled = _timeline.Maximum > 0;
                     new FilePickerFileType("RTX Lens recording") { Patterns = ["*.json"] }
                 ]
             });
+
             if (file is null)
             {
                 return;
             }
 
             var html = Path.GetExtension(file.Name).Equals(".html", StringComparison.OrdinalIgnoreCase);
+
             var contents = await Task.Run(() =>
             {
                 var session = _recorder.CompletedSession();
                 return html ? PerformanceHtmlExporter.Export(session) : PerformanceRecordingFile.Serialize(session);
             });
+
             await using var stream = await file.OpenWriteAsync();
+
             if (stream.CanSeek)
             {
                 stream.SetLength(0);
             }
 
-            using var writer = new StreamWriter(stream);
+            await using var writer = new StreamWriter(stream);
             await writer.WriteAsync(contents);
+
             _status.Text = "Recording exported.";
             _status.IsVisible = true;
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException
-            or InvalidOperationException)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
             _status.Text = error.Message;
             _status.IsVisible = true;

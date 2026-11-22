@@ -34,8 +34,7 @@ internal static class MobileAccessListener
             options.Limits.MaxConcurrentUpgradedConnections = 16;
             options.Limits.MaxRequestBodySize = 1024;
             options.Limits.RequestHeadersTimeout = TimeSpan.FromSeconds(10);
-            options.Listen(address, port, endpoint => endpoint.UseHttps(https =>
-                https.ServerCertificateSelector = (_, _) => certificate.GetCertificate()));
+            options.Listen(address, port, endpoint => endpoint.UseHttps(https => https.ServerCertificateSelector = (_, _) => certificate.GetCertificate()));
         });
 
         builder.Services.AddSingleton(hub);
@@ -81,13 +80,16 @@ internal static class MobileAccessListener
                 });
             }
 
-            using var registration = revoked.Register(httpContext.Abort);
+            await using var registration = revoked.Register(httpContext.Abort);
             httpContext.Items[DeviceIdentity] = deviceId;
             httpContext.Response.Headers.CacheControl = "no-store";
+
             return await next(context);
         });
+
         paired.MapSensorsEndpoint(formatFrame);
-        paired.MapGet(MobileProtocol.Session, () => Results.NoContent()).RequireRateLimiting("mobile-read");
+        paired.MapGet(MobileProtocol.Session, Results.NoContent).RequireRateLimiting("mobile-read");
+
         paired.MapPost(MobileProtocol.Registration, (HttpContext context, MobileNotificationRegistration request) =>
         {
             if (request.Token is not null && !ExpoMobilePushProvider.IsToken(request.Token))
@@ -95,10 +97,9 @@ internal static class MobileAccessListener
                 return Results.BadRequest();
             }
 
-            return context.Items[DeviceIdentity] is Guid id && pairing.SetPushToken(id, request.Token)
-                ? Results.NoContent()
-                : Results.Unauthorized();
+            return context.Items[DeviceIdentity] is Guid id && pairing.SetPushToken(id, request.Token) ? Results.NoContent() : Results.Unauthorized();
         }).RequireRateLimiting("mobile-registration");
+
         paired.MapPost(MobileProtocol.RegistrationV2, (HttpContext context, MobileNotificationRegistrationV2 request) =>
         {
             if ((request.Token is not null && !ExpoMobilePushProvider.IsToken(request.Token)) || request.Preferences is not { IsValid: true })
@@ -110,10 +111,11 @@ internal static class MobileAccessListener
                 ? Results.NoContent()
                 : Results.Unauthorized();
         }).RequireRateLimiting("mobile-registration");
+
         if (history is not null)
         {
-            paired.MapGet(MobileProtocol.Incidents, (string? before) => history.List(before)).RequireRateLimiting("mobile-read");
-            paired.MapGet(MobileProtocol.Incidents + "/{kind}/{id:guid}", (string kind, Guid id) => history.Detail(kind, id)).RequireRateLimiting("mobile-read");
+            paired.MapGet(MobileProtocol.Incidents, history.List).RequireRateLimiting("mobile-read");
+            paired.MapGet(MobileProtocol.Incidents + "/{kind}/{id:guid}", history.Detail).RequireRateLimiting("mobile-read");
         }
 
         app.MapPost(MobileProtocol.Pairing, (HttpContext context, MobilePairingRequest request) =>
@@ -125,6 +127,7 @@ internal static class MobileAccessListener
         app.MapPost(MobileProtocol.CompletePairing, (HttpContext context, MobilePairingCompletion request) =>
         {
             context.Response.Headers.CacheControl = "no-store";
+
             var (valid, credential) = pairing.Complete(request);
             if (!valid)
             {
@@ -146,8 +149,7 @@ internal static class MobileAccessListener
         }
     }
 
-    public static Uri GetAddress(WebApplication app) =>
-        new(app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single());
+    public static Uri GetAddress(WebApplication app) => new(app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single());
 
     private static void ConfigureLimiter(FixedWindowRateLimiterOptions options, int permits)
     {
@@ -156,7 +158,5 @@ internal static class MobileAccessListener
     }
 
     private sealed record MobileNotificationRegistration([property: System.Text.Json.Serialization.JsonRequired] string? Token);
-
-    private sealed record MobileNotificationRegistrationV2([property: System.Text.Json.Serialization.JsonRequired] string? Token,
-        MobileNotificationPreferences? Preferences);
+    private sealed record MobileNotificationRegistrationV2([property: System.Text.Json.Serialization.JsonRequired] string? Token, MobileNotificationPreferences? Preferences);
 }

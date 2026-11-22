@@ -115,6 +115,12 @@ internal static class DeviceWarningProfileTests
         var evaluator = new DeviceWarningEvaluator(new HardwareCatalog([factory]));
         var configuration = Configuration();
         configuration.Plugins[id] = new PluginSettings();
+        TestAssert.False(EvaluateAt(0).Warnings.Any(warning => warning.Observation.Active), "The first sample starts the timer.");
+        var active = EvaluateAt(3).Warnings.Single(warning => warning.Observation.Active);
+        TestAssert.Equal(id + "/monitor-overcurrent", active.Definition.Id);
+        TestAssert.Equal("Test monitor connector aux · Pin overcurrent", active.Definition.Title);
+        return;
+
         DeviceWarningEvaluation EvaluateAt(int seconds)
         {
             var frame = Frame(seconds, 0, 10, 0);
@@ -125,10 +131,6 @@ internal static class DeviceWarningProfileTests
                 Plugins = [new PluginHealth(id, PluginState.Ready, frame.Timestamp, null)]
             }, configuration, [profile], SettingsProfile.Rtx5090);
         }
-        TestAssert.False(EvaluateAt(0).Warnings.Any(warning => warning.Observation.Active), "The first sample starts the timer.");
-        var active = EvaluateAt(3).Warnings.Single(warning => warning.Observation.Active);
-        TestAssert.Equal(id + "/monitor-overcurrent", active.Definition.Id);
-        TestAssert.Equal("Test monitor connector aux · Pin overcurrent", active.Definition.Title);
     }
 
     private static void ProfilesUseIndependentSourcesAndReminderPolicies()

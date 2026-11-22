@@ -58,8 +58,7 @@ internal static class PreferenceTests
             await store.SaveAsync(settings.Value);
             TestAssert.True(store.Load().SuppressExitConfirmation, "Opting out must survive restarting the app.");
 
-            var reloaded = new AppSettingsViewModel(store.Load());
-            reloaded.ConfirmBeforeExit = true;
+            var reloaded = new AppSettingsViewModel(store.Load()) { ConfirmBeforeExit = true };
             await store.SaveAsync(reloaded.Value);
             TestAssert.True(!store.Load().SuppressExitConfirmation, "Settings must allow confirmation to be restored.");
 
@@ -91,7 +90,7 @@ internal static class PreferenceTests
         {
             var store = new PreferencesStore(path);
             var value = new AppPreferences { Theme = AppTheme.Light, StartMinimized = true, ShowWireViewPsuCurrent = true,
-                WireViewPsuConnector = 2, ShowAsusPsuCurrent = true, AsusPsuConnector = 1 };
+                WireViewPsuConnector = 2, ShowAsusPsuCurrent = true, AsusPsuConnector = 1, ShowInternalClocksOnGpuStatusPanels = true };
             await store.SaveAsync(value);
             TestAssert.Equal(value, store.Load());
             await File.WriteAllTextAsync(path, "null");

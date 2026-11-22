@@ -48,6 +48,7 @@ internal sealed class MobileAccessService(
         {
             pairing.Load();
             _stateLoaded = true;
+
             await ReconcileAsync(cancellationToken);
         }
         catch (Exception error) when (IsAccessFailure(error))
@@ -160,6 +161,7 @@ internal sealed class MobileAccessService(
 
             _simulationWarnings.Add(warning);
             push?.SendSimulation(warning.Title);
+
             return true;
         }
         finally
@@ -214,6 +216,7 @@ internal sealed class MobileAccessService(
             if (key is null)
             {
                 using var generated = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+
                 key = generated.ExportPkcs8PrivateKey();
                 pairing.SaveSettings(settings, key, rules);
             }
@@ -224,11 +227,12 @@ internal sealed class MobileAccessService(
             }
             catch (Exception error) when (IsAccessFailure(error))
             {
-                var portInUse = error is AddressInUseException
-                    || error.GetBaseException() is SocketException { SocketErrorCode: SocketError.AddressAlreadyInUse };
+                var portInUse = error is AddressInUseException || error.GetBaseException() is SocketException { SocketErrorCode: SocketError.AddressAlreadyInUse };
+
                 var message = portInUse
                     ? $"TCP port {settings.Port} is already in use. Choose another Mobile Access port."
                     : $"Mobile Access could not start its HTTPS listener on TCP port {settings.Port}. Check the RTX Lens Event Log.";
+
                 RecordFailure(message, error);
                 return;
             }
@@ -260,10 +264,11 @@ internal sealed class MobileAccessService(
 
         try
         {
-            Func<byte[], byte[]>? formatFrame = _simulationWarnings is { } warnings ? warnings.AddToFrame : null;
-            _listener = await MobileAccessListener.StartAsync(listenAddress, port, certificate, pairing, hub, cancellationToken,
-                formatFrame, historyEndpoints);
+            Func<byte[], byte[]>? formatFrame = _simulationWarnings != null ? _simulationWarnings.AddToFrame : null;
+
+            _listener = await MobileAccessListener.StartAsync(listenAddress, port, certificate, pairing, hub, cancellationToken, formatFrame, historyEndpoints);
             _certificate = certificate;
+
             pairing.SetListening(true);
             logger.LogActivity(LogLevel.Information, "mobile.listening", "Mobile access", "The remote sensor listener is ready.");
         }
@@ -283,6 +288,7 @@ internal sealed class MobileAccessService(
 
         pairing.SetListening(false);
         _simulationWarnings?.Clear();
+
         _listener = null;
 
         try
@@ -292,6 +298,7 @@ internal sealed class MobileAccessService(
         finally
         {
             await listener.DisposeAsync();
+
             _certificate?.Dispose();
             _certificate = null;
         }
@@ -302,6 +309,7 @@ internal sealed class MobileAccessService(
     private MobileAccessStatus GetStatus()
     {
         var settings = pairing.Data.Settings;
+
         return new MobileAccessStatus(settings.Enabled, _listener is not null, settings.Port, settings.NoIp?.Hostname,
             noIp.GetStatus(settings.NoIp), settings.OpenFirewall, settings.PortForwarding,
             pairing.GetPendingApproval(), pairing.GetDevices(), _error, settings.LocalAddress, settings.PublicAddress, settings.WarningHistoryDays);
@@ -310,7 +318,9 @@ internal sealed class MobileAccessService(
     private void RecordFailure(string message, Exception error)
     {
         _error = message;
+
         var cause = error.GetBaseException();
+
         logger.LogActivity(LogLevel.Warning, "mobile.setup-failed", "Mobile access", message,
             detail: $"{cause.GetType().Name} (0x{cause.HResult:X8})", exception: error);
     }

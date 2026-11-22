@@ -12,9 +12,13 @@ public sealed class ConnectorProfileResolver(IEnumerable<IConnectorSourceProvide
 
     public ConnectorProfiles CreateDefaults()
     {
-        var profiles = new List<ConnectorSourceProfile> { Create("automatic", "Automatic", _providers, true) };
-        profiles.AddRange(_providers.Where(provider => provider.IsDedicatedProfile)
-            .Select(provider => Create(provider.Id, provider.DedicatedProfileName, [provider], false)));
+        List<ConnectorSourceProfile> profiles =
+        [
+            Create("automatic", "Automatic", _providers, true),
+            .. _providers.Where(provider => provider.IsDedicatedProfile)
+                .Select(provider => Create(provider.Id, provider.DedicatedProfileName, [provider], false))
+
+        ];
 
         return new ConnectorProfiles { Version = 1, Profiles = profiles };
     }

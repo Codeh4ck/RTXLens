@@ -37,6 +37,7 @@ public sealed class DebugSession : ObservableObject
     private readonly DebugAsusAlerts _asus = new();
     private bool _batch;
     private MonitoringOptions? _monitoringOverride;
+    private WidgetConfiguration? _widgetOverride;
     private RTXLens.Contracts.Warnings.WarningOptions? _warningOverride;
     private WarningEngine _warningEngine = new(DebugWarningCatalog.Registry);
 
@@ -59,9 +60,12 @@ public sealed class DebugSession : ObservableObject
 
             _wireViewConfiguration = null;
             _wireViewDeviceId = null;
+
             _asus.Reset();
+
             _warningEngine = new WarningEngine(DebugWarningCatalog.Registry);
             _revision++;
+
             Changed?.Invoke(true);
         }
     }
@@ -146,6 +150,7 @@ public sealed class DebugSession : ObservableObject
 
             _configurationOverrides.Clear();
             _monitoringOverride = null;
+            _widgetOverride = null;
             _warningOverride = null;
             LastNotification = "No debug notifications yet.";
         }
@@ -160,24 +165,27 @@ public sealed class DebugSession : ObservableObject
     public DeviceConfig? GetSimulatedWireViewConfiguration()
     {
         var wireView = Plugins.Single(plugin => plugin.Id == WireViewIdentity.Id);
+
         if (!Enabled || wireView is not { IsSimulated: true, Installed: true, Enabled: true, State: PluginState.Ready })
         {
             return null;
         }
 
-        if (_wireViewConfiguration is null || _wireViewDeviceId != wireView.DeviceId)
+        if (_wireViewConfiguration is not null && _wireViewDeviceId == wireView.DeviceId)
         {
-            _wireViewDeviceId = wireView.DeviceId;
-            _wireViewConfiguration = DebugDeviceDefaults.WireView() with { EditToken = Guid.NewGuid().ToString("N") };
+            return _wireViewConfiguration;
         }
+
+        _wireViewDeviceId = wireView.DeviceId;
+        _wireViewConfiguration = DebugDeviceDefaults.WireView() with { EditToken = Guid.NewGuid().ToString("N") };
 
         return _wireViewConfiguration;
     }
 
     public DeviceConfig ApplySimulatedWireViewConfiguration(DeviceConfig changes)
     {
-        var current = GetSimulatedWireViewConfiguration()
-            ?? throw new InvalidOperationException("The simulated WireView Pro II is not available.");
+        var current = GetSimulatedWireViewConfiguration() ?? throw new InvalidOperationException("The simulated WireView Pro II is not available.");
+
         if (changes.EditToken != current.EditToken)
         {
             throw new InvalidOperationException("Simulated settings changed. Refresh before applying your changes.");
@@ -196,12 +204,13 @@ public sealed class DebugSession : ObservableObject
             throw new InvalidOperationException("Debug configuration changed; reload before applying.");
         }
 
-        if (configuration.Warnings is null || !configuration.Warnings.IsValid() || !configuration.Monitoring.IsValid() || configuration.Plugins.Any(pair => !pair.Value.IsValid()))
+        if (!configuration.Warnings.IsValid() || !configuration.Monitoring.IsValid() || configuration.Widget?.IsValid() != true || configuration.Plugins.Any(pair => !pair.Value.IsValid()))
         {
             throw new ArgumentException("Invalid debug configuration.");
         }
 
         _batch = true;
+
         try
         {
             _configurationOverrides.Clear();
@@ -217,7 +226,9 @@ public sealed class DebugSession : ObservableObject
                 }
             }
 
+            _widgetOverride = configuration.Widget;
             _warningOverride = configuration.Warnings;
+
             _monitoringOverride = new MonitoringOptions
             {
                 ConnectorProfiles = configuration.Monitoring.ConnectorProfiles,
@@ -312,8 +323,7 @@ public sealed class DebugSession : ObservableObject
 
             var stateHealth = health.FirstOrDefault(item => item.PluginId == plugin.Id);
             var staleAfterMs = settings.GetValueOrDefault(plugin.Id)?.StaleAfterMs ?? 5000;
-            var ready = info!.Enabled && stateHealth is { State: PluginState.Ready, LastSuccessAt: { } success } &&
-                        now - success <= TimeSpan.FromMilliseconds(staleAfterMs);
+            var ready = info!.Enabled && stateHealth is { State: PluginState.Ready, LastSuccessAt: { } success } && now - success <= TimeSpan.FromMilliseconds(staleAfterMs);
 
             if (!ready)
             {
@@ -332,32 +342,24 @@ public sealed class DebugSession : ObservableObject
                 var options = msiSettings.Options?.Deserialize(ClientJsonContext.Default.MsiOptions) ?? new MsiOptions();
                 if (options.FanControl != MsiFanControl.Unmanaged)
                 {
-                    foreach (var metric in plugin.Metrics.Where(metric => metric is
-                                 { Mode: DebugMetricMode.Live, Definition.Metric: SensorMetric.FanAutomatic or SensorMetric.FanDuty }))
+                    foreach (var metric in plugin.Metrics.Where(metric => metric is { Mode: DebugMetricMode.Live, Definition.Metric: SensorMetric.FanAutomatic or SensorMetric.FanDuty }))
                     {
                         var index = effective.FindIndex(reading => metric.Definition.Matches(reading.Identity));
                         effective[index] = effective[index] with
                         {
                             Value = metric.Definition.Metric == SensorMetric.FanAutomatic
                                 ? options.FanControl == MsiFanControl.Automatic ? 1 : 0
-                                : options.FanControl == MsiFanControl.Manual
-                                    ? options.FanDutyPercent
-                                    : 0
+                                : options.FanControl == MsiFanControl.Manual ? options.FanDutyPercent : 0
                         };
                     }
                 }
             }
 
-            if (plugin.Id == AsusIdentity.Id && (plugin.IsSimulated || plugin.Metrics.Any(metric => metric.Mode != DebugMetricMode.Live
-                                                                                                  && (metric.Definition.Metric is SensorMetric
-                                                                                                              .ImbalanceDetected
-                                                                                                          or SensorMetric.ImbalancePercentage
-                                                                                                          or SensorMetric.OvercurrentDetected
-                                                                                                      || metric.Definition is
-                                                                                                      {
-                                                                                                          Component: SensorComponent.GpuPin,
-                                                                                                          Metric: SensorMetric.Current
-                                                                                                      }))))
+            if (plugin.Id == AsusIdentity.Id && (plugin.IsSimulated || plugin.Metrics.Any(metric =>
+                    metric.Mode != DebugMetricMode.Live &&
+                    (metric.Definition.Metric is SensorMetric.ImbalanceDetected or SensorMetric.ImbalancePercentage
+                        or SensorMetric.OvercurrentDetected || metric.Definition is
+                        { Component: SensorComponent.GpuPin, Metric: SensorMetric.Current }))))
             {
                 alerts.RemoveAll(alert => alert.PluginId == plugin.Id);
 
@@ -379,13 +381,15 @@ public sealed class DebugSession : ObservableObject
             Selections = [.. sourceMonitoring.Selections]
         };
 
-        var configuration = new ConfigurationSnapshot(_revision, new ServiceConfiguration { Plugins = settings, Monitoring = monitoring, Warnings = _warningOverride ?? _liveConfiguration.Configuration.Warnings },
-            Version: Version);
+        var configuration = new ConfigurationSnapshot(_revision, _liveConfiguration.Configuration
+                with { Widget = _widgetOverride ?? _liveConfiguration.Configuration.Widget, Plugins = settings, Monitoring = monitoring,
+                    Warnings = _warningOverride ?? _liveConfiguration.Configuration.Warnings }, Version: Version);
 
-        var usable = readings.Where(reading =>
-                reading.Quality == ReadingQuality.Valid &&
-                health.Any(plugin => plugin.PluginId == reading.Identity.PluginId && plugin.State == PluginState.Ready) && now - reading.ObservedAt <=
-                TimeSpan.FromMilliseconds(settings.GetValueOrDefault(reading.Identity.PluginId)?.StaleAfterMs ?? 5000))
+        var usable = readings
+            .Where(reading => reading.Quality == ReadingQuality.Valid &&
+                              health.Any(plugin => plugin.PluginId == reading.Identity.PluginId && plugin.State == PluginState.Ready) &&
+                              now - reading.ObservedAt <=
+                              TimeSpan.FromMilliseconds(settings.GetValueOrDefault(reading.Identity.PluginId)?.StaleAfterMs ?? 5000))
             .ToDictionary(reading => reading.Identity.Key, StringComparer.Ordinal);
 
         var selections = monitoring.Selections.Select(selection => Core.SourceResolver.Resolve(selection, usable)).ToArray();
@@ -398,12 +402,10 @@ public sealed class DebugSession : ObservableObject
         {
             foreach (var metric in plugin.Metrics)
             {
-                var live = _liveSnapshot?.Sensors.FirstOrDefault(reading =>
-                    reading.Identity.PluginId == plugin.Id && metric.Definition.Matches(reading.Identity));
+                var live = _liveSnapshot?.Sensors.FirstOrDefault(reading => reading.Identity.PluginId == plugin.Id && metric.Definition.Matches(reading.Identity));
                 metric.UpdateLive(live is { Quality: ReadingQuality.Valid } ? live.Value : null);
 
-                var effective = readings.FirstOrDefault(reading =>
-                    reading.Identity.PluginId == plugin.Id && metric.Definition.Matches(reading.Identity));
+                var effective = readings.FirstOrDefault(reading => reading.Identity.PluginId == plugin.Id && metric.Definition.Matches(reading.Identity));
                 metric.UpdateEffective(effective?.Value, effective?.Quality.ToString() ?? DebugMetricViewModel.NotReported);
             }
         }

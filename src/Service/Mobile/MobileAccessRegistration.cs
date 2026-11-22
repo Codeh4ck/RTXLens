@@ -14,16 +14,19 @@ internal static class MobileAccessRegistration
     {
         services.AddSingleton<IMobileAccessStore>(new MobileAccessStore(debugInstance));
         services.AddSingleton<IMobileNetworkAccess, MobileNetworkAccess>();
+
         services.AddSingleton(provider => new MobilePairing(provider.GetRequiredService<IMobileAccessStore>(),
             provider.GetRequiredService<TimeProvider>(), provider.GetRequiredService<ILogger<MobilePairing>>()));
 
         services.AddSingleton(_ => NoIpUpdater.CreateClient());
+
         services.AddSingleton(provider => new NoIpUpdater(provider.GetRequiredService<HttpClient>(),
             provider.GetRequiredService<TimeProvider>(), provider.GetRequiredService<ILogger<NoIpUpdater>>()));
 
         services.AddSingleton(provider => new MobileWarningHistory(
             Path.Combine(Path.GetDirectoryName(provider.GetRequiredService<RuntimeConfigurationFile>().Path)!, "mobile-warning-history"),
             provider.GetRequiredService<ILogger<MobileWarningHistory>>()));
+
         services.AddSingleton(provider => new MobileHistoryEndpoints(provider.GetRequiredService<MobileWarningHistory>(),
             provider.GetRequiredService<SafeguardJournalService>(), provider.GetRequiredService<TimeProvider>(),
             () => provider.GetRequiredService<MobilePairing>().Data.Settings.WarningHistoryDays));
@@ -33,6 +36,7 @@ internal static class MobileAccessRegistration
             client.Timeout = TimeSpan.FromSeconds(10);
             client.MaxResponseContentBufferSize = 65536;
         }).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
+
         services.AddSingleton<MobilePushDelivery>();
         services.AddHostedService(provider => provider.GetRequiredService<MobilePushDelivery>());
 
@@ -45,6 +49,7 @@ internal static class MobileAccessRegistration
 
         services.AddHostedService(provider => provider.GetRequiredService<MobileAccessService>());
         services.AddHostedService<MobileNoIpService>();
+
         var pipeName = MobileAccessProtocol.GetPipeName(debugInstance);
         services.AddHostedService(provider => new MobileAccessAdminPipe(
             pipeName, provider.GetRequiredService<MobileAccessService>(), provider.GetRequiredService<MobilePairing>(),

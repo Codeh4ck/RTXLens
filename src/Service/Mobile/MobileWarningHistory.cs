@@ -41,6 +41,7 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
             {
                 var records = Load();
                 var current = new HashSet<Guid>();
+
                 foreach (var warning in warnings.States)
                 {
                     if (!Guid.TryParseExact(warning.EpisodeId, "N", out var id))
@@ -49,18 +50,22 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
                     }
 
                     current.Add(id);
+
                     if (warning.Phase == WarningPhase.Active && !records.ContainsKey(id))
                     {
-                        var readings = snapshot.Sensors.Where(reading =>
-                            reading is { Quality: ReadingQuality.Valid, Value: not null }
-                            && reading.Identity.PluginId == warning.PluginId && reading.Identity.DeviceId == warning.DeviceId)
-                            .Take(MaxReadings).ToArray();
+                        var readings = snapshot.Sensors
+                            .Where(reading => reading is { Quality: ReadingQuality.Valid, Value: not null } && reading.Identity.PluginId == warning.PluginId && reading.Identity.DeviceId == warning.DeviceId)
+                            .Take(MaxReadings)
+                            .ToArray();
+
                         var incident = new MobileIncident(id, "warning", warning.Title, warning.PluginId, warning.StartedAt, null, "Active")
                         {
                             DeviceId = warning.DeviceId, Detail = warning.Detail, CapturedAt = snapshot.Timestamp, Readings = readings
                         };
+
                         var stored = Save(incident);
                         records.Add(id, stored);
+
                         _bytes += stored.Size;
                     }
 
@@ -73,12 +78,15 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
                 foreach (var (id, phase) in _active.Where(entry => !current.Contains(entry.Key)).ToArray())
                 {
                     var previous = records[id];
+
                     var incident = (Read(Location(id)) ?? previous.Summary) with
                     {
                         EndedAt = now, Status = phase == nameof(WarningPhase.Recovering) ? "Cleared" : "Ended"
                     };
+
                     var stored = Save(incident);
                     records[id] = stored;
+
                     _bytes += stored.Size - previous.Size;
                     _active.Remove(id);
                 }
@@ -91,8 +99,7 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
             {
                 _nextWrite = now.AddSeconds(30);
-                logger.LogActivity(LogLevel.Warning, "mobile.history-write-failed", "Mobile access",
-                    "Could not save mobile warning history.", error.GetType().Name, exception: error);
+                logger.LogActivity(LogLevel.Warning, "mobile.history-write-failed", "Mobile access", "Could not save mobile warning history.", error.GetType().Name, exception: error);
             }
         }
     }
@@ -101,8 +108,7 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
     {
         lock (_gate)
         {
-            return [.. (_records?.Values.AsEnumerable() ?? []).Select(record => record.Summary)
-                .Where(record => record.StartedAt >= cutoff || _active.ContainsKey(record.Id))];
+            return [.. (_records?.Values.AsEnumerable() ?? []).Select(record => record.Summary).Where(record => record.StartedAt >= cutoff || _active.ContainsKey(record.Id))];
         }
     }
 
@@ -145,6 +151,7 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
 
         records = [];
         long bytes = 0;
+
         foreach (var path in Directory.EnumerateFiles(directory, "*.json"))
         {
             if (!Guid.TryParseExact(Path.GetFileNameWithoutExtension(path), "N", out var id))
@@ -158,14 +165,14 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
                 {
                     var recovered = record.EndedAt is null ? record with { Status = "Interrupted" } : record;
                     var stored = Summarize(recovered, new FileInfo(path).Length);
+
                     records.Add(id, stored);
                     bytes += stored.Size;
                 }
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
             {
-                logger.LogActivity(LogLevel.Warning, "mobile.history-record-invalid", "Mobile access",
-                    "Could not read a mobile warning record.", error.GetType().Name);
+                logger.LogActivity(LogLevel.Warning, "mobile.history-record-invalid", "Mobile access", "Could not read a mobile warning record.", error.GetType().Name);
             }
         }
 
@@ -184,9 +191,12 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
 
         var security = new DirectorySecurity();
         security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+
         using var identity = WindowsIdentity.GetCurrent();
+
         var administrators = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
         var system = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
+
         foreach (var account in new[] { administrators, system, identity.User! }.Distinct())
         {
             security.AddAccessRule(new FileSystemAccessRule(account, FileSystemRights.FullControl,
@@ -206,16 +216,20 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
     private void Clean(Dictionary<Guid, StoredIncident> records, DateTimeOffset now, int days)
     {
         var cutoff = now.AddDays(-days);
-        var removable = records.Values.Where(record => !_active.ContainsKey(record.Summary.Id))
+        var removable = records.Values
+            .Where(record => !_active.ContainsKey(record.Summary.Id))
             .OrderBy(record => record.Summary.StartedAt).ToArray();
+
         foreach (var record in removable)
         {
             if (record.Summary.StartedAt >= cutoff && records.Count <= MaxRecords && _bytes <= MaxDiskBytes)
             {
                 break;
             }
+
             File.Delete(Location(record.Summary.Id));
             records.Remove(record.Summary.Id);
+
             _bytes -= record.Size;
         }
 
@@ -233,8 +247,7 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
         }
 
         using var stream = File.OpenRead(path);
-        return stream.Length <= MobileHistoryEndpoints.MaximumReportBytes
-            ? JsonSerializer.Deserialize<MobileIncident>(stream, MobileHistoryEndpoints.Json) : null;
+        return stream.Length <= MobileHistoryEndpoints.MaximumReportBytes ? JsonSerializer.Deserialize<MobileIncident>(stream, MobileHistoryEndpoints.Json) : null;
     }
 
     private StoredIncident Save(MobileIncident record)
@@ -242,6 +255,7 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
         var path = Location(record.Id);
         var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         var bytes = JsonSerializer.SerializeToUtf8Bytes(record, MobileHistoryEndpoints.Json);
+
         if (bytes.Length > MobileHistoryEndpoints.MaximumReportBytes)
         {
             bytes = JsonSerializer.SerializeToUtf8Bytes(record with { Readings = [] }, MobileHistoryEndpoints.Json);
@@ -251,6 +265,7 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
         {
             File.WriteAllBytes(temp, bytes);
             File.Move(temp, path, overwrite: true);
+
             return Summarize(record, bytes.Length);
         }
         finally
@@ -259,8 +274,7 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
         }
     }
 
-    private static StoredIncident Summarize(MobileIncident record, long size) =>
-        new(record with { Readings = [], Detail = null }, size);
+    private static StoredIncident Summarize(MobileIncident record, long size) => new(record with { Readings = [], Detail = null }, size);
 
     private sealed record StoredIncident(MobileIncident Summary, long Size);
 }

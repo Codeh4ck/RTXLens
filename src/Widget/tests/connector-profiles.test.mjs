@@ -72,9 +72,26 @@ test('5080 profile scales an associated WireView chart and marks readings above 
     assert.equal(pin.fill, 100);
     assert.equal(pin.overflow, true);
 
+    overrides.overrideCurrentMax = true;
+    settings.update(name => overrides[name]);
+    assert.match(presenter.present(binding, now).axis[0], /^10(?:[.,]0+)?\s*A$/);
+    assert.equal(presenter.present(binding, now).pins[wireView.identity.channel - 1].number, 6.25);
+
     overrides.wireviewMetric = 'W';
     settings.update(name => overrides[name]);
     assert.match(presenter.present(binding, now).axis[0], /^75(?:[.,]0+)?\s*W$/);
+
+    overrides.powerCableFallback = 300;
+    overrides.overridePowerFallback = true;
+    settings.update(name => overrides[name]);
+    assert.match(presenter.present(binding, now).axis[0], /^75(?:[.,]0+)?\s*W$/);
+    frame.settingsProfile.profile.powerCeilingPerPin = null;
+    frame.sensors = frame.sensors.filter(reading => reading.identity.metric !== 'PowerCapability');
+    store.update(parseSnapshot(frame));
+    assert.match(presenter.present(binding, now).axis[0], /^50(?:[.,]0+)?\s*W$/);
+    overrides.overridePowerFallback = false;
+    settings.update(name => overrides[name]);
+    assert.match(presenter.present(binding, now).axis[0], /^100(?:[.,]0+)?\s*W$/);
 
     frame.settingsProfile.wireViewDeviceId = null;
     store.update(parseSnapshot(frame));

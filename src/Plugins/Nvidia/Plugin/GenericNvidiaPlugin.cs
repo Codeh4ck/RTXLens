@@ -29,7 +29,9 @@ public sealed class GenericNvidiaPlugin(PluginSettings settings, NvidiaTelemetry
     public ValueTask<PluginSample> PollAsync(CancellationToken cancellationToken)
     {
         var sample = reader.Read(_options.DeviceId, _pollIntervalMs, cancellationToken);
-        var readings = sample is null ? [] : GenericNvidiaSnapshotMapper.Create(sample);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var readings = sample is null ? [] : GenericNvidiaSnapshotMapper.Create(sample, reader.ReadDomainClocks(sample.Device));
 
         if (sample is not null && diagnostics?.Read(sample.Device.Id) is { } diagnosticSample)
         {

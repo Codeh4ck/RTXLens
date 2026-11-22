@@ -33,11 +33,15 @@ const template = `
     <p class="panel-detail"></p>
     <div class="panel-alert" role="status"></div>`;
 
-const gpuStatusTemplate = `
-    <section class="gpu-card gpu-clocks" aria-label="Clocks">
-        <h2 class="gpu-card-title"><span class="icon" data-icon="vcore" aria-hidden="true"></span>Clocks</h2>
+function readingCard(group: string, title: string, icon: string): string {
+    return `<section class="gpu-card gpu-${group}" aria-label="${title}">
+        <h2 class="gpu-card-title"><span class="icon" data-icon="${icon}" aria-hidden="true"></span>${title}</h2>
         <div class="gpu-reading-columns"></div>
-    </section>
+    </section>`;
+}
+
+const gpuStatusTemplate = (hideFans: boolean) => `
+    ${readingCard('clocks', 'Clocks', 'vcore')}
     <section class="gpu-card gpu-vram" aria-label="VRAM usage">
         <h2 class="gpu-card-title"><span class="icon" data-icon="vramusage" aria-hidden="true"></span>VRAM usage</h2>
         <div class="gpu-vram-reading">
@@ -46,14 +50,8 @@ const gpuStatusTemplate = `
             </div>
         </div>
     </section>
-    <section class="gpu-card gpu-temperatures" aria-label="Temperatures">
-        <h2 class="gpu-card-title"><span class="icon" data-icon="vtemp" aria-hidden="true"></span>Temperatures</h2>
-        <div class="gpu-reading-columns"></div>
-    </section>
-    <section class="gpu-card gpu-fans" aria-label="Fans">
-        <h2 class="gpu-card-title"><span class="icon" data-icon="vfan" aria-hidden="true"></span>Fans</h2>
-        <div class="gpu-reading-columns"></div>
-    </section>`;
+    ${readingCard('temperatures', 'Temperatures', 'vtemp')}
+    ${hideFans ? '' : readingCard('fans', 'Fans', 'vfan')}`;
 
 export class PanelView {
     readonly element: HTMLElement;
@@ -94,7 +92,8 @@ export class PanelView {
         data: PanelData,
         reset: () => void,
         metricChanged: (slot: number, metric: string) => void,
-        pageChanged: (direction: number) => void
+        pageChanged: (direction: number) => void,
+        instance: string
     ) {
         this.element = element;
         this.slot = slot;
@@ -198,9 +197,19 @@ export class PanelView {
 
         const rowHost = this.nodes['status-rows'];
 
+        const hideFans = settings.enabled('hideGpuFans');
         if (gpuStatus) {
-            rowHost!.innerHTML = gpuStatusTemplate;
+            rowHost!.innerHTML = gpuStatusTemplate(hideFans);
             this.vramTrack = rowHost!.querySelector('.gpu-vram-track');
+            if (data.rows.some(row => row.id === 'GpuSystem' || row.id === 'GpuCrossbar')) {
+                const clocks = rowHost!.querySelector<HTMLElement>('.gpu-clocks')!;
+                if (settings.stackGpuClocks) {
+                    clocks.classList.add('stacked-clocks');
+                    rowHost!.classList.toggle('all-clocks-with-fans', !hideFans);
+                } else {
+                    this.configureClockPages(clocks, instance, slot);
+                }
+            }
         }
 
         for (const metric of pins ? [] : data.rows) {
@@ -333,6 +342,29 @@ export class PanelView {
         this.element
             .querySelector('.panel-icon')!
             .setAttribute('data-icon', data.kind === 'status' ? (data.pluginId === WireViewId ? 'vtemp' : 'vcore') : 'pin');
+    }
+
+    private configureClockPages(card: HTMLElement, instance: string, slot: number): void {
+        const key = `rtxlens/clock-page/${instance}/${slot}`;
+        let extended = false;
+        try { extended = localStorage.getItem(key) === 'extended'; } catch { /* Optional storage. */ }
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'clock-page';
+        button.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 8h15l-4-4m5 12H5l4 4"/></svg>';
+        const update = () => {
+            card.dataset.page = extended ? 'extended' : 'main';
+            button.title = extended ? 'Show core and memory clocks' : 'Show additional NVIDIA clocks';
+            button.setAttribute('aria-label', button.title);
+        };
+        update();
+        button.addEventListener('click', event => {
+            event.stopPropagation();
+            extended = !extended;
+            update();
+            try { localStorage.setItem(key, card.dataset.page!); } catch { /* Keep this session's selection. */ }
+        });
+        card.querySelector('.gpu-card-title')!.append(button);
     }
 
     private renderPins(data: PanelData): void {

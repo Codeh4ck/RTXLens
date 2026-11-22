@@ -21,6 +21,7 @@ internal sealed class HardwarePage : UserControl
     public HardwarePage(HardwarePanelViewModel panel, ShellViewModel shell)
     {
         Margin = new Thickness(0, 0, -PageScrollbarGutter, 0);
+
         var body = new StackPanel { Spacing = 14, Margin = new Thickness(0, 12, PageScrollbarGutter, 12) };
         body.Children.Add(CreateHeader(panel, shell));
 
@@ -41,7 +42,7 @@ internal sealed class HardwarePage : UserControl
                 body.Children.Add(new ItemsControl
                 {
                     ItemsSource = panel.Faults,
-                    ItemTemplate = new FuncDataTemplate<MetricViewModel>((fault, _) => fault is null ? null : new Border
+                    ItemTemplate = new FuncDataTemplate<MetricViewModel>((fault, _) => new Border
                     {
                         Padding = new Thickness(0, 0, 0, 8),
                         Child = Readout(fault)
@@ -54,6 +55,7 @@ internal sealed class HardwarePage : UserControl
                 var warning = Message(tone: "error");
                 BindTo(warning, ContentProperty, panel, nameof(panel.WarningText));
                 BindTo(warning, IsVisibleProperty, panel, nameof(panel.HasWarning));
+
                 body.Children.Add(warning);
             }
 
@@ -67,6 +69,7 @@ internal sealed class HardwarePage : UserControl
     private static Grid CreateHeader(HardwarePanelViewModel panel, ShellViewModel shell)
     {
         var device = Caption();
+
         if (panel.IsNvidia)
         {
             BindTo(device, TextBlock.TextProperty, shell.Dashboard.GpuStatus, nameof(GpuStatusViewModel.DeviceText));
@@ -75,7 +78,9 @@ internal sealed class HardwarePage : UserControl
         {
             BindTo(device, TextBlock.TextProperty, panel, nameof(panel.DeviceText));
         }
+
         var iconName = panel.IsMsi ? "msi" : panel.IsWireView ? "tg" : panel.IsAsus ? "asus" : "vcore";
+
         var icon = new Border
         {
             Classes = { "icon-surface" },
@@ -99,18 +104,24 @@ internal sealed class HardwarePage : UserControl
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Center
         };
+
         var restart = ActionButton("Restart plugin", "refresh", () => shell.RestartPluginCommand.Execute(panel.Id));
         restart.Classes.Add("desktop-action");
+
         BindTo(restart, IsVisibleProperty, panel, nameof(panel.CanRestart));
         BindTo(restart, IsEnabledProperty, shell, "!IsBusy");
+
         actions.Children.Add(restart);
 
         if (panel.IsMsi)
         {
             var reset = ActionButton("Reset peaks", "refresh", panel.Msi.ResetPeaks);
             reset.Classes.Add("desktop-action");
+
             BindTo(reset, IsVisibleProperty, panel.Msi, nameof(panel.Msi.ShowPeakHold));
+
             actions.Children.Add(reset);
+
             if (OperatingSystem.IsWindows())
             {
                 var history = ActionButton("Safeguard+ History", "timer", () =>
@@ -120,8 +131,11 @@ internal sealed class HardwarePage : UserControl
                         shell.OpenSafeguardHistory(owner);
                     }
                 });
+
                 history.Classes.Add("desktop-action");
+
                 Watch(history, shell, () => history.IsVisible = shell is { HasSafeguardHistory: true, IsSimulation: false });
+
                 actions.Children.Add(history);
             }
         }
@@ -137,6 +151,7 @@ internal sealed class HardwarePage : UserControl
                     {
                         var window = new WireViewDeviceWindow(shell, panel);
                         shell.TrackToolWindow(window, "wireview-settings", owner, besideOwner: true);
+
                         window.Show(owner);
                     }
                     else
@@ -145,13 +160,15 @@ internal sealed class HardwarePage : UserControl
                     }
                 }
             });
+
             settings.Classes.Add("desktop-action");
+
             Watch(settings, panel, UpdateSettings);
             Watch(settings, shell, UpdateSettings, nameof(shell.CanOpenWireViewSettings));
+
             actions.Children.Add(settings);
 
-            void UpdateSettings() => settings.IsVisible = panel is { CanReadDevice: true, IsReporting: true }
-                                                          && shell.CanOpenWireViewSettings;
+            void UpdateSettings() => settings.IsVisible = panel is { CanReadDevice: true, IsReporting: true } && shell.CanOpenWireViewSettings;
 
             var clear = ActionButton("Clear faults", DesktopIcons.ChartClear, async () =>
             {
@@ -168,8 +185,7 @@ internal sealed class HardwarePage : UserControl
                     Children = { Caption("An ongoing physical fault can be reported again."), statusFlags, logFlags }
                 };
 
-                if (!await ConfirmAsync(owner, "Clear WireView Pro II faults", content, "Clear selected flags")
-                    || statusFlags.IsChecked != true && logFlags.IsChecked != true)
+                if (!await ConfirmAsync(owner, "Clear WireView Pro II faults", content, "Clear selected flags") || (statusFlags.IsChecked != true && logFlags.IsChecked != true))
                 {
                     return;
                 }
@@ -179,14 +195,19 @@ internal sealed class HardwarePage : UserControl
                     FaultStatusMask = statusFlags.IsChecked == true ? ushort.MaxValue : (ushort)0,
                     FaultLogMask = logFlags.IsChecked == true ? ushort.MaxValue : (ushort)0
                 };
+
                 await shell.RunAsync(() => shell.Api.ClearWireViewFaultsAsync(request, shell.StopToken), "Faults cleared.");
             });
+
             clear.Classes.Add("desktop-action");
+
             BindTo(clear, IsVisibleProperty, panel, nameof(panel.ShowClearFaults));
+
             actions.Children.Add(clear);
         }
 
         var status = Message(tone: "success", badge: true);
+
         BindTo(status, ContentProperty, panel, nameof(panel.State));
         BindTo(status, ToolTip.TipProperty, panel, nameof(panel.Message));
         Watch(status, panel, () =>
@@ -195,6 +216,7 @@ internal sealed class HardwarePage : UserControl
             status.Classes.Set("warning", panel.Tone == StatusTone.Caution);
             status.Classes.Set("error", panel.Tone == StatusTone.Negative);
         });
+
         actions.Children.Add(status);
 
         var header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), RowDefinitions = new RowDefinitions("Auto,Auto") };
@@ -204,11 +226,13 @@ internal sealed class HardwarePage : UserControl
             ColumnSpacing = 12,
             Children = { icon, title }
         };
+
         Grid.SetColumn(title, 1);
         header.Children.Add(identity);
 
         Grid.SetColumn(actions, 1);
         header.Children.Add(actions);
+
         var breakpoint = panel.IsWireView ? 1000 : panel.IsMsi ? 960 : 720;
         header.SizeChanged += (_, args) =>
         {
@@ -240,7 +264,7 @@ internal sealed class HardwarePage : UserControl
     private static Grid CreateDetails(HardwarePanelViewModel panel, ShellViewModel shell)
     {
         var gpu = shell.Dashboard.GpuStatus;
-        var status = GpuStatusPanel.Create(gpu, panel.IsWireView ? panel : null);
+        var status = GpuStatusPanel.Create(gpu, panel.IsWireView ? panel : null, isDedicatedTab: panel.IsNvidia);
 
         if (panel.IsNvidia)
         {
@@ -270,6 +294,7 @@ internal sealed class HardwarePage : UserControl
             details.ColumnDefinitions[1].Width = wide ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
             details.ColumnSpacing = wide ? 14 : 0;
             details.RowSpacing = wide || !panel.HasPins ? 0 : 14;
+
             Grid.SetRow(status, wide || !panel.HasPins ? 0 : 1);
             Grid.SetColumn(status, wide ? 1 : 0);
         }
@@ -280,10 +305,10 @@ internal sealed class HardwarePage : UserControl
         var metrics = Columns(
             PinStatistic("CURRENT SPREAD (Δ)", connector, nameof(connector.Spread), 18, "TertiaryBrush", "Max − min current"),
             PinStatistic("SUM OF PIN CURRENTS", connector, nameof(connector.Total), 18));
+
         metrics.ColumnSpacing = 8;
 
-        var section = DashboardSection(connector.Name, "pin",
-            new StackPanel { Spacing = 12, Children = { metrics, CreatePinChart(connector.Pins) } });
+        var section = DashboardSection(connector.Name, "pin", new StackPanel { Spacing = 12, Children = { metrics, CreatePinChart(connector.Pins) } });
         section.ContentMaxWidth = 680;
         return section;
     }
@@ -294,16 +319,19 @@ internal sealed class HardwarePage : UserControl
             PinStatistic("CURRENT SPREAD (Δ)", panel, nameof(panel.CurrentSpreadText), 18, "TertiaryBrush", "Max − min current"),
             PinStatistic("HIGHEST PIN", panel, nameof(panel.HighestCurrentText), 14),
             PinStatistic("LOWEST PIN", panel, nameof(panel.LowestCurrentText), 14));
+
         metrics.ColumnSpacing = 8;
 
         var headroom = Caption("CURRENT HEADROOM TO LIMIT");
         headroom.FontSize = 10;
         headroom.HorizontalAlignment = HorizontalAlignment.Center;
+
         BindTo(headroom, IsVisibleProperty, panel, nameof(panel.ShowHeadroom));
 
         var comparison = Caption();
         comparison.FontSize = 10;
         comparison.HorizontalAlignment = HorizontalAlignment.Center;
+
         BindTo(comparison, TextBlock.TextProperty, panel, nameof(panel.PsuComparisonLabel));
         BindTo(comparison, IsVisibleProperty, panel, nameof(panel.ShowPsuComparison));
 
@@ -314,8 +342,10 @@ internal sealed class HardwarePage : UserControl
                 pin.ResetPeak();
             }
         });
+
         reset.Classes.Add("desktop-action");
         reset.HorizontalAlignment = HorizontalAlignment.Right;
+
         BindTo(reset, IsVisibleProperty, panel, nameof(panel.ShowPeakHold));
 
         var choices = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
@@ -329,12 +359,14 @@ internal sealed class HardwarePage : UserControl
                 IsChecked = shell.Preferences.PinMetric == metric,
                 Padding = new Thickness(12, 7)
             };
+
             if (Application.Current?.TryFindResource("NavigationTabTheme", out var theme) == true)
             {
                 option.Theme = (ControlTheme?)theme;
             }
 
             Avalonia.Automation.AutomationProperties.SetName(option, $"Show pin {metric.ToString().ToLowerInvariant()}");
+
             option.Click += (_, _) => shell.SetPinMetric(metric);
             choices.Children.Add(option);
         }
@@ -344,8 +376,10 @@ internal sealed class HardwarePage : UserControl
             Spacing = 12,
             Children = { metrics, headroom, CreatePinChart(panel.Pins), comparison, reset }
         });
+
         section.ContentMaxWidth = 680;
         section.HeaderActions = choices;
+
         return section;
     }
 
@@ -354,8 +388,8 @@ internal sealed class HardwarePage : UserControl
     {
         var title = Caption(label);
         title.FontSize = 10;
-        var value = new ReadingText { FontSize = fontSize, FontWeight = FontWeight.SemiBold };
-        value[!ReadingText.UnitBrushProperty] = new DynamicResourceExtension(DesktopBrushes.MutedText);
+
+        var value = new ReadingText { FontSize = fontSize, FontWeight = FontWeight.SemiBold, [!ReadingText.UnitBrushProperty] = new DynamicResourceExtension(DesktopBrushes.MutedText) };
         BindTo(value, ReadingText.ReadingProperty, source, path);
 
         var body = new StackPanel { Spacing = 4, Children = { title, value } };
@@ -366,8 +400,7 @@ internal sealed class HardwarePage : UserControl
             body.Children.Add(caption);
         }
 
-        var card = new Border { CornerRadius = new CornerRadius(6), Padding = new Thickness(8), Child = body };
-        card[!Border.BackgroundProperty] = new DynamicResourceExtension("InsetBrush");
+        var card = new Border { CornerRadius = new CornerRadius(6), Padding = new Thickness(8), Child = body, [!Border.BackgroundProperty] = new DynamicResourceExtension("InsetBrush") };
         if (borderBrush is not null)
         {
             card.BorderThickness = new Thickness(1);
@@ -391,6 +424,7 @@ internal sealed class HardwarePage : UserControl
             ColumnSpacing = 4,
             Name = "PinDistributionPlot"
         };
+
         var ticks = new Canvas { Height = PinBar.PlotHeight, VerticalAlignment = VerticalAlignment.Top, Name = "PinScale" };
         bars.Children.Add(ticks);
 
@@ -406,10 +440,12 @@ internal sealed class HardwarePage : UserControl
                 Update();
                 pin.PropertyChanged += OnPinChanged;
             };
+
             bar.DetachedFromVisualTree += (_, _) => pin.PropertyChanged -= OnPinChanged;
 
             Grid.SetColumn(bar, index + 1);
             bars.Children.Add(bar);
+
             continue;
 
             void Update()
@@ -443,6 +479,7 @@ internal sealed class HardwarePage : UserControl
 
         RenderScale();
         bars.AttachedToVisualTree += (_, _) => RenderScale();
+
         return bars;
 
         void RenderScale()
@@ -450,6 +487,7 @@ internal sealed class HardwarePage : UserControl
             var pin = pins[0];
             var scale = pin.Scale;
             var nextState = (scale, pin.ShowHeadroom);
+
             if (axisState == nextState)
             {
                 return;
@@ -458,8 +496,9 @@ internal sealed class HardwarePage : UserControl
             axisState = nextState;
             ticks.Margin = new Thickness(0, PinBar.ReadingHeight + (pin.ShowHeadroom ? PinBar.HeadroomHeight : 0), 0, 0);
             ticks.Children.Clear();
-            var axis = new Rectangle { Width = 1, Height = PinBar.PlotHeight };
-            axis[!Shape.FillProperty] = new DynamicResourceExtension(DesktopBrushes.MutedText);
+
+            var axis = new Rectangle { Width = 1, Height = PinBar.PlotHeight, [!Shape.FillProperty] = new DynamicResourceExtension(DesktopBrushes.MutedText) };
+
             Canvas.SetLeft(axis, 42);
             ticks.Children.Add(axis);
 
@@ -473,10 +512,10 @@ internal sealed class HardwarePage : UserControl
                 label.Width = 38;
                 label.FontSize = 10;
                 label.TextAlignment = TextAlignment.Right;
+
                 Canvas.SetTop(label, offset - 7);
 
-                var tick = new Rectangle { Width = 5, Height = 1 };
-                tick[!Shape.FillProperty] = new DynamicResourceExtension(DesktopBrushes.MutedText);
+                var tick = new Rectangle { Width = 5, Height = 1, [!Shape.FillProperty] = new DynamicResourceExtension(DesktopBrushes.MutedText) };
                 Canvas.SetLeft(tick, 42);
                 Canvas.SetTop(tick, offset);
 
@@ -495,10 +534,11 @@ internal sealed class HardwarePage : UserControl
         return display;
     }
 
-    internal static MetricDisplay Readout(string label, string? icon, object source, string path, bool tile = false)
+    private static MetricDisplay Readout(string label, string? icon, object source, string path, bool tile = false)
     {
         var display = new MetricDisplay { Label = label, Icon = icon is null ? null : Icon(icon) };
         display.Classes.Set("tile", tile);
+
         BindTo(display, MetricDisplay.ValueProperty, source, path);
         return display;
     }

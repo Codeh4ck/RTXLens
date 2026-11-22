@@ -2,6 +2,8 @@ import type { SettingOption } from './SettingOption.ts';
 
 export interface SettingDefinition {
     id: string;
+    host?: boolean;
+    section?: string;
     label: string;
     group: string;
     type: 'slider' | 'switch' | 'color' | 'combobox' | 'textfield' | 'media-selector';

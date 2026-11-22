@@ -101,6 +101,48 @@ try {
     const base = { panel1: 'asusPins', panel2: 'asusStatus', panel3: 'msiConnector1', numberLocale: 'en-GB',
         asusCompare: true, wireviewCompare: true, showPeak: true, showAlerts: false };
     await verifyGpuStatus(page, base, properties, async value => { transform = value; for (const socket of sockets) send(socket); });
+    metadata = { ...metadata, revision: 8, configuration: { ...metadata.configuration, widget: { profiles: {
+        Default: { panel1: 'nvidiaStatus', showCrossbarClock: 'true', showSystemClock: 'true' },
+        'Quiet desk': { showCrossbarClock: 'false' }
+    } } } };
+    transform = frame => ({ ...frame, configurationRevision: 8 });
+    const clockCard = page.locator('#panel1 .gpu-clocks');
+    const clockSwitch = clockCard.locator('.clock-page');
+    await clockSwitch.waitFor();
+    await clockSwitch.click();
+    await clockCard.getByText('Crossbar').waitFor();
+    await clockCard.getByText('System', { exact: true }).waitFor();
+    assert.equal(await clockCard.getByText('Core clock').isVisible(), false);
+    await properties({ widgetProfile: 'Quiet desk' });
+    assert.equal(await clockCard.getByText('Crossbar').count(), 0);
+    await properties({ widgetProfile: 'Default' });
+    for (const [width, height] of [[1688,696],[696,1688]]) {
+        // One occupied panel exercises the wide and tall modes independently of total viewport size.
+        metadata.configuration.widget.profiles.Default.panel2 = 'off';
+        metadata.configuration.widget.profiles.Default.panel3 = 'off';
+        metadata.revision++;
+        transform = frame => ({ ...frame, configurationRevision: metadata.revision });
+        await page.setViewportSize({width,height});
+        for (const socket of sockets) send(socket);
+        await page.waitForFunction(() => JSON.parse(localStorage.getItem('rtxlens/widget-profiles'))?.Default?.panel2 === 'off'
+            && document.querySelector('#panel2').hidden && document.querySelector('#panel3').hidden);
+        await clockSwitch.waitFor({ state: 'hidden' });
+        await clockCard.getByText('Core clock').waitFor();
+        await clockCard.getByText('Crossbar').waitFor();
+        assert.equal(await clockSwitch.isVisible(), false);
+    }
+    metadata.configuration.widget.preview = { profile: 'Default', scenario: 'electrical', issuedAt: new Date().toISOString() };
+    metadata.revision++;
+    const previewDialog = page.locator('dialog[data-mode="preview"]');
+    await previewDialog.waitFor();
+    await previewDialog.getByRole('button', { name: 'Close flyout' }).click();
+    await page.reload();
+    await page.waitForFunction(() => document.querySelector('.widget').dataset.connection === 'live');
+    await clockCard.getByText('Crossbar').waitFor();
+    assert.equal(await previewDialog.count(), 0, 'Reopening the widget does not replay a simulated alert');
+    metadata = configuration(1200);
+    transform = frame => frame;
+    await page.waitForFunction(() => !document.querySelector('#panel1 .clock-page'));
     await verifyBars(page, base, properties, value => { transform = value; for (const socket of sockets) send(socket); }, output);
     const largeFonts = Object.fromEntries(['title','label','value','unit','pin','axis','comparison','alert'].map(role=>[role+'Size',140]));
     for (const [name, width, height, count] of [['S-H',840,344,1], ['S-V',696,416,1], ['M-H',840,696,1],
@@ -113,6 +155,37 @@ try {
         const report = await measure(name);
         assert.equal(report.panels, count, name+' panel count');
         reports.push(report);
+    }
+    for (const [name, width, height] of [['S-H',840,344], ['S-V',696,416], ['M-H',840,696],
+        ['M-V',696,840], ['L-H',1688,696], ['L-V',696,1688], ['XL-H',2536,696], ['XL-V',696,2536]]) {
+        await page.setViewportSize({width,height});
+        await properties({ ...base, ...largeFonts, panel1: 'nvidiaStatus', showCrossbarClock: true, showSystemClock: true });
+        const card = page.locator('#panel1 .gpu-clocks');
+        if (!await card.getByText('Crossbar').isVisible()) await card.locator('.clock-page').click();
+        await card.getByText('System', { exact: true }).waitFor();
+        reports.push(await measure(name + ' extended clocks at maximum font sizes'));
+        if (name === 'M-H') await page.screenshot({ path: join(output, 'GPU-extended-clocks.png') });
+        await properties({ ...base, ...largeFonts, panel1: 'nvidiaStatus', alwaysShowInternalClocks: true });
+        assert.equal(await card.locator('.clock-page').count(), 0);
+        for (const label of ['Core clock', 'Memory clock', 'Crossbar', 'System']) {
+            assert.ok(await card.getByText(label, { exact: true }).isVisible());
+        }
+        for (const metric of ['vram', 'temperatureCore', 'temperatureMemory', 'fan1', 'fan2']) {
+            assert.ok(await page.locator(`#panel1 .status-row[data-metric="${metric}"] .row-value`).isVisible());
+        }
+        reports.push(await measure(name + ' all clocks with fans at maximum font sizes'));
+        if (name === 'M-H') await page.locator('#panel1').screenshot({ path: join(output, 'GPU-all-clocks-with-fans.png') });
+        await properties({ ...base, ...largeFonts, panel1: 'nvidiaStatus', hideGpuFans: true });
+        const gpu = page.locator('#panel1');
+        assert.deepEqual(await gpu.locator('.gpu-card-title').allTextContents(), ['Clocks', 'VRAM usage', 'Temperatures']);
+        assert.deepEqual(await card.locator('.row-label').allTextContents(), ['Core clock', 'Memory clock', 'Crossbar', 'System']);
+        const [core, memory, crossbar, system] = await card.locator('.status-row').evaluateAll(rows =>
+            rows.map(row => row.getBoundingClientRect().toJSON()));
+        assert.ok(core.x === crossbar.x && memory.x === system.x && core.y === memory.y &&
+            crossbar.y === system.y && crossbar.y >= core.bottom, 'Both clock rows must align');
+        assert.equal(await gpu.locator('.gpu-fans, .clock-page').count(), 0);
+        reports.push(await measure(name + ' GPU fans hidden at maximum font sizes'));
+        if (name === 'M-H') await gpu.screenshot({ path: join(output, 'GPU-fans-hidden.png') });
     }
     for(const [name,width,height] of [['S-H',840,344],['M-V',696,840],['L-H',1688,696],['XL-H',2536,696]]) {
         await page.setViewportSize({width,height});
@@ -288,7 +361,26 @@ try {
     assert.equal(await page.locator('.preview-notice').count(), 0);
     await page.locator('.flyout-close').click();
     await page.waitForFunction(() => !document.querySelector('#service-alert').hidden);
-    assert.match(await page.locator('#service-alert').innerText(), /overcurrent/i);
+    const banner = page.locator('#service-alert');
+    assert.match(await banner.innerText(), /overcurrent/i);
+    const pulseSettings = { ...base, showAlerts: true, alertPulse: true };
+    await properties(pulseSettings);
+    async function capturePulse(time, name) {
+        await banner.evaluate((element, time) => {
+            const pulse = element.getAnimations().find(animation => animation.animationName === 'alert-attention');
+            if (!pulse) throw new Error('The visible alert banner has no pulse animation');
+            pulse.pause();
+            pulse.currentTime = time;
+        }, time);
+        return banner.screenshot({ path: join(output, name) });
+    }
+    const baselineBanner = await capturePulse(0, 'alert-pulse-start.png');
+    const peakBanner = await capturePulse(1000, 'alert-pulse-peak.png');
+    assert.ok(!baselineBanner.equals(peakBanner), 'The two-second warning pulse must change visible banner pixels');
+    await properties({ ...pulseSettings, reduceMotion: true });
+    assert.equal(await banner.evaluate(element => element.getAnimations().length), 0);
+    assert.ok(baselineBanner.equals(await banner.screenshot()), 'Disabling animation restores the steady banner');
+    await properties({ ...base, showAlerts: true });
     await page.waitForTimeout(500);
     assert.equal(await page.locator('dialog').count(), 0, 'Unchanged warning sequences must not reopen a dismissed flyout');
 

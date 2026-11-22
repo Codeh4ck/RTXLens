@@ -7,7 +7,7 @@ namespace RTXLens.Plugins.GenericNvidia.Mapping;
 
 public static class GenericNvidiaSnapshotMapper
 {
-    public static SensorReading[] Create(NvidiaSample sample)
+    public static SensorReading[] Create(NvidiaSample sample, NvidiaSample? domainClocks = null)
     {
         var readings = new List<SensorReading>();
 
@@ -38,7 +38,7 @@ public static class GenericNvidiaSnapshotMapper
             }
         }
 
-        // A memory junction sensor takes priority over the older memory thermal API.
+        // A memory junction sensor takes priority over the older memory thermal API
         if (!readings.Any(reading => reading.Identity is { Component: SensorComponent.GpuMemory, Metric: SensorMetric.Temperature }))
         {
             var memory = sample.Sensors.FirstOrDefault(sensor => sensor is { Name: "GPU Memory", Type: SensorType.Temperature });
@@ -106,9 +106,27 @@ public static class GenericNvidiaSnapshotMapper
             }
         }
 
+        if (domainClocks?.Device.Id == sample.Device.Id)
+        {
+            foreach (var sensor in domainClocks.Sensors)
+            {
+                var component = sensor.Name switch
+                {
+                    "GPU Crossbar" => SensorComponent.GpuCrossbar,
+                    "GPU System" => SensorComponent.GpuSystem,
+                    _ => (SensorComponent?)null
+                };
+
+                if (component is { } domain)
+                {
+                    Add(domain, SensorMetric.Clock, sensor.Value, observedAt: domainClocks.ObservedAt);
+                }
+            }
+        }
+
         return [.. readings];
 
-        void Add(SensorComponent component, SensorMetric metric, float? value, int? channel = null)
+        void Add(SensorComponent component, SensorMetric metric, float? value, int? channel = null, DateTimeOffset? observedAt = null)
         {
             double? number = value is { } finite && float.IsFinite(finite) ? finite : null;
             if (component == SensorComponent.GpuConnector && metric == SensorMetric.Voltage && number is not > 0)
@@ -117,7 +135,7 @@ public static class GenericNvidiaSnapshotMapper
             }
 
             readings.Add(new SensorReading(new SensorIdentity(GenericNvidiaPlugin.PluginId, sample.Device.Id, component, metric, channel),
-                SensorUnits.For(metric), number, sample.ObservedAt, number is null ? ReadingQuality.Unavailable : ReadingQuality.Valid));
+                SensorUnits.For(metric), number, observedAt ?? sample.ObservedAt, number is null ? ReadingQuality.Unavailable : ReadingQuality.Valid));
         }
     }
 }

@@ -11,7 +11,7 @@
 .gpu-usage-value { display: flex; align-items: center; justify-content: flex-end; width: 4.5ch; flex: none; font-variant-numeric: tabular-nums; }
 .panel-title { margin: 0; font: 700 max(14px, calc(var(--title-base) * var(--title-scale, 1))) var(--font-family, Consolas, monospace); overflow-wrap: anywhere; }
 .panel-source { margin: calc(var(--space) * .3) 0 0; font-size: max(14px, calc(var(--label-base) * var(--label-scale, 1))); color: var(--muted); overflow-wrap: anywhere; }
-.status-pill { flex: none; color: var(--connected); border: 1px solid currentColor; background: color-mix(in srgb, currentColor 8%, transparent); border-radius: 24px; padding: calc(var(--space) * .45) var(--space); font-size: max(14px, calc(var(--label-base) * var(--label-scale, 1))); white-space: nowrap; }
+.status-pill { flex: none; color: var(--muted); border: 1px solid currentColor; background: color-mix(in srgb, currentColor 8%, transparent); border-radius: 24px; padding: calc(var(--space) * .45) var(--space); font-size: max(14px, calc(var(--label-base) * var(--label-scale, 1))); white-space: nowrap; }
 .panel[data-tone='warning'] .status-pill { color: var(--warning); }
 .panel[data-tone='error'] .status-pill { color: var(--error); }
 .panel[data-tone='neutral'] .status-pill { color: var(--muted); }
@@ -219,6 +219,64 @@
 
 .widget[data-large-type='true'] .panel[data-gpu-status='true'] .gpu-reading-columns .status-row {
     gap: 0;
+}
+
+/* Reserve the second clock row while keeping the other three cards readable in short slots. */
+.all-clocks-with-fans {
+    grid-template-rows: minmax(min-content, 1.8fr) repeat(3, minmax(min-content, 1fr));
+    --clock-layout-value-size: clamp(14px, 5cqh, max(14px, calc(var(--value-base) * var(--value-scale, 1))));
+    --clock-layout-label-size: clamp(12px, 3.5cqh, max(13px, calc(var(--label-base) * 1.2 * var(--label-scale, 1))));
+}
+.all-clocks-with-fans .gpu-card {
+    padding-block: calc(var(--space) * .2);
+}
+.all-clocks-with-fans .row-value { font-size: var(--clock-layout-value-size); }
+.all-clocks-with-fans .gpu-reading-columns .row-label { font-size: var(--clock-layout-label-size); }
+
+.stacked-clocks .gpu-reading-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-flow: row;
+    row-gap: var(--space);
+}
+.stacked-clocks .gpu-reading-columns [data-metric='GpuCrossbar'] {
+    grid-area: 2 / 1;
+    border-inline-start: 0;
+}
+.stacked-clocks [data-metric='GpuSystem'] { grid-area: 2 / 2; }
+
+.clock-page {
+    display: inline-grid;
+    place-items: center;
+    min-width: 28px;
+    min-height: 28px;
+    padding: 2px;
+    color: var(--accent);
+    background: var(--panel-surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+
+@container gpu-status (max-width: 1079.99px) and (max-height: 759.99px) {
+    .gpu-clocks[data-page='main'] :is([data-metric='GpuCrossbar'], [data-metric='GpuSystem']),
+    .gpu-clocks[data-page='extended'] :is([data-metric='coreClock'], [data-metric='memoryClock']) {
+        display: none;
+    }
+    .gpu-clocks[data-page='extended'] [data-metric='memoryClock'] + .status-row {
+        border-inline-start: 0;
+    }
+}
+
+@container gpu-status (min-width: 1080px) or (min-height: 760px) {
+    .clock-page { display: none; }
+}
+
+@container gpu-status (max-width: 1079.99px) and (min-height: 760px) {
+    .gpu-clocks[data-page] .gpu-reading-columns {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-auto-flow: row;
+        row-gap: var(--space);
+    }
+    .gpu-clocks[data-page] .status-row:nth-child(odd) { border-inline-start: 0; }
 }
 
 @container gpu-status (max-height: 405px) {

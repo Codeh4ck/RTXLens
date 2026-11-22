@@ -9,6 +9,8 @@ internal static class GenericNvidiaDebugMetrics
     [
         new("GPU", "Core clock", SensorComponent.GpuCore, SensorMetric.Clock, 2400),
         new("GPU", "Memory clock", SensorComponent.GpuMemory, SensorMetric.Clock, 14000),
+        new("GPU", "Crossbar clock", SensorComponent.GpuCrossbar, SensorMetric.Clock, 2100),
+        new("GPU", "GPU system clock", SensorComponent.GpuSystem, SensorMetric.Clock, 1800),
         new("GPU", "GPU usage", SensorComponent.GpuCore, SensorMetric.Utilization, 65),
         new("GPU", "Core voltage (V)", SensorComponent.GpuCore, SensorMetric.Voltage, 0.925),
         new("Connector", "Power", SensorComponent.GpuConnector, SensorMetric.Power, 432, 1),

@@ -17,7 +17,7 @@ public sealed record DeviceWarningProfile
 
     public bool IsValid() => !string.IsNullOrWhiteSpace(Id) && Id.Length <= 80
         && !string.IsNullOrWhiteSpace(Name) && Name.Length <= 80
-        && (DeviceId is null || !string.IsNullOrWhiteSpace(DeviceId) && DeviceId.Length <= 512)
+        && (DeviceId is null || (!string.IsNullOrWhiteSpace(DeviceId) && DeviceId.Length <= 512))
         && !string.IsNullOrWhiteSpace(PluginId) && (ConnectorId is null || !string.IsNullOrWhiteSpace(ConnectorId))
         && (Limits is null || Limits.IsValid())
         && (NotificationPolicy is null || NotificationPolicy.IsValid())

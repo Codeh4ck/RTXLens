@@ -3,6 +3,8 @@ import { MsiId, WireViewId } from './pluginIds.ts';
 import { UpdateChecker } from './updates/UpdateChecker.ts';
 import { UpdateStateStore } from './updates/UpdateStateStore.ts';
 import { widgetVersion } from './updates/WidgetVersion.ts';
+import type { WidgetWarningPreview } from './contracts/ConfigurationSnapshot.ts';
+import { WidgetProfileSettings } from './settings/WidgetProfiles.ts';
 import { Settings } from './settings/Settings.ts';
 import { applyAppearance } from './settings/applyAppearance.ts';
 import { TelemetryStore } from './telemetry/TelemetryStore.ts';
@@ -30,7 +32,14 @@ export class WidgetApplication {
     private peaks = new PeakStore();
     private format = new Formatter(this.settings);
     private presenter = new PanelPresenter(this.store, this.settings, this.format, this.peaks);
-    private client = new ServiceClient(this.store, () => this.requestRender());
+    private profiles = new WidgetProfileSettings();
+    private refreshHostSettings?: () => void;
+    private previewScenario = 'none';
+    private lastPreview = '';
+    private client = new ServiceClient(this.store, () => this.requestRender(), (profiles, preview) => {
+        if (this.profiles.receive(profiles)) this.refreshHostSettings?.();
+        if (preview) this.receivePreview(preview);
+    });
     private views: (PanelView | null)[] = [null, null, null];
     private viewKeys = ['', '', ''];
     private flyout: FlyoutView;
@@ -118,6 +127,8 @@ export class WidgetApplication {
 
         this.updates.stop();
         this.updateInstance = instance;
+        this.viewKeys.fill('');
+        this.lastPreview = '';
         let storage: Storage | null = null;
 
         try {
@@ -134,6 +145,11 @@ export class WidgetApplication {
     }
 
     updateSettings(read: (name: string) => unknown, defaultTemperatureUnit: string, updatesReady = true): void {
+        this.refreshHostSettings = () => this.applySettings(this.profiles.reader(read), defaultTemperatureUnit, updatesReady);
+        this.refreshHostSettings();
+    }
+
+    private applySettings(read: (name: string) => unknown, defaultTemperatureUnit: string, updatesReady: boolean): void {
         const oldPage = this.settings.text('smallPanel');
         const oldAutoPage = this.settings.enabled('autoPage');
         const oldPageSeconds = this.settings.number('pageSeconds');
@@ -157,7 +173,8 @@ export class WidgetApplication {
         }
 
         if (oldPreview !== this.settings.text('warningPreview')) {
-            this.previewRequested = this.settings.text('warningPreview') !== 'none';
+            this.previewScenario = this.settings.text('warningPreview');
+            this.previewRequested = this.previewScenario !== 'none';
 
             if (!this.previewRequested && this.flyout.mode === 'preview') {
                 this.flyout.close();
@@ -169,6 +186,22 @@ export class WidgetApplication {
         delete this.root.dataset.mediaError;
         this.media.loadMedia(normalizeMediaConfig(this.settings.raw('backgroundMedia')));
         this.client.start(59273);
+        this.requestRender();
+    }
+
+    private receivePreview(preview: WidgetWarningPreview): void {
+        if (preview.profile !== this.settings.text('widgetProfile') &&
+            preview.profile.toLowerCase() !== this.profiles.requestedProfile.toLowerCase()) return;
+        const age = Date.now() - Date.parse(preview.issuedAt);
+        if (!Number.isFinite(age) || age < -1000 || age > 15000 || this.lastPreview === preview.issuedAt) return;
+        const key = 'rtxlens/warning-preview/' + this.updateInstance;
+        this.lastPreview = preview.issuedAt;
+        try {
+            if (localStorage.getItem(key) === preview.issuedAt) return;
+            localStorage.setItem(key, preview.issuedAt);
+        } catch { /* In memory deduplication remains available. */ }
+        this.previewScenario = preview.scenario;
+        this.previewRequested = true;
         this.requestRender();
     }
 
@@ -316,7 +349,7 @@ export class WidgetApplication {
         const newWarning = this.warningTracker.update(deliverable, this.settings.enabled('showAlerts'));
 
         if (this.flyout.mode === 'preview' || this.previewRequested) {
-            const simulated = previewWarnings(this.settings.text('warningPreview'));
+            const simulated = previewWarnings(this.previewScenario);
 
             if (simulated.length) {
                 this.flyout.warnings([...simulated, ...notices], true);
@@ -382,6 +415,7 @@ export class WidgetApplication {
                 binding.kind,
                 binding.pluginId,
                 showSummary,
+                binding.kind === 'status' && this.settings.stackGpuClocks,
                 Boolean(data.comparisonLabel),
                 data.rows.map(row => row.id),
                 ...[chartSettings.Source, chartSettings.Spread, chartSettings.Axis, chartSettings.Headroom, chartSettings.Peak].map((name) => this.settings.enabled(name))
@@ -401,7 +435,8 @@ export class WidgetApplication {
                     (direction) => {
                         this.advancePage(direction, this.assigned());
                         this.requestRender();
-                    }
+                    },
+                    this.updateInstance
                 );
 
                 this.viewKeys[index] = key;

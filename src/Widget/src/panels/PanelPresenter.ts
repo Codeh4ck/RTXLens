@@ -236,18 +236,6 @@ export class PanelPresenter {
             data.vramUsagePercent = Math.max(0, Math.min(100, utilization ?? used / total * 100));
         }
 
-        const channels = this.store.snapshot?.sensors.filter(reading => reading.identity.pluginId === pluginId
-            && reading.identity.deviceId === deviceId && reading.identity.component === 'GpuFan'
-            && reading.identity.metric === 'FanSpeed' && reading.identity.channel !== null)
-            .map(reading => reading.identity.channel!).sort((left, right) => left - right).slice(0, 2) ?? [];
-        const fans = channels.map((channel, index) => {
-            const rpm = this.format.value(value('GpuFan', 'FanSpeed', channel), 'RPM', 0);
-            const duty = value('GpuFan', 'FanDuty', channel);
-            const text = this.settings.enabled('showFanDuty') && duty !== null
-                ? `${rpm} (${this.format.value(duty, '%', 0)})`
-                : rpm;
-            return metric(`fan${index + 1}`, `Fan ${index + 1}`, text, 'vfan');
-        });
         const temperatureWarnings = this.store.snapshot?.warnings?.states.filter(state =>
             state.pluginId === pluginId && state.deviceId === deviceId && state.phase === 'Active' && state.icon === 'temperature'
         ) ?? [];
@@ -260,7 +248,31 @@ export class PanelPresenter {
             metric('temperatureMemory', 'VRAM temp', this.format.temperature(memoryTemperature), 'vtemp', warns('memory'))
         ];
 
-        data.rows.push(...(fans.length ? fans : [metric('fan1', 'Fans', '-', 'vfan')]));
+        const hideFans = this.settings.enabled('hideGpuFans');
+        for (const [option, component, label] of [
+            ['showCrossbarClock', 'GpuCrossbar', 'Crossbar'],
+            ['showSystemClock', 'GpuSystem', 'System']
+        ] as const) {
+            if ((this.settings.stackGpuClocks || this.settings.enabled(option)) && this.store.reading(pluginId, deviceId, component, 'Clock')) {
+                data.rows.push(metric(component, label, this.format.value(value(component, 'Clock'), 'MHz', 0), 'vcore'));
+            }
+        }
+
+        if (!hideFans) {
+            const channels = this.store.snapshot?.sensors.filter(reading => reading.identity.pluginId === pluginId
+                && reading.identity.deviceId === deviceId && reading.identity.component === 'GpuFan'
+                && reading.identity.metric === 'FanSpeed' && reading.identity.channel !== null)
+                .map(reading => reading.identity.channel!).sort((left, right) => left - right).slice(0, 2) ?? [];
+            const fans = channels.map((channel, index) => {
+                const rpm = this.format.value(value('GpuFan', 'FanSpeed', channel), 'RPM', 0);
+                const duty = value('GpuFan', 'FanDuty', channel);
+                const text = this.settings.enabled('showFanDuty') && duty !== null
+                    ? `${rpm} (${this.format.value(duty, '%', 0)})`
+                    : rpm;
+                return metric(`fan${index + 1}`, `Fan ${index + 1}`, text, 'vfan');
+            });
+            data.rows.push(...(fans.length ? fans : [metric('fan1', 'Fans', '-', 'vfan')]));
+        }
 
         if (temperatureWarnings.length) {
             data.alerts.push('Display warning: GPU temperature threshold exceeded');
@@ -285,10 +297,12 @@ export class PanelPresenter {
             : profileLimit === undefined ? deviceLimit
             : deviceLimit === null ? profileLimit : Math.min(profileLimit, deviceLimit);
         const cable = this.store.value(binding.pluginId, binding.deviceId, 'GpuConnector', 'PowerCapability', now, 1);
+        const profileFallback = this.settings.enabled('overridePowerFallback') ? undefined : profile?.powerFallbackPerPin;
+        const profileCurrent = this.settings.enabled('overrideCurrentMax') ? undefined : profile?.currentCeiling;
         const powerCeiling = profile?.powerCeilingPerPin
-            ?? (cable !== null && cable > 0 ? cable / 6 : profile?.powerFallbackPerPin ?? this.settings.number('powerCableFallback') / 6);
+            ?? (cable !== null && cable > 0 ? cable / 6 : profileFallback ?? this.settings.number('powerCableFallback') / 6);
         const max = unit === 'V' ? profile?.voltageMaximum ?? 12.6
-            : unit === 'W' ? powerCeiling : profile?.currentCeiling ?? this.settings.number('currentMax');
+            : unit === 'W' ? powerCeiling : profileCurrent ?? this.settings.number('currentMax');
         const min = unit === 'V' ? profile?.voltageMinimum ?? 11.4 : 0;
 
         if (profile) {

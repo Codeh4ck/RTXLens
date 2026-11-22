@@ -149,9 +149,6 @@ internal static class WireViewPanelTests
         panel.Apply(frame, prefs, frame.Timestamp);
         var reads = 0;
         var response = new TaskCompletionSource<DeviceConfig>();
-        Task<DeviceConfig> Read(CancellationToken _) => ++reads == 1
-            ? Task.FromException<DeviceConfig>(new HttpRequestException("Device starting"))
-            : response.Task;
 
         await panel.EnsureDeviceConfigurationAsync(Read, frame.Timestamp, default);
         await panel.EnsureDeviceConfigurationAsync(Read, frame.Timestamp.AddSeconds(1), default);
@@ -169,6 +166,11 @@ internal static class WireViewPanelTests
         panel.MarkDisconnected(prefs);
         panel.Apply(frame, prefs, frame.Timestamp);
         TestAssert.Equal("—", panel.Pins[0].Headroom);
+        return;
+
+        Task<DeviceConfig> Read(CancellationToken _) => ++reads == 1
+            ? Task.FromException<DeviceConfig>(new HttpRequestException("Device starting"))
+            : response.Task;
     }
 
     private static async Task IgnoresSupersededDeviceReadsAsync()
