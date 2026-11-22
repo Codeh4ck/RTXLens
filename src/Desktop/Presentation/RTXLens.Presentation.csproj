@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <ItemGroup>
+        <InternalsVisibleTo Include="RTXLens.UI.Tests" />
         <EmbeddedResource Include="Performance/PerformanceChart.html" LogicalName="RTXLens.PerformanceChart.html" />
         <ProjectReference Include="../../Plugins/Msi/Contracts/RTXLens.Plugins.Msi.Contracts.csproj" />
         <ProjectReference Include="../Client/RTXLens.Client.csproj" />

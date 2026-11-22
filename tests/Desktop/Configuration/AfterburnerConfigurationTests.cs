@@ -13,6 +13,7 @@ internal static class AfterburnerConfigurationTests
         runner.Run(CurrentLimitsEnforceOneDecimalPlace);
         if (OperatingSystem.IsWindows())
         {
+            runner.Run(DiscoverySkipsInvalidRememberedInstallations);
             runner.Run(BundledScriptBindingsRoundTripWithoutChangingTheOtherConnector);
         }
         runner.Run(ConnectorConfigurationsAndActionsAreIndependent);
@@ -47,6 +48,28 @@ internal static class AfterburnerConfigurationTests
     private static readonly byte[] Profile = Encoding.UTF8.GetBytes("; profile comment\r\n[Settings]\r\nCurrentGpu=0\r\nSources=+GPU usage,-PSU 12VHPWR1 alarm,+PSU 12VHPWR2 alarm,+Core clock\r\n[Monitoring]\r\nPSU.dll=1\r\nOther.dll=1\r\n[Source PSU 12VHPWR1 alarm]\r\nAlarmThresholdMin=\r\nAlarmThresholdMax=\r\nAlarmFlags=3\r\nAlarmTimeout=2000\r\nAlarmApp=%AB%\r\nAlarmAppCmdLine=-lowpowerprofile -message GPUSafeguard\r\nFormula=\r\n[Source PSU 12VHPWR2 alarm]\r\nAlarmThresholdMin=\r\nAlarmThresholdMax=1\r\nAlarmFlags=3\r\nAlarmTimeout=3000\r\nAlarmApp=%AB%\r\nAlarmAppCmdLine=-lowpowerprofile -message GPUSafeguard\r\nFormula=\r\n[Source GPU usage]\r\nAlarmFlags=0\r\nGroup=untouched\r\n");
 
     private static AfterburnerSettings Settings => new(true, true, true, 6, 1.2, 2, true);
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static void DiscoverySkipsInvalidRememberedInstallations()
+    {
+        using var fixture = new Files();
+        var directory = fixture.Store.Installation;
+        var expected = AfterburnerDiscovery.Find();
+
+        // The remembered folder may be gone or contain an unrelated executable.
+        CheckCandidate(Path.Combine(directory, "removed"));
+        File.Copy(typeof(AfterburnerConfigurationTests).Assembly.Location, Path.Combine(directory, "MSIAfterburner.exe"));
+        CheckCandidate(directory);
+
+        void CheckCandidate(string candidate)
+        {
+            TestAssert.Throws<InvalidDataException>(() => AfterburnerDiscovery.Inspect(candidate));
+            TestAssert.Equal(0, AfterburnerDiscovery.InspectCandidates([candidate]).Length);
+            var discovered = AfterburnerDiscovery.InspectCandidates([candidate, .. expected.Select(item => item.Directory)]);
+            TestAssert.True(expected.SequenceEqual(discovered),
+                "An invalid installation must be skipped while preserving all other discovered installations.");
+        }
+    }
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     private static void BundledScriptBindingsRoundTripWithoutChangingTheOtherConnector()

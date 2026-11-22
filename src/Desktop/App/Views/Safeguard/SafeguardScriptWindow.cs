@@ -222,7 +222,7 @@ internal sealed class SafeguardScriptWindow : LensWindow
                                      ?? throw new ArgumentException($"Select a value for {key}.");
     }
 
-    internal static bool IsConfigurationError(Exception error) => error is IOException or UnauthorizedAccessException
+    internal static bool IsConfigurationError(Exception error) => error is InvalidDataException or IOException or UnauthorizedAccessException
         or ArgumentException or InvalidOperationException or CryptographicException or System.ComponentModel.Win32Exception
         or System.Text.Json.JsonException or OverflowException or System.Security.SecurityException;
 }

@@ -73,6 +73,11 @@ public static class AfterburnerDiscovery
         }
 
         candidates.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "MSI Afterburner"));
+        return InspectCandidates(candidates);
+    }
+
+    internal static AfterburnerInstallation[] InspectCandidates(IEnumerable<string> candidates)
+    {
         var installations = new List<AfterburnerInstallation>();
 
         foreach (var candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
@@ -81,7 +86,7 @@ public static class AfterburnerDiscovery
             {
                 installations.Add(Inspect(candidate));
             }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
+            catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException or ArgumentException)
             {
                 // Invalid candidates must never become write targets.
             }
