@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <ItemGroup>
+        <InternalsVisibleTo Include="RTXLens.Tests" />
         <PackageReference Include="LibreHardwareMonitorLib" />
     </ItemGroup>
 </Project>

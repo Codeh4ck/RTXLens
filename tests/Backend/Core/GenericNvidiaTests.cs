@@ -21,6 +21,7 @@ internal static class GenericNvidiaTests
         runner.Run(MapsSingleAndMultipleFansByCoolerIdWithoutInventingDuty);
         runner.Run(MapsCoreVoltageAndHotspotWithoutPublishingBoardPower);
         runner.Run(StreamsNvmlDiagnosticsForTheSelectedGpu);
+        runner.Run(ReadsCrossbarAndSystemByNativeDomainIndex);
         runner.Run(StreamsIndependentDomainClocksWithTheirMeasurementTime);
         runner.Run(InputVoltagePrefersMeasurementsAndUsesConnectorRatioOnlyAsFallback);
         runner.Run(RecognizesAstralCapabilitiesAndKeepsStableGpuIdentity);
@@ -84,6 +85,29 @@ internal static class GenericNvidiaTests
         TestAssert.Equal(2, readings.Length);
         TestAssert.Equal(SensorUnit.Volts, readings.Single(reading => reading.Identity.Component == SensorComponent.GpuCore).Unit);
         TestAssert.Equal<double?>(75, readings.Single(reading => reading.Identity.Component == SensorComponent.GpuHotspot).Value);
+    }
+
+    private static void ReadsCrossbarAndSystemByNativeDomainIndex()
+    {
+        using var reader = new NvidiaIdentityReader();
+        var readings = reader.ReadDomainClocks("pci-first", 1, Measure);
+        TestAssert.Equal(2, readings.Length);
+        TestAssert.Equal<float?>(2509, readings.Single(sensor => sensor.Name == "GPU Crossbar").Value);
+        TestAssert.Equal<float?>(2869, readings.Single(sensor => sensor.Name == "GPU System").Value);
+
+        static int Measure(nint handle, ref NvidiaIdentityReader.ClockMeasurement request)
+        {
+            TestAssert.Equal((nint)1, handle);
+            TestAssert.Equal(0x1000Cu, request.Version);
+            request.FrequencyKHz = request.DomainIndex switch
+            {
+                1 => 2_509_000, // Crossbar
+                2 => 2_869_000, // System
+                4 => 17_517_000, // Memory
+                _ => throw new InvalidOperationException("Unexpected NVAPI clock domain.")
+            };
+            return 0;
+        }
     }
 
     private static void StreamsIndependentDomainClocksWithTheirMeasurementTime()

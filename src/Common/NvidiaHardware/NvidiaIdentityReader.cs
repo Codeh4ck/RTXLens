@@ -13,15 +13,15 @@ internal sealed class NvidiaIdentityReader : IDisposable
 
     // Private NVAPI CLK_MEASURE_FREQ V1 - the request holds three 32-bit fields
     [StructLayout(LayoutKind.Sequential)]
-    private struct ClockMeasurement
+    internal struct ClockMeasurement
     {
         public uint Version;
-        public uint DomainMask;
+        public uint DomainIndex;
         public uint FrequencyKHz;
     }
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private delegate int MeasureClock(nint handle, ref ClockMeasurement measurement);
+    internal delegate int MeasureClock(nint handle, ref ClockMeasurement measurement);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate nint QueryInterface(uint id);
@@ -120,16 +120,22 @@ internal sealed class NvidiaIdentityReader : IDisposable
             return [];
         }
 
+        return ReadDomainClocks(deviceId, handle, measure);
+    }
+
+    internal NvidiaSensor[] ReadDomainClocks(string deviceId, nint handle, MeasureClock measure)
+    {
         var sensors = new List<NvidiaSensor>(2);
 
-        Read(0x02, "GPU Crossbar");
-        Read(0x04, "GPU System");
+        // Windows NVAPI translates these indices to RM domain masks (0x02 and 0x04).
+        Read(1, "GPU Crossbar");
+        Read(2, "GPU System");
 
         return [.. sensors];
 
-        void Read(uint mask, string name)
+        void Read(uint domainIndex, string name)
         {
-            var key = (deviceId, handle, mask);
+            var key = (deviceId, handle, domainIndex);
             var known = _clockSupport.TryGetValue(key, out var supported);
 
             if (known && !supported)
@@ -137,7 +143,7 @@ internal sealed class NvidiaIdentityReader : IDisposable
                 return;
             }
 
-            var request = new ClockMeasurement { Version = 0x1000C, DomainMask = mask };
+            var request = new ClockMeasurement { Version = 0x1000C, DomainIndex = domainIndex };
             var status = measure(handle, ref request);
 
             switch (status)

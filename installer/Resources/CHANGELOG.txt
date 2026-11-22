@@ -1,3 +1,6 @@
+1.1.7 - NVIDIA clock reporting fix
+- Fixed the NVIDIA clock readings in the desktop app and iCUE widget. Crossbar previously showed the System clock, and System showed the Memory clock.
+
 1.1.6 - NVIDIA clocks and iCUE widget settings
 - The NVIDIA plugin reports Crossbar (XBAR) and System (SYS) clocks on supported GPUs in the dedicated GPU Status tab.
 - Configure iCUE widget profiles in RTX Lens, including panel layout, readings, alerts and appearance.
