@@ -18,7 +18,7 @@ import type { IncidentRef } from './incidentProtocol';
 import { useLockScreenNotifications } from './lockScreenNotifications';
 import { allowsWarning, type NotificationPreferences } from './mobilePreferences';
 import {
-  ConnectionAddresses, MsiDisplaySettings, NotificationSettings, TemperatureSettings, TemperatureUnitContext, TestRemoteAccess, useMobilePreferences,
+  ConnectionAddresses, DisplaySettings, NotificationSettings, TemperatureSettings, ReadingFormatContext, readingFormat, TestRemoteAccess, useMobilePreferences,
 } from './mobileSettings';
 import { decodePairingCode, decodeSavedComputer, requestPairing, type PairedComputer, type SensorFrame } from './protocol';
 import { Gpu, Home, Power, Warnings } from './screens';
@@ -423,7 +423,7 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
           navigate('home');
         }} />
         {preferencesLoaded && <TemperatureSettings unit={preferences.temperature} save={preferences.saveTemperature} />}
-        {preferencesLoaded && <MsiDisplaySettings value={preferences.display} busy={preferences.savingDisplay} save={preferences.saveDisplay} />}
+        {preferencesLoaded && <DisplaySettings value={preferences.display} busy={preferences.savingDisplay} save={preferences.saveDisplay} />}
       </Page>
     );
   } else if (tab === 'warnings') {
@@ -460,12 +460,11 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
           </View>
         </Card>
       </View>}
-      <TemperatureUnitContext.Provider value={preferences.temperature}>
+      <ReadingFormatContext.Provider value={readingFormat(preferences.temperature, preferences.display.useGrouping)}>
         <View style={styles.screen} key={tab}>{content}</View>
-      </TemperatureUnitContext.Provider>
-      <SafeAreaView edges={['bottom']} style={styles.bottom}>
-        {(tab !== 'home' || !editingHome) && <BottomNavigation selected={tab} warningCount={warningCount} onSelect={navigate} />}
-      </SafeAreaView>
+      </ReadingFormatContext.Provider>
+      {tab === 'home' && editingHome ? <SafeAreaView edges={['bottom']} /> :
+        <BottomNavigation selected={tab} warningCount={warningCount} onSelect={navigate} />}
     </>
   );
 }

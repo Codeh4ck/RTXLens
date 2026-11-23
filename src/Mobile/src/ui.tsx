@@ -1,6 +1,7 @@
 import { useColors, useThemeStyles, type Colors } from './appearance';
 import { Children, createContext, isValidElement, useContext, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
 export const HomeInteractionContext = createContext(false);
@@ -51,7 +52,7 @@ const paths = {
 export type IconName = keyof typeof paths;
 export type Tab = 'home' | 'power' | 'gpu' | 'warnings' | 'settings';
 const tabs: { id: Tab; label: string }[] = [
-  { id: 'home', label: 'Home' }, { id: 'power', label: 'Power' }, { id: 'gpu', label: 'GPU' },
+  { id: 'power', label: 'Power' }, { id: 'gpu', label: 'GPU' }, { id: 'home', label: 'Home' },
   { id: 'warnings', label: 'Warnings' }, { id: 'settings', label: 'Settings' },
 ];
 
@@ -69,23 +70,33 @@ export function BottomNavigation({ selected, warningCount, onSelect }: {
 }) {
   const styles = useStyles();
   const colors = useColors();
+  const { bottom } = useSafeAreaInsets();
   return (
-    <View accessibilityRole="tablist" style={styles.navigation}>
-      {tabs.map(({ id, label }) => {
-        const active = id === selected;
-        const badge = id === 'warnings' && warningCount > 0;
-        return (
-          <Pressable key={id} accessibilityRole="tab" accessibilityState={{ selected: active }}
-            accessibilityLabel={badge ? `${label}, ${warningCount} active` : label}
-            onPress={() => onSelect(id)} style={({ pressed }) => [styles.tab, pressed && styles.pressed]}>
-            <View style={[styles.tabIcon, active && styles.activeTabIcon]}>
-              <Icon name={id} color={active ? colors.accent : colors.muted} />
-              {badge && <View style={styles.dot} />}
-            </View>
-            <Text style={[styles.tabLabel, active && styles.activeTabLabel]}>{label}</Text>
-          </Pressable>
-        );
-      })}
+    <View style={[styles.dock, { paddingBottom: bottom }]}>
+      <View accessibilityRole="tablist" style={styles.navigation}>
+        {tabs.map(({ id, label }) => {
+          const active = id === selected;
+          const home = id === 'home';
+          const badge = id === 'warnings' && warningCount > 0;
+          const ink = active ? colors.accent : colors.muted;
+          return (
+            <Pressable key={id} accessibilityRole="tab" accessibilityState={{ selected: active }}
+              accessibilityLabel={badge ? `${label}, ${warningCount} active` : label}
+              onPress={() => onSelect(id)} style={({ pressed }) => [styles.tab, pressed && styles.pressed]}>
+              {home && <>
+                <View pointerEvents="none" style={[styles.homeDivider, { left: 0 }]} />
+                <View pointerEvents="none" style={[styles.homeDivider, { right: 0 }]} />
+              </>}
+              <View style={styles.tabIcon}>
+                <Icon name={id} color={ink} size={home ? 23 : 20} />
+                {badge && <View style={styles.dot} />}
+              </View>
+              <Text style={[styles.tabLabel, { color: ink }]}>{label}</Text>
+              <View pointerEvents="none" style={[styles.tabUnderline, active && styles.selectedUnderline]} />
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -181,19 +192,20 @@ export function Notice({ children }: { children: string }) {
 
 const createStyles = (colors: Colors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  bottom: { backgroundColor: colors.surface, borderTopWidth: 1, borderColor: colors.line },
+  dock: { backgroundColor: colors.raised, borderTopLeftRadius: 18, borderTopRightRadius: 18,
+    borderColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth },
   page: { paddingHorizontal: 20, paddingTop: 15, paddingBottom: 24, gap: 16, alignSelf: 'center', width: '100%', maxWidth: 680 },
   pageHeader: { gap: 4, marginBottom: 4 },
   title: { color: colors.text, fontSize: 36, letterSpacing: -1.4, fontWeight: '700' },
   heading: { color: colors.text, fontSize: 17, fontWeight: '700', flexShrink: 1 },
   text: { color: colors.text, fontSize: 15 },
   caption: { color: colors.muted, fontSize: 14, lineHeight: 20 },
-  card: { borderRadius: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.panelGlow ? colors.accent : colors.line,
+  card: { borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.panelGlow ? colors.accent : colors.line,
     boxShadow: colors.panelGlow ? `0 0 12px ${colors.accent}40` : undefined },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 11,
-    borderTopLeftRadius: 19, borderTopRightRadius: 19, borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line, backgroundColor: colors.panelHeader },
-  emptyCardHeader: { borderBottomWidth: 0, borderBottomLeftRadius: 19, borderBottomRightRadius: 19 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingTop: 11, paddingBottom: 4,
+    borderTopLeftRadius: 15, borderTopRightRadius: 15, borderBottomWidth: 0,
+    borderBottomColor: colors.line, backgroundColor: colors.surface },
+  emptyCardHeader: { paddingBottom: 11, borderBottomWidth: 0, borderBottomLeftRadius: 15, borderBottomRightRadius: 15 },
   cardIcon: { width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface },
   cardTitle: { flex: 1 },
   cardBody: { padding: 14, gap: 12 },
@@ -209,10 +221,13 @@ const createStyles = (colors: Colors) => StyleSheet.create({
   primaryButton: { backgroundColor: colors.accent, borderColor: colors.accent },
   buttonLabel: { fontSize: 14, fontWeight: '700', flexShrink: 1 },
   pressed: { opacity: 0.72 },
-  navigation: { flexDirection: 'row', paddingHorizontal: 8, paddingVertical: 7, gap: 2, alignSelf: 'center', maxWidth: 680, width: '100%' },
-  tab: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 51, gap: 4 },
-  tabIcon: { alignItems: 'center', justifyContent: 'center', width: 40, height: 30, borderRadius: 11 },
-  activeTabIcon: { backgroundColor: colors.accentSurface },
+  navigation: { flexDirection: 'row', gap: 4, paddingHorizontal: 8, paddingVertical: 6,
+    alignSelf: 'center', maxWidth: 680, width: '100%' },
+  tab: { flex: 1, minHeight: 48, paddingVertical: 4, alignItems: 'center', justifyContent: 'center', gap: 2, borderRadius: 8 },
+  tabIcon: { alignItems: 'center', justifyContent: 'center', width: 38, height: 23 },
+  homeDivider: { position: 'absolute', top: 12, bottom: 12, width: 1, backgroundColor: colors.line },
+  tabUnderline: { width: 28, height: 3, borderRadius: 2, marginTop: 1 },
+  selectedUnderline: { backgroundColor: colors.accent },
   tabLabel: { color: colors.muted, fontSize: 11, fontWeight: '600' },
   activeTabLabel: { color: colors.accent },
   dot: { position: 'absolute', top: 4, right: 7, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.warning },

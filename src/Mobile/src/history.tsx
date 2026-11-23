@@ -5,8 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { Destination } from './connection';
 import { decodeIncident, decodeIncidentPage, type Incident, type IncidentRef, type IncidentSummary } from './incidentProtocol';
-import { formatReading, isPin, metricLabel, sourceName } from './metrics';
-import { TemperatureUnitContext } from './mobileSettings';
+import { isPin, metricLabel, sourceName } from './metrics';
+import { ReadingFormatContext } from './mobileSettings';
 import type { PairedComputer, SensorReading } from './protocol';
 import { readingIcon, ReadingRow } from './screens';
 import { transport } from './transport';
@@ -142,7 +142,7 @@ export function IncidentHistory({ computer, destination, live, target, onNotific
 function IncidentDetail({ incident }: { incident: Incident }) {
   const styles = useStyles();
   const local = localStyles;
-  const temperatureUnit = useContext(TemperatureUnitContext);
+  const { number, formatReading } = useContext(ReadingFormatContext);
   const groups = new Map<string, { name: string; readings: SensorReading[] }>();
   for (const reading of incident.readings) {
     const { pluginId, deviceId, connectorId } = reading.identity;
@@ -165,7 +165,7 @@ function IncidentDetail({ incident }: { incident: Incident }) {
           {incident.endedAt && <ReadingRow icon="clock" label="Ended" value={time(incident.endedAt)} />}
           {incident.deviceId && <ReadingRow icon="monitor" label="Device" value={incident.deviceId} />}
           {incident.connector !== null && <ReadingRow icon="power" label="Connector" value={String(incident.connector)} />}
-          {incident.delayMs !== null && <ReadingRow icon="clock" label="Shutdown delay" value={`${incident.delayMs.toLocaleString()} ms`} />}
+          {incident.delayMs !== null && <ReadingRow icon="clock" label="Shutdown delay" value={`${number(incident.delayMs, 0)} ms`} />}
           {incident.deliveryStatus && <ReadingRow icon="activity" label="Email status" value={incident.deliveryStatus} />}
         </PanelList>
       </Card>
@@ -184,7 +184,7 @@ function IncidentDetail({ incident }: { incident: Incident }) {
       {Array.from(groups, ([key, group]) => <Card key={key} title={group.name} icon="activity">
         <PanelList>{group.readings.map(reading => {
           const label = metricLabel(reading);
-          return <ReadingRow key={reading.identity.key} value={formatReading(reading, temperatureUnit)} icon={readingIcon(reading)}
+          return <ReadingRow key={reading.identity.key} value={formatReading(reading)} icon={readingIcon(reading)}
             label={isPin(reading) ? `P${reading.identity.channel ?? '?'} ${label.toLowerCase()}` : label} />;
         })}</PanelList>
       </Card>)}
