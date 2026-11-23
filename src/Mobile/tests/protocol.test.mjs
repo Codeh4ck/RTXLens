@@ -158,12 +158,30 @@ test('orders available Power and GPU source tabs independently of telemetry arri
   const expected = ['wireview-pro2', 'asus-astral', 'msi-psu', 'generic-nvidia', 'extra-source'];
   for (const [page, component] of [['power', 'GpuConnector'], ['gpu', 'GpuCore']]) {
     const readings = expected.toReversed().map(pluginId => ({
-      identity: { pluginId, deviceId: 'device', component }, quality: 'Valid', value: 1,
+      identity: { pluginId, deviceId: pluginId, component }, quality: 'Valid', value: 1,
     }));
     const sources = sensors => hardwareTabGroups(sensors, page).map(group => group.source);
     assert.deepEqual(sources(readings), expected);
     assert.deepEqual(sources(readings.filter(r => r.identity.pluginId !== 'asus-astral')), expected.filter(id => id !== 'asus-astral'));
   }
+});
+
+test('hides NVIDIA Power only when Astral covers the valid readings on the same GPU connector', () => {
+  const reading = (pluginId, metric, value, deviceId = 'gpu1', channel = 1) => ({
+    identity: { pluginId, deviceId, component: 'GpuConnector', metric, channel, connectorId: null },
+    quality: value === null ? 'Unavailable' : 'Valid', value,
+  });
+  const nvidia = reading('generic-nvidia', 'Power', 320);
+  const astral = reading('asus-astral', 'Power', 321);
+  const sources = (...readings) => hardwareTabGroups(readings, 'power').map(g => g.source);
+  assert.deepEqual(sources(nvidia, astral), ['asus-astral']);
+  assert.deepEqual(sources(nvidia), ['generic-nvidia']);
+  for (const extra of [reading('generic-nvidia', 'Voltage', 12), reading('generic-nvidia', 'Power', 275, 'gpu2'),
+    reading('generic-nvidia', 'Power', 160, 'gpu1', 2)]) {
+    assert.deepEqual(sources(astral, nvidia, extra), ['asus-astral', 'generic-nvidia']);
+  }
+  assert.deepEqual(sources(nvidia, reading('asus-astral', 'Voltage', 12), reading('asus-astral', 'Power', null)),
+    ['asus-astral', 'generic-nvidia']);
 });
 
 test('keeps pin measurements from different devices and PSU connectors distinguishable', () => {

@@ -205,7 +205,7 @@ function PinChart({ title = 'Pin distribution', pins, metric, limit, onSelect }:
             <View key={reading.identity.key} accessible accessibilityLabel={`${pin}, ${formatted}`} style={local.pin}>
               <Text style={[local.pinValue, overLimit && local.exceeded]} adjustsFontSizeToFit numberOfLines={1}>{value === null ? '–' : formatted}</Text>
               <View style={local.track}>
-                {value !== null && <View style={[local.fill, selected === 'Voltage' && local.voltageFill, currentLimit !== undefined && local.underLimit, overLimit && local.overLimit,
+                {value !== null && <View style={[local.fill, selected === 'Voltage' && local.voltageFill, overLimit && local.overLimit,
                   { height: `${Math.max(0, value / ceiling) * 100}%` }]} />}
               </View>
               <Text style={styles.caption}>{pin}</Text>
@@ -447,7 +447,6 @@ const createLocalStyles = (colors: Colors) => StyleSheet.create({
   track: { backgroundColor: colors.raised, width: '66%', height: 104, borderRadius: 6, overflow: 'hidden', justifyContent: 'flex-end' },
   fill: { backgroundColor: colors.secondary, borderRadius: 4 },
   voltageFill: { backgroundColor: colors.tertiary },
-  underLimit: { backgroundColor: colors.success },
   exceeded: { color: colors.danger },
   overLimit: { backgroundColor: colors.danger },
   warningStatus: { color: colors.warning, fontSize: 13, fontWeight: '700' },
