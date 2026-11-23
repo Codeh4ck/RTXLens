@@ -115,8 +115,64 @@ const labels: Record<string, string> = {
   ReplayCount: 'PCIe replays', ReplayRolloverCount: 'PCIe replay rollovers', SupportedPerformanceStates: 'Supported P-states',
 };
 
+const gpuClockLabels = new Map([
+  ['GpuCore', 'Core clock'], ['GpuMemory', 'Memory clock'],
+  ['GpuCrossbar', 'Crossbar clock'], ['GpuSystem', 'System clock'],
+]);
+
+export function isGpuPowerReading({ identity }: SensorReading) {
+  return identity.component === 'GpuPowerLimits' || (identity.component === 'GpuBoard' && identity.metric === 'Power');
+}
+
+type GpuStatusRow = { reading: SensorReading; label?: string; value?: string };
+
+// The GPU page passes readings for a single selected device.
+export function gpuStatusRows(readings: SensorReading[]): GpuStatusRow[] {
+  const clocks = new Map<string, GpuStatusRow>();
+  const other: GpuStatusRow[] = [];
+  const fans = new Map<number, { reading: SensorReading; speed?: SensorReading; duty?: SensorReading }>();
+  const memoryTotal = findMetric(readings, 'GpuMemory', 'MemoryTotal');
+  for (const reading of readings) {
+    const { component, metric, channel } = reading.identity;
+    if (isGpuPowerReading(reading) || component === 'GpuPcie' || component === 'GpuPerformance'
+      || metric === 'MemoryTotal' || metric === 'MemoryFree') continue;
+    if (metric === 'Clock' && gpuClockLabels.has(component)) {
+      clocks.set(component, { reading });
+    } else if (component === 'GpuFan' && (metric === 'FanSpeed' || metric === 'FanDuty')) {
+      const index = channel ?? 1;
+      const fan = fans.get(index) ?? { reading };
+      if (metric === 'FanSpeed') fan.speed = reading;
+      else fan.duty = reading;
+      fans.set(index, fan);
+    } else if (metric === 'MemoryUsed' && memoryTotal && reading.quality === 'Valid' && reading.value !== null) {
+      other.push({ reading, value: `${formatReading(reading)} / ${formatReading(memoryTotal)}` });
+    } else {
+      other.push({ reading });
+    }
+  }
+
+  const rows: GpuStatusRow[] = [];
+  for (const component of gpuClockLabels.keys()) {
+    const clock = clocks.get(component);
+    if (clock) rows.push(clock);
+  }
+  rows.push(...other);
+  for (const [index, { reading, speed, duty }] of [...fans].sort(([a], [b]) => a - b)) {
+    const rpm = formatReading(speed);
+    const hasDuty = duty?.quality === 'Valid' && duty.value !== null;
+    let value = rpm;
+    if (hasDuty) {
+      const percent = formatReading(duty);
+      value = speed?.quality === 'Valid' && speed.value !== null ? `${rpm} (${percent})` : `${percent} duty`;
+    }
+    rows.push({ reading, label: `Fan ${index}`, value });
+  }
+  return rows;
+}
+
 export function metricLabel({ identity }: SensorReading) {
   const { component, metric, channel } = identity;
+  if (metric === 'Clock') return gpuClockLabels.get(component) ?? words(metric);
   if (metric === 'Temperature') {
     if (component === 'GpuCore') return 'Core temperature';
     if (component === 'GpuMemory') return 'VRAM temperature';
@@ -126,12 +182,10 @@ export function metricLabel({ identity }: SensorReading) {
     if (component === 'Psu') return 'PSU temperature';
   }
   if (component === 'GpuCore') {
-    if (metric === 'Clock') return 'Core clock';
     if (metric === 'Voltage') return 'Core voltage';
     if (metric === 'Utilization') return 'GPU usage';
   }
   if (component === 'GpuMemory') {
-    if (metric === 'Clock') return 'Memory clock';
     if (metric === 'Utilization') return 'Memory usage';
   }
   if (component === 'GpuFan' || component === 'Psu') {

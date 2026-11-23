@@ -6,7 +6,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import {
   boostLimitRows, findMetric, formatReading, groupMetrics, isPin, metricLabel, number, pinCurrentSummary, pinMetrics, pinPanelSources, pinPanelTitle, powerConnectorGroups,
-  sourceName, wireViewFaults, type PinMetric,
+  gpuStatusRows, isGpuPowerReading, sourceName, wireViewFaults, type PinMetric,
 } from './metrics';
 import { homeCards, homePanelKey, type HomeCardId, type HomePanel } from './mobilePreferences';
 import { TemperatureUnitContext } from './mobileSettings';
@@ -238,16 +238,12 @@ export function Gpu({ frame, live, connectionCard }: TelemetryProps) {
   const groups = groupMetrics(frame.sensors, 'gpu');
   const selected = groups.find(group => group.key === source) ?? groups.find(group => group.source === NvidiaId) ?? groups[0];
   const readings = selected?.readings ?? [];
-  const diagnostics = ['GpuPowerLimits', 'GpuPerformance', 'GpuPcie', 'GpuCrossbar', 'GpuSystem'];
-  const gpuPower = readings.filter(reading => reading.identity.component === 'GpuPowerLimits'
-    || (reading.identity.component === 'GpuBoard' && reading.identity.metric === 'Power'));
-  const health = readings.filter(reading => !diagnostics.includes(reading.identity.component) && !gpuPower.includes(reading)
-    && !['MemoryTotal', 'MemoryFree'].includes(reading.identity.metric));
+  const gpuPower = readings.filter(isGpuPowerReading);
+  const health = gpuStatusRows(readings);
   const performance = readings.filter(reading => reading.identity.component === 'GpuPerformance'
     && !['SupportedClockReasons', 'ClockLimitDuration'].includes(reading.identity.metric));
   const limits = boostLimitRows(readings);
   const pcie = readings.filter(reading => reading.identity.component === 'GpuPcie');
-  const memoryTotal = findMetric(readings, 'GpuMemory', 'MemoryTotal');
 
   return (
     <Page title="GPU" description={lastReading(frame, live)}>
@@ -257,10 +253,8 @@ export function Gpu({ frame, live, connectionCard }: TelemetryProps) {
       {selected ? (
         <>
           {health.length > 0 && <Card title="GPU status" icon="gpu">
-            <PanelList>{health.map(reading => (
-              <Reading key={reading.identity.key} reading={reading}
-                value={reading.identity.metric === 'MemoryUsed' && memoryTotal && reading.quality === 'Valid' && reading.value !== null
-                  ? `${formatReading(reading)} / ${formatReading(memoryTotal)}` : undefined} />
+            <PanelList>{health.map(({ reading, label, value }) => (
+              <Reading key={reading.identity.key} reading={reading} label={label} value={value} />
             ))}</PanelList>
           </Card>}
           {(gpuPower.length > 0 || performance.length > 0) && <Card title="GPU power status" icon="power">
@@ -355,11 +349,11 @@ function Empty({ icon, title, live }: { icon: IconName; title: string; live: boo
   </Card>;
 }
 
-function Reading({ reading, value }: { reading: SensorReading; value?: string }) {
+function Reading({ reading, label, value }: { reading: SensorReading; label?: string; value?: string }) {
   const temperatureUnit = useContext(TemperatureUnitContext);
   const fault = (reading.identity.metric === 'FaultLog' || reading.identity.metric === 'FaultStatus')
     && reading.quality === 'Valid' && reading.value !== null && reading.value !== 0;
-  return <ReadingRow label={metricLabel(reading)} value={value ?? formatReading(reading, temperatureUnit)} icon={readingIcon(reading)} fault={fault} />;
+  return <ReadingRow label={label ?? metricLabel(reading)} value={value ?? formatReading(reading, temperatureUnit)} icon={readingIcon(reading)} fault={fault} />;
 }
 
 const metricIcons: Partial<Record<string, IconName>> = {
