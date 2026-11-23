@@ -59,6 +59,45 @@ export function hardwareTabGroups(sensors: SensorReading[], kind: 'power' | 'gpu
     (hardwareOrder.get(left.source) ?? hardwareOrder.size) - (hardwareOrder.get(right.source) ?? hardwareOrder.size));
 }
 
+// NVIDIA and Astral use the same adapter ID from the shared hardware reader.
+export function gpuDeviceGroups(sensors: SensorReading[]): MetricGroup[] {
+  const devices = new Map<string, { group: MetricGroup; metrics: Map<string, SensorReading> }>();
+  for (const group of groupMetrics(sensors, 'gpu')) {
+    const sharedAdapter = group.source === AsusId || group.source === NvidiaId;
+    const key = sharedAdapter ? JSON.stringify(['gpu', group.readings[0].identity.deviceId]) : group.key;
+    const device = devices.get(key) ?? { group, metrics: new Map<string, SensorReading>() };
+    if (group.source === NvidiaId) device.group = group;
+    for (const reading of group.readings) {
+      const { component, metric, channel, connectorId } = reading.identity;
+      const slot = JSON.stringify([component, metric, channel, connectorId]);
+      const previous = device.metrics.get(slot);
+      const valid = reading.quality === 'Valid' && reading.value !== null;
+      if (!previous || (valid && (previous.quality !== 'Valid' || previous.value === null || group.source === NvidiaId))) {
+        device.metrics.set(slot, reading);
+      }
+    }
+    devices.set(key, device);
+  }
+  return Array.from(devices, ([key, { group, metrics }]) => ({ ...group, key, readings: [...metrics.values()] }));
+}
+
+export function gpuConnectorPower(sensors: SensorReading[], selectedKey: string | null | undefined, deviceId: string, onlyGpu: boolean) {
+  const connectors = sensors.filter(({ identity }) => identity.metric === 'Power'
+    && (identity.component === 'GpuConnector' || identity.component === 'PsuConnector'));
+  const sameAdapter = (r: SensorReading) => (r.identity.pluginId === NvidiaId || r.identity.pluginId === AsusId)
+    && r.identity.deviceId === deviceId;
+  if (selectedKey === undefined) {
+    const local = connectors.filter(sameAdapter);
+    return local.find(r => r.quality === 'Valid' && r.value !== null && r.identity.pluginId === NvidiaId)
+      ?? local.find(r => r.quality === 'Valid' && r.value !== null);
+  }
+  const selected = connectors.find(r => r.identity.key === selectedKey);
+  if (!selected) return undefined;
+  // External meters have no GPU adapter ID. A global selection is ambiguous with multiple GPUs.
+  if (selected.identity.pluginId === AsusId || selected.identity.pluginId === NvidiaId) return sameAdapter(selected) ? selected : undefined;
+  return onlyGpu ? selected : undefined;
+}
+
 export function findMetric(sensors: SensorReading[], component: string, metric: string, channel?: number) {
   return sensors.find(sensor => sensor.identity.component === component && sensor.identity.metric === metric
     && (channel === undefined || channel === sensor.identity.channel) && sensor.quality === 'Valid' && sensor.value !== null);
@@ -154,7 +193,10 @@ export function gpuStatusRows(readings: SensorReading[], format = formatReading)
       else fan.duty = reading;
       fans.set(index, fan);
     } else if (metric === 'MemoryUsed' && memoryTotal && reading.quality === 'Valid' && reading.value !== null) {
-      other.push({ reading, value: `${format(reading)} / ${format(memoryTotal)}` });
+      const used = format(reading);
+      const total = format(memoryTotal);
+      const unit = total.slice(total.lastIndexOf(' '));
+      other.push({ reading, value: `${used.endsWith(unit) ? used.slice(0, -unit.length) : used} / ${total}` });
     } else {
       other.push({ reading });
     }
@@ -186,8 +228,8 @@ export function metricLabel({ identity }: SensorReading) {
     if (component === 'GpuCore') return 'Core temperature';
     if (component === 'GpuMemory') return 'VRAM temperature';
     if (component === 'GpuHotspot') return 'Hotspot temperature';
-    if (component === 'MonitorBoard') return channel === 1 ? 'Board inlet temperature' : 'Board outlet temperature';
-    if (component === 'ExternalProbe') return `External temperature ${channel ?? ''}`.trim();
+    if (component === 'MonitorBoard') return channel === 1 ? 'Board In temperature' : 'Board Out temperature';
+    if (component === 'ExternalProbe') return channel == null ? 'External temperature' : `Ext. ${channel} temperature`;
     if (component === 'Psu') return 'PSU temperature';
   }
   if (component === 'GpuCore') {

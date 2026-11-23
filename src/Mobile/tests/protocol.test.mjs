@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { decodeFrame, decodePairingCode, decodeSavedComputer, requestPairing } from '../src/protocol.ts';
-import { number, boostLimitRows, gpuStatusRows, groupMetrics, hardwareTabGroups, metricLabel, formatReading, pinCurrentSummary, pinPanelSources, powerConnectorGroups, wireViewFaults } from '../src/metrics.ts';
+import { number, boostLimitRows, gpuConnectorPower, gpuDeviceGroups, gpuStatusRows, groupMetrics, hardwareTabGroups, metricLabel, formatReading, pinCurrentSummary, pinPanelSources, powerConnectorGroups, wireViewFaults } from '../src/metrics.ts';
 import { destinations, localProbeTimeout, localSwitchAddress, retryDelay, selectConnectionIssue, sessionResult } from '../src/connection.ts';
 import { decodeIncident, decodeIncidentPage, warningNotificationIncident } from '../src/incidentProtocol.ts';
 import {
@@ -114,6 +114,36 @@ test('GPU status shows reported clocks together and pairs fan readings by channe
   assert.deepEqual(display([clock('GpuSystem', null), speed(2, 475), duty(2, null), duty(4, 30)]),
     [['System clock', 'Unavailable'], ['Fan 2', '475 RPM'], ['Fan 4', '30% duty']]);
   assert.deepEqual(display([]), []);
+});
+
+test('merges Astral and NVIDIA on the same adapter and keeps other adapters independent', () => {
+  const reading = (pluginId, deviceId, component, metric, value, channel = null) => ({
+    identity: { pluginId, deviceId, component, metric, channel, connectorId: null, key: [pluginId, deviceId, component, metric, channel].join('/') },
+    unit: 'Count', value, quality: value == null ? 'Unavailable' : 'Valid',
+  });
+  const board = reading('asus-astral', 'card1', 'GpuBoard', 'Power', 418);
+  const core = reading('generic-nvidia', 'card1', 'GpuCore', 'Clock', 1140);
+  const astralClock = reading('asus-astral', 'card1', 'GpuCore', 'Clock', 1100);
+  const astralFan = reading('asus-astral', 'card1', 'GpuFan', 'FanSpeed', 0, 1);
+  const missingFan = reading('generic-nvidia', 'card1', 'GpuFan', 'FanSpeed', null, 1);
+  const second = reading('generic-nvidia', 'card2', 'GpuCore', 'Clock', 1900);
+  for (const sensors of [[board, astralFan, missingFan, astralClock, core, second], [second, core, astralClock, missingFan, astralFan, board]]) {
+    const groups = gpuDeviceGroups(sensors);
+    assert.equal(groups.length, 2);
+    const merged = groups.find(g => g.readings.includes(board));
+    assert.equal(merged.source, 'generic-nvidia');
+    assert.deepEqual(new Set(merged.readings), new Set([core, astralFan, board]));
+    assert.deepEqual(groups.find(g => g !== merged).readings, [second]);
+  }
+  assert.deepEqual(gpuDeviceGroups([board])[0].readings, [board]);
+  const wire = reading('wireview-pro2', 'meter', 'GpuConnector', 'Power', 401);
+  const local = reading('asus-astral', 'card1', 'GpuConnector', 'Power', 403);
+  const sensors = [wire, local, board, second];
+  assert.equal(gpuConnectorPower(sensors, wire.identity.key, 'card1', true), wire);
+  assert.equal(gpuConnectorPower(sensors, wire.identity.key, 'card1', false), undefined);
+  assert.equal(gpuConnectorPower(sensors, local.identity.key, 'card2', false), undefined);
+  assert.equal(gpuConnectorPower(sensors, undefined, 'card1', true), local);
+  assert.equal(gpuConnectorPower(sensors, null, 'card1', true), undefined);
 });
 
 test('groups thousands only when enabled and retains the locale decimal separator', () => {

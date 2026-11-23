@@ -64,6 +64,7 @@ export function themeColors(value: Appearance) {
   return { background, surface, text, accent, panelGlow: value.panelGlow, panelHeader: mix(surface, accent, 0.075), secondary: readable(secondary), tertiary: readable(tertiary),
     onAccent: isLight(accent) ? '#000000' : '#FFFFFF', raised: mix(background, text, 0.09), line: mix(background, text, 0.24),
     muted: mix(surface, text, 0.7), accentSurface: mix(background, accent, 0.14),
+    success: light ? '#176744' : '#79DCAE',
     warning: light ? '#794500' : '#FFD08B', warningSurface: light ? '#FFF0D6' : '#392C20',
     danger: light ? '#981E42' : '#FF9AB0', dangerSurface: light ? '#FCE4EB' : '#391F2C' };
 }

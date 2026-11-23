@@ -7,7 +7,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import {
   boostLimitRows, findMetric, groupMetrics, hardwareTabGroups, isPin, metricLabel, pinCurrentSummary, pinMetrics, pinPanelSources, pinPanelTitle, powerConnectorGroups,
-  gpuStatusRows, isGpuPowerReading, sourceName, wireViewFaults, type PinMetric,
+  gpuConnectorPower, gpuDeviceGroups, gpuStatusRows, isGpuPowerReading, sourceName, wireViewFaults, type PinMetric,
 } from './metrics';
 import { homeCards, homePanelKey, type HomeCardId, type HomePanel } from './mobilePreferences';
 import { ReadingFormatContext } from './mobileSettings';
@@ -203,9 +203,9 @@ function PinChart({ title = 'Pin distribution', pins, metric, limit, onSelect }:
           const overLimit = currentLimit !== undefined && value !== null && value >= currentLimit;
           return (
             <View key={reading.identity.key} accessible accessibilityLabel={`${pin}, ${formatted}`} style={local.pin}>
-              <Text style={local.pinValue} adjustsFontSizeToFit numberOfLines={1}>{value === null ? '–' : formatted}</Text>
+              <Text style={[local.pinValue, overLimit && local.exceeded]} adjustsFontSizeToFit numberOfLines={1}>{value === null ? '–' : formatted}</Text>
               <View style={local.track}>
-                {value !== null && <View style={[local.fill, selected === 'Voltage' && local.voltageFill, overLimit && local.overLimit,
+                {value !== null && <View style={[local.fill, selected === 'Voltage' && local.voltageFill, currentLimit !== undefined && local.underLimit, overLimit && local.overLimit,
                   { height: `${Math.max(0, value / ceiling) * 100}%` }]} />}
               </View>
               <Text style={styles.caption}>{pin}</Text>
@@ -238,9 +238,10 @@ export function Gpu({ frame, live, connectionCard }: TelemetryProps) {
   const [source, setSource] = useState('');
   if (!frame) return <Page title="GPU">{connectionCard}</Page>;
 
-  const groups = hardwareTabGroups(frame.sensors, 'gpu');
+  const groups = gpuDeviceGroups(frame.sensors);
   const selected = groups.find(group => group.key === source) ?? groups.find(group => group.source === NvidiaId) ?? groups[0];
   const readings = selected?.readings ?? [];
+  const connectorPower = selected && gpuConnectorPower(frame.sensors, frame.connectorPowerKey, readings[0].identity.deviceId, groups.length === 1);
   const gpuPower = readings.filter(isGpuPowerReading);
   const health = gpuStatusRows(readings, formatReading);
   const performance = readings.filter(reading => reading.identity.component === 'GpuPerformance'
@@ -261,7 +262,7 @@ export function Gpu({ frame, live, connectionCard }: TelemetryProps) {
         options={groups.map(group => ({ id: group.key, label: group.name }))} onSelect={setSource} />}
       {selected ? (
         <>
-          <GpuOverview rows={health} readings={readings} />
+          <GpuOverview rows={health} readings={readings} connectorPower={connectorPower} />
           {(gpuPower.length > 0 || performance.length > 0) && <Card title="GPU power status" icon="power">
             {boardPower && <BoardPower watts={boardPower} limit={enforced} />}
             <MetricGrid rows={[...gpuPower.filter(r => r !== boardPower), ...performance].map(reading => ({ reading }))} />
@@ -275,10 +276,10 @@ export function Gpu({ frame, live, connectionCard }: TelemetryProps) {
               </View>
               {limits.map(limit => <View key={limit.name} style={local.limitRow}>
                 <Text style={[styles.text, local.limitName]}>{limit.name}</Text>
-                <Text style={[limit.active ? local.warningStatus : styles.caption, local.limitStatus]}>
-                  {limit.active === null ? 'Unknown' : limit.active ? 'Active' : 'Idle'}
+                <Text style={[styles.caption, limit.active === false && local.good, limit.active && local.warningStatus, local.limitStatus]}>
+                  {limit.active === null ? 'N/A' : limit.active ? 'Active' : 'Idle'}
                 </Text>
-                <Text style={[styles.caption, local.limitTime]}>{limit.seconds === null ? 'Unavailable' : `${number(limit.seconds, 3)} s`}</Text>
+                <Text style={[styles.caption, local.limitTime]}>{limit.seconds === null ? 'N/A' : `${number(limit.seconds, 3)} s`}</Text>
               </View>)}
             </PanelList>
           </Card>}
@@ -365,9 +366,13 @@ function Empty({ icon, title, live }: { icon: IconName; title: string; live: boo
   </Card>;
 }
 
+function isFaultStatus(reading: SensorReading) {
+  return reading.identity.metric === 'FaultStatus' || reading.identity.metric === 'FaultLog';
+}
+
 function Reading({ reading, label, value }: { reading: SensorReading; label?: string; value?: string }) {
   const { formatReading } = useContext(ReadingFormatContext);
-  const fault = (reading.identity.metric === 'FaultLog' || reading.identity.metric === 'FaultStatus')
+  const fault = isFaultStatus(reading)
     && reading.quality === 'Valid' && reading.value !== null && reading.value !== 0;
   return <ReadingRow label={label ?? metricLabel(reading)} value={value ?? formatReading(reading)} icon={readingIcon(reading)} fault={fault} />;
 }
@@ -391,12 +396,13 @@ export function ReadingRow({ label, value, icon, fault = false }: { label: strin
   const local = useThemeStyles(createLocalStyles);
   const colors = useColors();
   return (
-    <View style={[local.reading, fault && local.fault]}>
+    <View style={local.reading}>
       {icon && <View style={local.readingIcon}>
         <Icon name={icon} color={fault ? colors.danger : colors.secondary} size={17} />
       </View>}
       <Text style={[styles.text, local.readingLabel]}>{label}</Text>
-      <Text style={[local.readingValue, value === 'Unavailable' && local.unavailable]}>{value}</Text>
+      {fault ? <View style={local.faultBadge}><View style={local.faultDot} /><Text style={local.faultText}>{value}</Text></View>
+        : <Text style={[local.readingValue, value === 'OK' && local.good, value === 'Unavailable' && local.unavailable]}>{value}</Text>}
     </View>
   );
 }
@@ -422,7 +428,11 @@ const createLocalStyles = (colors: Colors) => StyleSheet.create({
   readingIcon: { width: 26, height: 26, borderRadius: 7, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.raised },
   readingLabel: { flex: 1 },
   readingValue: { color: colors.text, flexShrink: 1, maxWidth: '55%', textAlign: 'right', fontWeight: '700', fontVariant: ['tabular-nums'] },
-  fault: { backgroundColor: colors.dangerSurface, borderColor: colors.danger, borderWidth: 1, borderRadius: 10 },
+  faultBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.dangerSurface,
+    borderRadius: 12, paddingHorizontal: 9, paddingVertical: 4, maxWidth: '55%' },
+  faultDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.danger },
+  faultText: { color: colors.danger, fontSize: 13, fontWeight: '600', flexShrink: 1 },
+  good: { color: colors.success },
   pinSummary: { flexDirection: 'row', gap: 7 },
   pinStat: { flex: 1, minWidth: 0, borderRadius: 10, borderWidth: 1, borderColor: colors.line,
     paddingHorizontal: 7, paddingVertical: 7, backgroundColor: colors.raised, gap: 4 },
@@ -437,6 +447,8 @@ const createLocalStyles = (colors: Colors) => StyleSheet.create({
   track: { backgroundColor: colors.raised, width: '66%', height: 104, borderRadius: 6, overflow: 'hidden', justifyContent: 'flex-end' },
   fill: { backgroundColor: colors.secondary, borderRadius: 4 },
   voltageFill: { backgroundColor: colors.tertiary },
+  underLimit: { backgroundColor: colors.success },
+  exceeded: { color: colors.danger },
   overLimit: { backgroundColor: colors.danger },
   warningStatus: { color: colors.warning, fontSize: 13, fontWeight: '700' },
   limitRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8 },

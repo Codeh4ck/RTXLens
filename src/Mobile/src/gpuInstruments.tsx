@@ -69,7 +69,7 @@ export function ConnectorSummary({ readings }: { readings: SensorReading[] }) {
   </>;
 }
 
-export function GpuOverview({ rows, readings }: { rows: Row[]; readings: SensorReading[] }) {
+export function GpuOverview({ rows, readings, connectorPower }: { rows: Row[]; readings: SensorReading[]; connectorPower?: SensorReading }) {
   const local = useThemeStyles(styles);
   const colors = useColors();
   const { formatReading } = useContext(ReadingFormatContext);
@@ -78,14 +78,21 @@ export function GpuOverview({ rows, readings }: { rows: Row[]; readings: SensorR
   const memory = rows.find(({ reading: r }) => r.identity.metric === 'MemoryUsed');
   const total = findMetric(readings, 'GpuMemory', 'MemoryTotal')?.value;
   const used = memory?.reading.quality === 'Valid' ? memory.reading.value : null;
+  const memoryLoad = rows.find(({ reading: r }) => r.identity.component === 'GpuMemory' && r.identity.metric === 'Utilization');
+  const memoryRatio = used != null && total != null && total > 0 ? used / total
+    : memoryLoad?.reading.quality === 'Valid' && memoryLoad.reading.value != null ? memoryLoad.reading.value / 100 : null;
+  const memoryValue = used != null && memory ? memory.value ?? formatReading(memory.reading) : undefined;
+  const electrical: Row[] = [];
+  if (connectorPower) electrical.push({ reading: connectorPower, label: 'Connector power' });
+  if (voltage) electrical.push(voltage);
   const percent = usage?.reading.quality === 'Valid' ? usage.reading.value : null;
   const clocks = rows.filter(({ reading }) => reading.identity.metric === 'Clock');
   const temps = rows.filter(({ reading }) => reading.identity.metric === 'Temperature');
   const fans = rows.filter(({ reading }) => reading.identity.component === 'GpuFan');
-  const other = rows.filter(row => row !== usage && row !== voltage && row !== memory &&
+  const other = rows.filter(row => row !== usage && row !== voltage && row !== memory && row !== memoryLoad &&
     !clocks.includes(row) && !temps.includes(row) && !fans.includes(row));
   return <>
-    {(usage || voltage || memory) && <Card title="GPU status" icon="gpu"><View style={local.hero}>
+    {(usage || electrical.length > 0 || memory || memoryLoad) && <Card title="GPU status" icon="gpu"><View style={local.hero}>
       {usage && <View style={local.gauge} accessible accessibilityLabel={`GPU usage, ${formatReading(usage.reading)}`}>
         <Text style={local.label}>GPU usage</Text>
         <View style={local.dial}>
@@ -98,10 +105,19 @@ export function GpuOverview({ rows, readings }: { rows: Row[]; readings: SensorR
           <View style={local.dialText}><Text style={local.dialValue} adjustsFontSizeToFit numberOfLines={1}>{formatReading(usage.reading)}</Text></View>
         </View>
       </View>}
-      {(voltage || memory) && <View style={local.summary}>
-        {voltage && <Metric row={voltage} />}
-        {memory && <Metric row={memory} />}
-        {used != null && total != null && total > 0 && <Meter ratio={used / total} />}
+      {(electrical.length > 0 || memory || memoryLoad) && <View style={local.summary}>
+        {electrical.length > 0 && <MetricGrid rows={electrical} />}
+        {(memory || memoryLoad) && <View style={local.cell}>
+          <Text style={local.label}>VRAM usage</Text>
+          <Text style={local.value} numberOfLines={1} adjustsFontSizeToFit>
+            {memoryValue && <ValueWithUnits value={memoryValue} />}
+            {memoryRatio != null && <Text style={memoryValue ? local.unit : undefined}>
+              {memoryValue ? ` (${Math.round(100 * memoryRatio)}%)` : `${Math.round(100 * memoryRatio)}%`}
+            </Text>}
+            {!memoryValue && memoryRatio == null && <Text style={local.muted}>Unavailable</Text>}
+          </Text>
+        </View>}
+        {memoryRatio != null && <Meter ratio={memoryRatio} />}
       </View>}
     </View></Card>}
     {clocks.length > 0 && <Card title="Clocks" icon="clock"><MetricGrid rows={clocks} /></Card>}
@@ -144,7 +160,7 @@ const styles = (colors: Colors) => StyleSheet.create({
   connectorDetailValue: { color: colors.text, fontWeight: '600', fontVariant: ['tabular-nums'] },
   connectorRow: { flexDirection: 'row', gap: 6 },
   connectorCell: { flex: 1, minWidth: 0, paddingHorizontal: 7, paddingVertical: 10, gap: 4, borderRadius: 8, backgroundColor: colors.raised },
-  gridCell: { flexBasis: '45%', flexGrow: 1 },
+  gridCell: { flexBasis: '45%', flexGrow: 1, paddingHorizontal: 7, justifyContent: 'space-between' },
   cell: { padding: 10, gap: 3, backgroundColor: colors.raised, borderRadius: 8 },
   value: { color: colors.secondary, fontSize: 20, fontWeight: '700', fontVariant: ['tabular-nums'] },
   unit: { color: colors.muted, fontSize: 14 }, internalClock: { color: colors.tertiary },
