@@ -13,6 +13,8 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
 using RTXLens.App.Controls;
 using RTXLens.App.ViewModels.Shell;
+using RTXLens.App.Views.Diagnostics;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using RTXLens.Presentation.Configuration;
 using RTXLens.Presentation.Telemetry;
 using static RTXLens.App.Views.Shell.DesktopControls;
@@ -232,10 +234,10 @@ internal sealed class ConfigurationPage : UserControl
 
         tabs.Add(Tab("GPU chart profiles", () => new GpuChartProfilesView(_shell)));
         tabs.Add(Tab("Source selections", CreateSources));
-        tabs.Add(Tab("Maintenance", CreateMaintenance));
 
         var mobile = _tabs.Items.OfType<TabItem>().FirstOrDefault(tab => Equals(tab.Header, MobileAccessTab));
         tabs.Add(mobile ?? Tab(MobileAccessTab, () => new MobileAccessView(_shell)));
+        tabs.Add(Tab("Maintenance", CreateMaintenance));
 
         _tabs.ItemsSource = tabs;
         _tabs.SelectedItem = tabs.FirstOrDefault(tab => Equals(tab.Header, previous)) ?? tabs[0];
@@ -734,7 +736,30 @@ internal sealed class ConfigurationPage : UserControl
             "Apply any changes you want to keep before restarting. Windows restarts the installed service automatically. "
             + "If you launched the backend from a terminal, start it again there.");
 
-        return maintenance;
+        var diagnosticIcon = new Border
+        {
+            Width = 16, Height = 16,
+            OpacityMask = new VisualBrush(new Image { Source = Icon("diagnostic-report"), Width = 16, Height = 16 }),
+            [!Border.BackgroundProperty] = new DynamicResourceExtension("IconBrush")
+        };
+        var collect = ActionButton("Collect diagnostic information", diagnosticIcon, async () =>
+        {
+            if (TopLevel.GetTopLevel(this) is Window owner)
+                await new DiagnosticReportWindow(_shell.Preferences.ServiceAddress, _shell.StopToken).ShowDialog(owner);
+        });
+        return new StackPanel
+        {
+            Spacing = 12,
+            Children =
+            {
+                maintenance,
+                Section("Diagnostics", new StackPanel
+                {
+                    Spacing = 10,
+                    Children = { Caption("Save logs, crash reports, events and a current device snapshot to a ZIP file."), collect }
+                })
+            }
+        };
     }
 
     private Button HelpButton(string name, string title, string introduction, params string[] steps) =>

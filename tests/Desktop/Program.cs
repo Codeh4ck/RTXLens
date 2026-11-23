@@ -23,6 +23,7 @@ if (args is ["--performance-fixture", var output])
 }
 
 var runner = new TestRunner();
+runner.Run(RTXLens.UI.Tests.Controls.DiagnosticReportPrivacyTests.ExportsOnlyReviewedFields);
 RTXLens.UI.Tests.Performance.PerformanceRecordingTests.Run(runner);
 TelemetryTests.Run(runner);
 HardwarePanelTests.Run(runner);

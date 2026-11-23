@@ -102,6 +102,9 @@ internal sealed class TrayService : IDisposable
 
         switch (message)
         {
+            case NativeConstants.WindowGetIcon when wParam is not (NativeConstants.IconSmall or NativeConstants.IconBig or NativeConstants.IconSmall2):
+                // Avalonia's Win32 icon loader throws for unrecognized icon types.
+                return 0;
             case NativeConstants.WindowSize:
                 _dispatch(() => _minimizeChanged(wParam == 1));
                 break;

@@ -144,7 +144,25 @@
         <Setter Property="ItemContainerTheme" Value="{StaticResource EventRowTheme}" />
     </Style>
 
-    <Style Selector="TextBox, ComboBox, NumericUpDown">
+    <Style Selector="CalendarDatePicker, TimePicker">
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="MinHeight" Value="{DynamicResource ComboBoxMinHeight}" />
+        <Setter Property="BorderThickness" Value="{DynamicResource ComboBoxBorderThemeThickness}" />
+    </Style>
+    <Style Selector="CalendarDatePicker">
+        <Setter Property="Padding" Value="{DynamicResource ComboBoxPadding}" />
+    </Style>
+    <Style Selector="TimePicker /template/ Button#PART_FlyoutButton:pointerover">
+        <Setter Property="Background" Value="{DynamicResource HudHoverSurfaceBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource HudAccentBrush}" />
+    </Style>
+    <Style Selector="TimePicker /template/ Button#PART_FlyoutButton:focus-visible">
+        <Setter Property="BorderBrush" Value="{DynamicResource HudAccentBrush}" />
+    </Style>
+    <Style Selector="TimePickerPresenter, TimePickerPresenter DateTimePickerPanel > ListBoxItem, TimePickerPresenter DateTimePickerPanel > ListBoxItem:selected">
+        <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+    </Style>
+    <Style Selector="TextBox, ComboBox, NumericUpDown, CalendarDatePicker, TimePicker">
         <Setter Property="CornerRadius" Value="5" />
     </Style>
 

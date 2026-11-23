@@ -4,6 +4,10 @@ internal static class NativeConstants
 {
     public const int WindowProcedureIndex = -4;
     public const uint WindowSize = 0x0005;
+    public const uint WindowGetIcon = 0x007F;
+    public const uint IconSmall = 0;
+    public const uint IconBig = 1;
+    public const uint IconSmall2 = 2;
     public const uint ContextMenu = 0x007B;
     public const uint LeftDoubleClick = 0x0203;
     public const uint RightButtonUp = 0x0205;
