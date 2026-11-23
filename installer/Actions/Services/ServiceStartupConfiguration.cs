@@ -7,7 +7,8 @@ namespace RTXLens.Installer.Actions.Services;
 
 public static class ServiceStartupConfiguration
 {
-    private static int[] _settings = [3, 4];
+    private const int ServiceConfigDelayedAutoStartInfo = 3;
+    private const int ServiceConfigFailureActionsFlag = 4;
 
     public static int RunningProcessId()
     {
@@ -64,13 +65,12 @@ public static class ServiceStartupConfiguration
 
             try
             {
-                var enabled = 1;
-                foreach (var setting in _settings)
+                var delayedAutoStart = 0;
+                var recoveryOnNonCrashFailures = 1;
+                if (!ChangeServiceConfig2(service, ServiceConfigDelayedAutoStartInfo, ref delayedAutoStart)
+                    || !ChangeServiceConfig2(service, ServiceConfigFailureActionsFlag, ref recoveryOnNonCrashFailures))
                 {
-                    if (!ChangeServiceConfig2(service, setting, ref enabled))
-                    {
-                        throw new Win32Exception(Marshal.GetLastWin32Error());
-                    }
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
                 }
             }
             finally
