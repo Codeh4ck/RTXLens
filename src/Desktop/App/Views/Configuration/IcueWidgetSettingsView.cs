@@ -70,7 +70,11 @@ internal sealed class IcueWidgetSettingsView : UserControl
             return;
         }
 
-        if (!_editor.Widget.ProfileNames.Contains(_profile)) _profile = "Default";
+        if (!_editor.Widget.ProfileNames.Contains(_profile))
+        {
+            _profile = "Default";
+        }
+
         var body = new StackPanel { Spacing = 12 };
         var group = (string)tab.Header!;
         var settings = WidgetSettingDefinition.Managed.Where(setting => setting.Group == group);
@@ -102,7 +106,11 @@ internal sealed class IcueWidgetSettingsView : UserControl
                     title += $" ({setting.Unit})";
                 }
 
-                if (setting.Id == "warningPreview") title = "Warning preview";
+                if (setting.Id == "warningPreview")
+                {
+                    title = "Warning preview";
+                }
+
                 var input = setting.Id == "warningPreview" ? PreviewControl(setting) : Input(setting, title);
                 inputs.Add(setting.Id, input);
                 if (panelEditor)
@@ -184,7 +192,11 @@ internal sealed class IcueWidgetSettingsView : UserControl
         for (var slot = 1; slot <= 3; slot++)
         {
             var key = $"panel{slot}";
-            if (!inputs.TryGetValue(key, out var content)) continue;
+            if (!inputs.TryGetValue(key, out var content))
+            {
+                continue;
+            }
+
             var source = (ComboBox)content;
             var summary = inputs[key + "Hero"];
             void UpdateSummary() => summary.IsEnabled = source.SelectedItem is WidgetSettingOption option &&
@@ -197,7 +209,11 @@ internal sealed class IcueWidgetSettingsView : UserControl
 
         void LinkToggle(string sourceId, string targetId, bool enabledWhenChecked)
         {
-            if (!inputs.TryGetValue(sourceId, out var input)) return;
+            if (!inputs.TryGetValue(sourceId, out var input))
+            {
+                return;
+            }
+
             var source = (ToggleSwitch)input;
             var target = inputs[targetId];
             void Update() => target.IsEnabled = source.IsChecked == enabledWhenChecked;
@@ -218,7 +234,11 @@ internal sealed class IcueWidgetSettingsView : UserControl
         var add = IconButton("Add widget profile", "add-action", async () =>
         {
             if (TopLevel.GetTopLevel(this) is not Window owner ||
-                await RequestProfileNameAsync(owner, "New widget profile") is not { } name) return;
+                await RequestProfileNameAsync(owner, "New widget profile") is not { } name)
+            {
+                return;
+            }
+
             if (!_editor.AddWidgetProfile(name))
             {
                 instructions.Text = "Choose a unique name of up to 80 characters. Default and Instance are reserved.";
@@ -268,7 +288,11 @@ internal sealed class IcueWidgetSettingsView : UserControl
                 foreach (var choice in setting.Options!)
                 {
                     var radio = new RadioButton { Content = choice.Label, IsChecked = value == choice.Key };
-                    radio.IsCheckedChanged += (_, _) => { if (radio.IsChecked == true) Save(choice.Key); };
+                    radio.IsCheckedChanged += (_, _) => { if (radio.IsChecked == true)
+                        {
+                            Save(choice.Key);
+                        }
+                    };
                     choices.Children.Add(radio);
                 }
                 control = new ScrollViewer
@@ -370,7 +394,7 @@ internal sealed class IcueWidgetSettingsView : UserControl
                 return;
             }
 
-            status.Text = await _editor.QueueWidgetPreviewAsync(_profile, scenario.Key, default)
+            status.Text = await _editor.QueueWidgetPreviewAsync(_profile, scenario.Key, CancellationToken.None)
                 ? "Preview queued for " + _profile + "."
                 : "Preview could not be queued. " + _editor.Message;
         });

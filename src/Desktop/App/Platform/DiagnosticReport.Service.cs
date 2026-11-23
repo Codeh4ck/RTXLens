@@ -24,17 +24,34 @@ internal sealed partial class DiagnosticReport
             {
                 var page = await client.ReadHistoryAsync(before, token);
                 if (instance != null && page.InstanceId != instance)
+                {
                     throw new InvalidDataException("The service restarted during collection.");
+                }
+
                 instance = page.InstanceId;
-                if (page.Entries.Length == 0) break;
+                if (page.Entries.Length == 0)
+                {
+                    break;
+                }
+
                 var oldest = page.Entries[^1].Sequence;
                 if (oldest <= 0 || (before != 0 && oldest >= before))
+                {
                     throw new InvalidDataException("The service log cursor did not advance.");
+                }
+
                 foreach (var entry in page.Entries)
                 {
-                    if (InRange(entry.Timestamp)) summary.Write(writer, entry);
+                    if (InRange(entry.Timestamp))
+                    {
+                        summary.Write(writer, entry);
+                    }
                 }
-                if (oldest <= page.FirstSequence) break;
+                if (oldest <= page.FirstSequence)
+                {
+                    break;
+                }
+
                 before = oldest;
             }
             _notes.AddRange(summary.Describe("Service log API"));
@@ -60,13 +77,22 @@ internal sealed partial class DiagnosticReport
                 try
                 {
                     var entry = JsonSerializer.Deserialize<ServiceLogEntry>(line, Json);
-                    if (entry is null) invalid++;
-                    else if (InRange(entry.Timestamp)) summary.Write(writer, entry);
+                    if (entry is null)
+                    {
+                        invalid++;
+                    }
+                    else if (InRange(entry.Timestamp))
+                    {
+                        summary.Write(writer, entry);
+                    }
                 }
                 catch (JsonException) { invalid++; }
             }
             _notes.AddRange(summary.Describe("Local service journal"));
-            if (invalid > 0) _notes.Add($"Malformed journal entries skipped: {invalid}");
+            if (invalid > 0)
+            {
+                _notes.Add($"Malformed journal entries skipped: {invalid}");
+            }
         });
     }
 
@@ -79,7 +105,9 @@ internal sealed partial class DiagnosticReport
             output.WriteLine(JsonSerializer.Serialize(SupportReportData.Event(entry), Json));
             _counts[entry.Level] = _counts.GetValueOrDefault(entry.Level) + 1;
             if (entry.Level is ServiceLogLevel.Warning or ServiceLogLevel.Error && _messages.Count < 30)
+            {
                 _messages.Add($"{entry.Timestamp.UtcDateTime:u} {entry.Level} {SupportReportData.EventCode(entry.Code)}");
+            }
         }
 
         public IEnumerable<string> Describe(string source) =>
@@ -127,6 +155,7 @@ internal sealed partial class DiagnosticReport
             Scheme = http.BaseAddress!.Scheme == "https" ? "wss" : "ws", Port = http.BaseAddress.Port
         };
         var count = 0;
+        var invalidFrames = 0;
         SensorSnapshot? latest = null;
         try
         {
@@ -141,14 +170,30 @@ internal sealed partial class DiagnosticReport
                 {
                     received = await socket.ReceiveAsync(buffer.AsMemory(), deadline.Token);
                     if (received.MessageType != WebSocketMessageType.Text || frame.Length + received.Count > 2 * 1024 * 1024)
+                    {
                         throw new InvalidDataException("The service closed the stream or sent an unsupported sensor frame.");
+                    }
+
                     frame.Write(buffer, 0, received.Count);
                 } while (!received.EndOfMessage);
                 var bytes = frame.GetBuffer().AsMemory(0, (int)frame.Length);
-                latest = JsonSerializer.Deserialize(bytes.Span, ClientJsonContext.Default.SensorSnapshot)
-                    ?? throw new InvalidDataException("Missing snapshot.");
-                var safeFrame = JsonSerializer.Serialize(SupportReportData.Snapshot(latest), Json);
-                await File.WriteAllTextAsync(PathFor($"live/snapshot-{++count:D3}.json"), safeFrame, token);
+                SensorSnapshot snapshot;
+                string safeFrame;
+                try
+                {
+                    snapshot = JsonSerializer.Deserialize(bytes.Span, ClientJsonContext.Default.SensorSnapshot)
+                        ?? throw new JsonException("Missing snapshot.");
+                    safeFrame = JsonSerializer.Serialize(SupportReportData.Snapshot(snapshot), Json);
+                }
+                catch (Exception error) when (error is JsonException or ArgumentException or NullReferenceException)
+                {
+                    invalidFrames++;
+                    continue;
+                }
+
+                await File.WriteAllTextAsync(PathFor($"live/snapshot-{count + 1:D3}.json"), safeFrame, token);
+                latest = snapshot;
+                count++;
             }
             await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Capture complete", deadline.Token);
         }
@@ -156,6 +201,11 @@ internal sealed partial class DiagnosticReport
         {
             _notes.Add(deadline.IsCancellationRequested ? "Live readings timed out after 20 seconds." : $"Live readings unavailable: {error.GetType().Name}");
         }
+        if (invalidFrames > 0)
+        {
+            _notes.Add($"Malformed live sensor frames skipped: {invalidFrames}.");
+        }
+
         _notes.Add($"Live sensor frames collected: {count}/5.");
         var readings = (latest?.Sensors ?? []).Where(s => s.Identity is
             { PluginId: "generic-nvidia" or "wireview-pro2", Component: SensorComponent.GpuConnector, Channel: 1,

@@ -27,7 +27,7 @@ internal static class AvaloniaMobileAccessTests
         {
             Width = 1100,
             Height = 720,
-            Content = new Border { Padding = new Thickness(18), Child = view }
+            Content = new Border { Padding = new Thickness(18), Child = new StackPanel { Children = { view.EditActions, view } } }
         };
         window.Show();
 
@@ -65,10 +65,18 @@ internal static class AvaloniaMobileAccessTests
 
             var password = view.GetVisualDescendants().OfType<TextBox>()
                 .Single(control => AutomationProperties.GetName(control) == "DDNS key password");
-            TestAssert.True(password.PasswordChar != default && string.IsNullOrEmpty(password.Text),
+            TestAssert.True(password.PasswordChar != 0 && string.IsNullOrEmpty(password.Text),
                 "The DDNS password should be masked and the saved key should not be returned to the UI.");
 
-            Click(view, "Apply mobile access");
+            var port = view.GetVisualDescendants().OfType<NumericUpDown>()
+                .Single(control => AutomationProperties.GetName(control) == "TCP port");
+            port.Value = status.Port + 1;
+            password.Text = "unsaved";
+            Click(window, "Cancel");
+            TestAssert.True(applied is null && port.Value == status.Port && string.IsNullOrEmpty(password.Text),
+                "Cancel must discard mobile edits and clear replacement credentials without configuring the service.");
+
+            Click(window, "Apply");
             TestAssert.True(applied is { KeepNoIpCredentials: true, Settings: { NoIp: null, LocalAddress: "192.168.1.20" } },
                 "Saving without entering a replacement key should preserve the saved credentials on the service.");
 

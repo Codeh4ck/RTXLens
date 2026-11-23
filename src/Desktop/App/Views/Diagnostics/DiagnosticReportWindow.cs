@@ -44,12 +44,16 @@ internal sealed class DiagnosticReportWindow : LensWindow
         _period.SelectionChanged += (_, _) => custom.IsVisible = _period.SelectedIndex == 4;
         _inputs = new StackPanel { Spacing = 8, Children = { Caption("Time range"), _period, custom } };
         _status.IsVisible = false;
-        var configured = new Uri(serviceAddress);
-        var useConfigured = configured.IsLoopback && configured.AbsolutePath == "/";
-        var localService = useConfigured ? configured : new Uri(new AppPreferences().ServiceAddress);
+        var useConfigured = Uri.TryCreate(serviceAddress, UriKind.Absolute, out var configured)
+            && configured.IsLoopback && configured.Scheme is "http" or "https" && configured.PathAndQuery == "/"
+            && configured.UserInfo.Length == 0 && configured.Fragment.Length == 0;
+        var localService = useConfigured ? configured! : new Uri(new AppPreferences().ServiceAddress);
         var description = "The time range applies to crash reports and events. Hardware models and sensor readings are captured now. Personal identifiers, paths and raw log messages are excluded.";
         if (!useConfigured)
+        {
             description += " This report uses the local RTX Lens service on this PC.";
+        }
+
         var collect = CommitButton("Collect", () => CollectAsync(localService, stopToken));
         Body = new StackPanel
         {
@@ -67,7 +71,11 @@ internal sealed class DiagnosticReportWindow : LensWindow
         };
         Closing += (_, args) =>
         {
-            if (_operation is null) return;
+            if (_operation is null)
+            {
+                return;
+            }
+
             args.Cancel = true;
             _operation.Cancel();
         };
@@ -96,11 +104,14 @@ internal sealed class DiagnosticReportWindow : LensWindow
         }
 
         using var operation = CancellationTokenSource.CreateLinkedTokenSource(stopToken);
-        var workspace = Directory.CreateTempSubdirectory("RTXLens-Report-");
+        DirectoryInfo? workspace = null;
+        var saved = false;
+        var cleaned = true;
         _operation = operation;
         _inputs.IsEnabled = false;
         try
         {
+            workspace = Directory.CreateTempSubdirectory("RTXLens-Report-");
             var archive = await DiagnosticReport.CollectAsync(workspace, serviceAddress, from, through,
                 new Progress<string>(SetStatus), operation.Token);
             while (!operation.IsCancellationRequested)
@@ -113,17 +124,24 @@ internal sealed class DiagnosticReportWindow : LensWindow
                     FileTypeChoices = [new FilePickerFileType("ZIP archive") { Patterns = ["*.zip"] }],
                     ShowOverwritePrompt = true
                 });
-                if (target is null) break;
+                if (target is null)
+                {
+                    break;
+                }
+
                 try
                 {
                     var path = target.TryGetLocalPath() ?? throw new IOException("Choose a Windows file location.");
                     await DiagnosticReport.SaveAsync(archive, path, operation.Token);
+                    saved = true;
                     break;
                 }
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException)
                 {
                     if (!await ConfirmAsync(this, "Could not save diagnostic information", error.Message, "Choose another location"))
+                    {
                         break;
+                    }
                 }
             }
         }
@@ -138,16 +156,31 @@ internal sealed class DiagnosticReportWindow : LensWindow
         }
         finally
         {
+            if (workspace is not null)
+            {
+                cleaned = await DiagnosticReport.TryCleanUpAsync(() => workspace.Delete(recursive: true));
+                if (!cleaned)
+                {
+                    var outcome = saved ? "Diagnostic ZIP saved." : _status.Text;
+                    SetStatus($"{outcome}\nTemporary report files could not be removed from {workspace.FullName}.");
+                }
+            }
             _operation = null;
             _inputs.IsEnabled = true;
-            workspace.Delete(recursive: true);
         }
-        Close();
+        if (cleaned)
+        {
+            Close();
+        }
     }
 
     private static DateTimeOffset? LocalTime(CalendarDatePicker date, TimePicker time)
     {
-        if (date.SelectedDate is not { } day || time.SelectedTime is not { } clock) return null;
+        if (date.SelectedDate is not { } day || time.SelectedTime is not { } clock)
+        {
+            return null;
+        }
+
         var local = DateTime.SpecifyKind(day.Date + clock, DateTimeKind.Unspecified);
         return TimeZoneInfo.Local.IsInvalidTime(local) ? null : new DateTimeOffset(local);
     }

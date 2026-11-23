@@ -57,7 +57,11 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
 
     public void DeleteWidgetProfile(string name)
     {
-        if (name == "Default" || !Widget.Profiles.ContainsKey(name)) return;
+        if (name == "Default" || !Widget.Profiles.ContainsKey(name))
+        {
+            return;
+        }
+
         var profiles = new Dictionary<string, Dictionary<string, string>>(Widget.Profiles);
         profiles.Remove(name);
         Widget = Widget with { Profiles = profiles, Preview = Widget.Preview?.Profile == name ? null : Widget.Preview };
@@ -66,11 +70,19 @@ public sealed class ConfigurationEditorViewModel(Func<IMonitoringApi> api, bool 
 
     public async Task<bool> QueueWidgetPreviewAsync(string profile, string scenario, CancellationToken token)
     {
-        if (!CanEdit || _baseline?.Version is not { } version) return false;
+        if (!CanEdit || _baseline?.Version is not { } version)
+        {
+            return false;
+        }
+
         var saved = _baseline.Configuration;
         var request = new WidgetWarningPreview(profile, scenario, DateTimeOffset.UtcNow);
         var widget = saved.Widget with { Preview = request };
-        if (!widget.IsValid() || !Widget.ProfileNames.Contains(profile)) return false;
+        if (!widget.IsValid() || !Widget.ProfileNames.Contains(profile))
+        {
+            return false;
+        }
+
         IsBusy = true;
         try
         {

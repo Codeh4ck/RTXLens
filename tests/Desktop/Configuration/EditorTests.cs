@@ -25,7 +25,7 @@ internal static class EditorTests
         var api = new FakeMonitoringApi();
         var editor = new ConfigurationEditorViewModel(() => api);
         editor.Receive(api.Configuration);
-        await editor.ApplyAsync(default);
+        await editor.ApplyAsync(CancellationToken.None);
         TestAssert.Equal(1L, api.Configuration.Revision);
     }
 
@@ -38,10 +38,10 @@ internal static class EditorTests
         api.Configuration = api.Configuration with { Revision = 2, Version = "test:2" };
         editor.Receive(api.Configuration);
         TestAssert.True(editor.HasExternalChanges, "An external update must be reported.");
-        await editor.ApplyAsync(default);
+        await editor.ApplyAsync(CancellationToken.None);
         TestAssert.True(editor is { IsDirty: true, HasExternalChanges: true }, "A conflict must preserve the draft.");
         TestAssert.Equal(250d, editor.StreamIntervalMs);
-        await editor.ReloadAsync(default);
+        await editor.ReloadAsync(CancellationToken.None);
         TestAssert.False(editor.IsDirty || editor.HasExternalChanges, "Reload must replace the draft.");
     }
 
@@ -52,7 +52,7 @@ internal static class EditorTests
         editor.Receive(api.Configuration);
         editor.StreamIntervalMs = 300;
         editor.Plugins[0].Enabled = false;
-        await editor.ApplyAsync(default);
+        await editor.ApplyAsync(CancellationToken.None);
         TestAssert.Equal(300, api.Configuration.Configuration.Monitoring.StreamIntervalMs);
         TestAssert.False(api.Configuration.Configuration.Plugins["asus-astral"].Enabled, "Enablement must be applied live.");
         TestAssert.False(editor.IsDirty, "An acknowledged apply must clear the draft.");
@@ -64,7 +64,7 @@ internal static class EditorTests
         var editor = new ConfigurationEditorViewModel(() => api);
         editor.Receive(api.Configuration);
         editor.StreamIntervalMs = double.NaN;
-        await editor.ApplyAsync(default);
+        await editor.ApplyAsync(CancellationToken.None);
         TestAssert.Equal(1L, api.Configuration.Revision);
         TestAssert.True(editor.IsDirty, "Invalid values should remain available for correction.");
     }
@@ -79,8 +79,8 @@ internal static class EditorTests
         TestAssert.True(editor.IsDirty && editor.Widget.IsValid(), "Clock toggles must be valid pending edits.");
         TestAssert.False(editor.Widget.WithValue("Default", "backgroundMedia", "x").IsValid(), "Only desktop-managed settings may be saved.");
         TestAssert.False(editor.Widget.WithValue("Default", "currentMax", "100").IsValid(), "Reject invalid slider values.");
-        await editor.ApplyAsync(default);
-        await editor.ReloadAsync(default);
+        await editor.ApplyAsync(CancellationToken.None);
+        await editor.ReloadAsync(CancellationToken.None);
         var catalog = RTXLens.Contracts.Configuration.WidgetSettingDefinition.ById;
         var migrated = System.Text.Json.JsonSerializer.Deserialize(
             """{"profiles":{"Desk":{"connectedColor":"#123456","precision":"2"}}}""",
@@ -97,17 +97,17 @@ internal static class EditorTests
         editor.DeleteWidgetProfile("Default");
         TestAssert.Equal("true", editor.Widget.Value("Default", catalog["showCrossbarClock"]));
         editor.StreamIntervalMs = 377;
-        TestAssert.True(await editor.QueueWidgetPreviewAsync("Quiet desk", "thermal", default), "Queue immediately.");
+        TestAssert.True(await editor.QueueWidgetPreviewAsync("Quiet desk", "thermal", CancellationToken.None), "Queue immediately.");
         var saved = api.Configuration.Configuration;
         TestAssert.Equal("thermal", saved.Widget.Preview!.Scenario);
         TestAssert.False(saved.Widget.Profiles.ContainsKey("Quiet desk"), "Preview cannot commit profile drafts.");
         TestAssert.True(saved.Monitoring.StreamIntervalMs != 377 && editor.IsDirty, "Preview preserves unrelated edits.");
-        await editor.ApplyAsync(default);
-        await editor.ReloadAsync(default);
+        await editor.ApplyAsync(CancellationToken.None);
+        await editor.ReloadAsync(CancellationToken.None);
         TestAssert.True(editor.Widget.Profiles.ContainsKey("Quiet desk"), "Empty named profiles survive reload.");
         TestAssert.Equal("true", editor.Widget.Value("Quiet desk", catalog["showCrossbarClock"]));
         editor.DeleteWidgetProfile("Quiet desk");
-        await editor.ApplyAsync(default);
+        await editor.ApplyAsync(CancellationToken.None);
         TestAssert.False(api.Configuration.Configuration.Widget.Profiles.ContainsKey("Quiet desk"), "Deleted profiles stay deleted.");
     }
 

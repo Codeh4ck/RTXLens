@@ -27,7 +27,7 @@ internal static class DesktopClientTests
     {
         await using var host = await MonitoringTestHost.StartWithInstalledPluginsDisabledAsync();
         var client = new MonitoringApiClient(host.Client);
-        var catalog = await client.GetPluginsAsync(default);
+        var catalog = await client.GetPluginsAsync(CancellationToken.None);
         TestAssert.Equal(1, catalog.SchemaVersion);
         TestAssert.Equal(4, catalog.Plugins.Length);
         TestAssert.True(catalog.Plugins.All(plugin => plugin is { Enabled: false, State: PluginState.Disabled }), "Installed disabled plugins must remain discoverable.");
@@ -59,15 +59,15 @@ internal static class DesktopClientTests
     {
         await using var host = await MonitoringTestHost.StartWithoutPluginsAsync();
         var client = new MonitoringApiClient(host.Client);
-        var initial = await client.GetConfigurationAsync(default);
+        var initial = await client.GetConfigurationAsync(CancellationToken.None);
         var updated = await client.SetConfigurationAsync(initial.Configuration with
         {
             Monitoring = new MonitoringOptions { StreamIntervalMs = 200 }
-        }, initial.Version!, default);
+        }, initial.Version!, CancellationToken.None);
         var file = await File.ReadAllTextAsync(host.ConfigurationPath);
         try
         {
-            await client.SetConfigurationAsync(initial.Configuration, initial.Version!, default);
+            await client.SetConfigurationAsync(initial.Configuration, initial.Version!, CancellationToken.None);
             throw new InvalidOperationException("A stale write was accepted.");
         }
         catch (MonitoringApiException exception)
@@ -75,7 +75,7 @@ internal static class DesktopClientTests
             TestAssert.Equal(HttpStatusCode.PreconditionFailed, exception.StatusCode);
         }
         TestAssert.Equal(file, await File.ReadAllTextAsync(host.ConfigurationPath));
-        TestAssert.Equal(updated.Version, (await client.GetConfigurationAsync(default)).Version);
+        TestAssert.Equal(updated.Version, (await client.GetConfigurationAsync(CancellationToken.None)).Version);
         using var response = await host.Client.GetAsync("/configuration");
         TestAssert.Equal($"\"{updated.Version}\"", response.Headers.ETag?.Tag);
     }
@@ -84,7 +84,7 @@ internal static class DesktopClientTests
     {
         await using var host = await MonitoringTestHost.StartWithoutPluginsAsync();
         var client = new MonitoringApiClient(host.Client);
-        var initial = await client.GetConfigurationAsync(default);
+        var initial = await client.GetConfigurationAsync(CancellationToken.None);
         var results = await Task.WhenAll(WriteAsync(200), WriteAsync(300));
         TestAssert.Equal(1, results.Count(status => status == HttpStatusCode.OK));
         TestAssert.Equal(1, results.Count(status => status == HttpStatusCode.PreconditionFailed));
@@ -97,7 +97,7 @@ internal static class DesktopClientTests
                 await client.SetConfigurationAsync(initial.Configuration with
                 {
                     Monitoring = new MonitoringOptions { StreamIntervalMs = interval }
-                }, initial.Version!, default);
+                }, initial.Version!, CancellationToken.None);
                 return HttpStatusCode.OK;
             }
             catch (MonitoringApiException exception) { return exception.StatusCode; }
@@ -108,7 +108,7 @@ internal static class DesktopClientTests
     {
         await using var host = await MonitoringTestHost.StartWithInstalledPluginsDisabledAsync();
         var client = new MonitoringApiClient(host.Client);
-        var initial = await client.GetConfigurationAsync(default);
+        var initial = await client.GetConfigurationAsync(CancellationToken.None);
         using var invalid = new HttpRequestMessage(HttpMethod.Put, "/configuration")
         {
             Content = JsonContent.Create(initial.Configuration, ClientJsonContext.Default.ServiceConfiguration)
@@ -129,8 +129,8 @@ internal static class DesktopClientTests
     {
         await using var first = await MonitoringTestHost.StartWithoutPluginsAsync();
         await using var second = await MonitoringTestHost.StartWithoutPluginsAsync();
-        var firstVersion = (await new MonitoringApiClient(first.Client).GetConfigurationAsync(default)).Version;
-        var secondVersion = (await new MonitoringApiClient(second.Client).GetConfigurationAsync(default)).Version;
+        var firstVersion = (await new MonitoringApiClient(first.Client).GetConfigurationAsync(CancellationToken.None)).Version;
+        var secondVersion = (await new MonitoringApiClient(second.Client).GetConfigurationAsync(CancellationToken.None)).Version;
         TestAssert.True(firstVersion != secondVersion, "A restarted service must invalidate clients' preconditions even if the revision restarts at one.");
     }
 }

@@ -24,6 +24,7 @@ namespace RTXLens.App.Views.Configuration;
 internal sealed class ConfigurationPage : UserControl
 {
     private const string MobileAccessTab = "Mobile Access";
+    private readonly ContentControl _mobileActions = new() { IsVisible = false, HorizontalAlignment = HorizontalAlignment.Right };
     private readonly ShellViewModel _shell;
     private readonly ConfigurationEditorViewModel _editor;
 
@@ -94,11 +95,12 @@ internal sealed class ConfigurationPage : UserControl
             Children =
             {
                 new TextBlock { Text = "Configuration", Classes = { "heading" }, VerticalAlignment = VerticalAlignment.Center },
-                actions
+                actions, _mobileActions
             }
         };
 
         Grid.SetColumn(actions, 1);
+        Grid.SetColumn(_mobileActions, 1);
 
         _tabs.Padding = new Thickness(0, 0, PageScrollbarGutter, 0);
         _tabs.Theme = (ControlTheme)Application.Current!.FindResource("ConfigurationTabStripTheme")!;
@@ -110,6 +112,7 @@ internal sealed class ConfigurationPage : UserControl
                 RealizeSelectedTab();
 
                 actions.IsVisible = !IsMobileAccessSelected;
+                _mobileActions.IsVisible = IsMobileAccessSelected;
                 UpdateMessage();
             }
         };
@@ -236,7 +239,12 @@ internal sealed class ConfigurationPage : UserControl
         tabs.Add(Tab("Source selections", CreateSources));
 
         var mobile = _tabs.Items.OfType<TabItem>().FirstOrDefault(tab => Equals(tab.Header, MobileAccessTab));
-        tabs.Add(mobile ?? Tab(MobileAccessTab, () => new MobileAccessView(_shell)));
+        tabs.Add(mobile ?? Tab(MobileAccessTab, () =>
+        {
+            var view = new MobileAccessView(_shell);
+            _mobileActions.Content = view.EditActions;
+            return view;
+        }));
         tabs.Add(Tab("Maintenance", CreateMaintenance));
 
         _tabs.ItemsSource = tabs;
@@ -745,7 +753,9 @@ internal sealed class ConfigurationPage : UserControl
         var collect = ActionButton("Collect diagnostic information", diagnosticIcon, async () =>
         {
             if (TopLevel.GetTopLevel(this) is Window owner)
+            {
                 await new DiagnosticReportWindow(_shell.Preferences.ServiceAddress, _shell.StopToken).ShowDialog(owner);
+            }
         });
         return new StackPanel
         {

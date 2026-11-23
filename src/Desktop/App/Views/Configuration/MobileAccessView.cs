@@ -50,6 +50,8 @@ internal sealed class MobileAccessView : UserControl
     private readonly TextBlock _networkStatus = Caption();
     private readonly TextBlock _noIpStatus = Caption();
     private readonly StackPanel _devices = new() { Spacing = 8 };
+    public StackPanel EditActions { get; }
+    private readonly Button _cancel;
     private readonly Button _apply;
     private readonly Button _invite;
     private readonly Button _review;
@@ -100,7 +102,18 @@ internal sealed class MobileAccessView : UserControl
         noIpFields.IsVisible = false;
 
         var reload = IconButton("Reload settings", "refresh", () => RefreshAsync(reloadSettings: true));
-        _apply = CommitButton("Apply mobile access", ApplyAsync);
+        _cancel = ActionButton("Cancel", "cancel-action", () =>
+        {
+            if (_status is not { } status)
+            {
+                return;
+            }
+
+            SetAlert(_notice, null);
+            RenderStatus(status, loadSettings: true);
+        });
+        _apply = CommitButton("Apply", ApplyAsync);
+        EditActions = Actions(_cancel, _apply);
 
         _listenerStatus.VerticalAlignment = VerticalAlignment.Center;
         ToolTip.SetTip(_firewall, "On Public networks, Windows Firewall allows RTX Lens connections only from the local subnet.");
@@ -126,7 +139,7 @@ internal sealed class MobileAccessView : UserControl
         };
 
         var connection = Section("Connection", settings);
-        connection.HeaderActions = Actions(reload, _apply);
+        connection.HeaderActions = reload;
 
         _port.ValueChanged += (_, _) => UpdateForwardingInstructions();
         _localAddress.SelectionChanged += (_, _) => UpdateForwardingInstructions();
@@ -491,10 +504,8 @@ internal sealed class MobileAccessView : UserControl
             _port.Value = status.Port;
             _historyDays.Value = status.WarningHistoryDays;
 
-            if (status.LocalAddress is { } localAddress && _localAddress.Items.Contains(localAddress))
-            {
-                _localAddress.SelectedItem = localAddress;
-            }
+            _localAddress.SelectedIndex = status.LocalAddress is { } localAddress && _localAddress.Items.Contains(localAddress)
+                ? _localAddress.Items.IndexOf(localAddress) : (_localAddress.Items.Count > 0 ? 0 : -1);
 
             _firewall.IsChecked = status.OpenFirewall;
             _automaticForwarding.IsChecked = status.PortForwarding is not null;
@@ -561,7 +572,7 @@ internal sealed class MobileAccessView : UserControl
 
     private void UpdateButtons()
     {
-        _apply.IsEnabled = !_busy && _status is not null;
+        _cancel.IsEnabled = _apply.IsEnabled = !_busy && _status is not null;
         _invite.IsEnabled = !_busy && _pairingWindow is null
             && _status is { Listening: true, LocalAddress: not null, PendingApproval: null }
             && (_status.NoIpHostname is not null || _status.PublicAddress is not null);

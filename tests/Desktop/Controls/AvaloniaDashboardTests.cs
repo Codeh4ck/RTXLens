@@ -1178,7 +1178,7 @@ internal static class AvaloniaDashboardTests
             TestAssert.True(panel.DeviceConfiguration is not null, "The first reporting frame should load the WireView limit before opening Device settings.");
             shell.RefreshPresentation(force: true);
             TestAssert.True(panel.Pins[0].Current is not null && panel.Pins[0].Headroom != "—", "Headroom should be available on the dashboard.");
-            var config = shell.Api.GetWireViewConfigurationAsync(default).GetAwaiter().GetResult();
+            var config = shell.Api.GetWireViewConfigurationAsync(CancellationToken.None).GetAwaiter().GetResult();
             var editor = new WireViewSettingsEditor(config);
             var window = new Window { Content = editor.Content };
             window.Show();
@@ -1195,7 +1195,7 @@ internal static class AvaloniaDashboardTests
                 TestAssert.Throws<ArgumentException>(() => editor.Read());
                 numeric.Text = 8.7m.ToString(System.Globalization.CultureInfo.CurrentCulture);
 
-                var saved = shell.Api.ApplyWireViewConfigurationAsync(editor.Read(), default).GetAwaiter().GetResult();
+                var saved = shell.Api.ApplyWireViewConfigurationAsync(editor.Read(), CancellationToken.None).GetAwaiter().GetResult();
                 TestAssert.Equal("Fixture WireView", saved.FriendlyName);
                 TestAssert.Equal(8.7, saved.WireOcpFaultThresholdA);
             }

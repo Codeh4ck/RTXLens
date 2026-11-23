@@ -16,7 +16,7 @@ internal static class MsiCurveHardwareVerification
     {
         await using var host = await MonitoringTestHost.StartWithMsiHardwareAsync();
         var api = new MonitoringApiClient(host.Client);
-        var initial = await api.GetMsiSnapshotAsync(default);
+        var initial = await api.GetMsiSnapshotAsync(CancellationToken.None);
         var curve = new MsiFanCurve
         {
             Points = [new(0, 37), new(60, 73), new(85, 100)],
@@ -33,7 +33,7 @@ internal static class MsiCurveHardwareVerification
             await host.SetPluginSettingsAsync("msi-psu", settings);
             await TestWait.UntilAsync(async () =>
             {
-                var live = await api.GetMsiSnapshotAsync(default);
+                var live = await api.GetMsiSnapshotAsync(CancellationToken.None);
                 var expected = MsiFanCurveController.Interpolate(curve.Points, live.TemperatureC);
                 return live is { FanControllerState: "Curve", AutomaticFan: false }
                        && live.TargetFanDutyPercent == expected && live.FanDutyPercent == expected;
@@ -41,7 +41,7 @@ internal static class MsiCurveHardwareVerification
 
             // The host continues without a desktop client or editor.
             await Task.Delay(2500);
-            var snapshot = await api.GetMsiSnapshotAsync(default);
+            var snapshot = await api.GetMsiSnapshotAsync(CancellationToken.None);
             TestAssert.Equal("Curve", snapshot.FanControllerState);
             TestAssert.True(snapshot.FanRpm > 0, "The physical fan must report RPM.");
             var stored = await File.ReadAllTextAsync(host.ConfigurationPath);
@@ -51,7 +51,7 @@ internal static class MsiCurveHardwareVerification
 
             await host.SetPluginSettingsAsync("msi-psu", settings with { Enabled = false });
             using var reader = new MsiPsuReader(NullLogger<MsiPsuReader>.Instance);
-            var restored = reader.Read(new MsiOptions(), DateTimeOffset.UtcNow, default)!;
+            var restored = reader.Read(new MsiOptions(), DateTimeOffset.UtcNow, CancellationToken.None)!;
             TestAssert.True(restored is { AutomaticFan: true, FanDutyPercent: >= 0 and <= 100 }, "Plugin disable must restore automatic control.");
             Console.WriteLine("PASS: Disabling the curve plugin restored and verified Automatic.");
         }

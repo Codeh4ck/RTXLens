@@ -25,7 +25,7 @@ internal static class LegacyConfigurationTests
         json["configuration"]!.AsObject().Remove("warnings");
         using var http = new HttpClient(new JsonResponseHandler(json.ToJsonString())) { BaseAddress = new Uri("http://localhost:59273/") };
         var api = new MonitoringApiClient(http);
-        var snapshot = await api.GetConfigurationAsync(default);
+        var snapshot = await api.GetConfigurationAsync(CancellationToken.None);
         TestAssert.Equal(5, snapshot.Configuration.Warnings.Defaults.RepeatIntervalSeconds);
         var editor = new ConfigurationEditorViewModel(() => api);
         editor.Receive(snapshot);
@@ -34,7 +34,7 @@ internal static class LegacyConfigurationTests
         var dashboard = new DashboardViewModel();
         dashboard.SetConfiguration(snapshot);
         dashboard.Apply(UiTestData.Frame(), new AppPreferences(), DateTimeOffset.UtcNow);
-        var applied = await api.SetConfigurationAsync(snapshot.Configuration, "legacy:1", default);
+        var applied = await api.SetConfigurationAsync(snapshot.Configuration, "legacy:1", CancellationToken.None);
         editor.Receive(applied);
         TestAssert.Equal(new WarningPolicy(), applied.Configuration.Warnings.Defaults);
     }
@@ -50,7 +50,7 @@ internal static class LegacyConfigurationTests
         };
         var json = JsonSerializer.Serialize(snapshot, ClientJsonContext.Default.ConfigurationSnapshot);
         using var http = new HttpClient(new JsonResponseHandler(json)) { BaseAddress = new Uri("http://localhost:59273/") };
-        var loaded = await new MonitoringApiClient(http).GetConfigurationAsync(default);
+        var loaded = await new MonitoringApiClient(http).GetConfigurationAsync(CancellationToken.None);
         TestAssert.True(loaded.Configuration.Warnings.Defaults.RepeatWhileActive, "Current server policies must not be replaced with defaults.");
         TestAssert.Equal(15, loaded.Configuration.Warnings.Defaults.RepeatIntervalSeconds);
     }

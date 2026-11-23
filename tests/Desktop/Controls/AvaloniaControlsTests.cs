@@ -444,7 +444,7 @@ internal static class AvaloniaControlsTests
         var app = Application.Current!;
         var previousTheme = app.RequestedThemeVariant;
         var palette = new PaletteResources(app);
-        var dialog = new RTXLens.App.Views.Diagnostics.DiagnosticReportWindow("http://localhost:59273/", default);
+        var dialog = new RTXLens.App.Views.Diagnostics.DiagnosticReportWindow("http://localhost:59273/", CancellationToken.None);
         dialog.Show();
         try
         {

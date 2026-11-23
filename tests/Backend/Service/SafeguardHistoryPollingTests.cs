@@ -24,9 +24,9 @@ internal static class SafeguardHistoryPollingTests
         using var files = new JournalFiles();
         using var journal = files.CreateJournal();
         var completed = files.Add(finished: true);
-        await journal.RefreshNoticesAsync(files, default);
+        await journal.RefreshNoticesAsync(files, CancellationToken.None);
         var active = files.Add(finished: false);
-        await journal.RefreshNoticesAsync(files, default);
+        await journal.RefreshNoticesAsync(files, CancellationToken.None);
         TestAssert.True(journal.Notices!.Any(n => n.Id == active.Id), "A new execution must appear on the next poll.");
         TestAssert.True(journal.Notices!.Any(n => n.Id == completed.Id), "The completed execution must remain visible.");
         TestAssert.Equal(1, files.HistoryReads[completed.Id]);
@@ -37,13 +37,13 @@ internal static class SafeguardHistoryPollingTests
         using var files = new JournalFiles();
         using var journal = files.CreateJournal();
         var completed = files.Add(finished: true);
-        await journal.RefreshNoticesAsync(files, default);
+        await journal.RefreshNoticesAsync(files, CancellationToken.None);
         files.Clock.Advance(TimeSpan.FromSeconds(2));
         files.Write("history", completed.Id, completed with { Status = "Corrected" });
-        await journal.RefreshNoticesAsync(files, default);
+        await journal.RefreshNoticesAsync(files, CancellationToken.None);
         TestAssert.Equal("Corrected", journal.Notices!.Single().Status);
         files.Delete("history", completed.Id);
-        await journal.RefreshNoticesAsync(files, default);
+        await journal.RefreshNoticesAsync(files, CancellationToken.None);
         TestAssert.Equal(0, journal.Notices!.Length);
     }
 
@@ -52,16 +52,16 @@ internal static class SafeguardHistoryPollingTests
         using var files = new JournalFiles();
         using var journal = files.CreateJournal();
         var active = files.Add(finished: false);
-        await journal.RefreshNoticesAsync(files, default);
+        await journal.RefreshNoticesAsync(files, CancellationToken.None);
         TestAssert.Equal("Running", journal.Notices!.Single().Status);
         files.Clock.Advance(TimeSpan.FromMinutes(2));
-        await journal.RefreshNoticesAsync(files, default);
+        await journal.RefreshNoticesAsync(files, CancellationToken.None);
         TestAssert.Equal("Interrupted", journal.Notices!.Single().Status);
         files.Write("history", active.Id, active with { FinishedAt = files.Clock.GetUtcNow(), Status = "Simulated" });
-        await journal.RefreshNoticesAsync(files, default);
+        await journal.RefreshNoticesAsync(files, CancellationToken.None);
         TestAssert.Equal("Simulated", journal.Notices!.Single().Status);
         files.Clock.Advance(TimeSpan.FromDays(2));
-        await journal.RefreshNoticesAsync(files, default);
+        await journal.RefreshNoticesAsync(files, CancellationToken.None);
         TestAssert.Equal(0, journal.Notices!.Length);
         TestAssert.False(File.Exists(files.Location("history", active.Id)), "The expired record must be deleted.");
     }
@@ -70,7 +70,7 @@ internal static class SafeguardHistoryPollingTests
     {
         using var files = new JournalFiles();
         using var journal = files.CreateJournal();
-        await journal.ProcessMailAsync(files, default);
+        await journal.ProcessMailAsync(files, CancellationToken.None);
         var oldResult = Guid.NewGuid();
         files.Write("results", oldResult, new { Accepted = true });
         var resultPath = files.Location("results", oldResult);
@@ -78,14 +78,14 @@ internal static class SafeguardHistoryPollingTests
         files.Clock.Advance(TimeSpan.FromSeconds(1));
         var job = new SafeguardMailEvent(Guid.NewGuid(), Guid.NewGuid(), files.Clock.GetUtcNow().AddDays(-8));
         files.Write("outbox", job.ExecutionId, job);
-        await journal.ProcessMailAsync(files, default);
+        await journal.ProcessMailAsync(files, CancellationToken.None);
         TestAssert.Equal("Delivery expired", files.Read<SafeguardDelivery>("delivery", job.ExecutionId)?.Status);
         TestAssert.False(File.Exists(files.Location("outbox", job.ExecutionId)), "The next poll must consume the expired job.");
         TestAssert.Equal(1, files.Scans["results"]);
         TestAssert.Equal(1, files.Scans["delivery"]);
         TestAssert.True(File.Exists(resultPath), "Idle cleanup must respect its interval.");
         files.Clock.Advance(TimeSpan.FromMinutes(1));
-        await journal.ProcessMailAsync(files, default);
+        await journal.ProcessMailAsync(files, CancellationToken.None);
         TestAssert.False(File.Exists(resultPath), "The next cleanup must remove the expired result.");
     }
 
