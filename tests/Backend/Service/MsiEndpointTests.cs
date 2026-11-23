@@ -29,7 +29,7 @@ internal static class MsiEndpointTests
         using var data = JsonDocument.Parse(response);
         TestAssert.Equal(75, data.RootElement.GetProperty("fanDutyPercent").GetInt32());
         var client = new MonitoringApiClient(host.Client);
-        TestAssert.Equal(1, (await client.GetMsiDevicesAsync(default)).Length);
+        TestAssert.Equal(1, (await client.GetMsiDevicesAsync(CancellationToken.None)).Length);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await foreach (var frame in client.ReadSensorsAsync(timeout.Token))
         {

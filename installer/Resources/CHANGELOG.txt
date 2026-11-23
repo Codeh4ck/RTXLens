@@ -1,3 +1,12 @@
+1.1.9 - Desktop diagnostics, tray fixes and mobile readings
+- Collect a diagnostic ZIP from Configuration > Maintenance for a selected time range. The report includes filtered logs, crash and hang events, current service state and live readings.
+- Include CPU, RAM module, graphics adapter and identifiable USB PSU models and vendors in diagnostic reports, including graphics adapters outside the RTX Lens plugins.
+- Skip malformed live readings during diagnostic export and retry temporary file cleanup. A cleanup warning preserves the outcome of a successful save.
+- Add Reload and Apply to the Mobile Access configuration header. Reload fetches the latest saved settings and clears unsaved credentials.
+- Fix Windows tray initialization for close to tray and start minimized, and handle unexpected Windows icon requests.
+- Mobile GPU Status combines Astral and NVIDIA readings for the same GPU, shows connector power beside core voltage, and places VRAM usage percentage alongside used and total memory.
+- Mobile Power uses the active theme for Astral pin currents and shows current on MSI PSU connectors. WireView temperatures have clearer labels and triggered faults use compact badges.
+
 1.1.8 - Windows service startup
 - Fresh installs, upgrades and repairs set RTX Lens Service to Automatic and clear the delayed-start flag.
 

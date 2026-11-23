@@ -160,6 +160,22 @@ internal static class AvaloniaSettingsParityTests
             var tabs = window.GetVisualDescendants().OfType<TabControl>().Single();
             TestAssert.True(tabs.Items.OfType<TabItem>().Any(tab => Equals(tab.Header, "Mobile Access")),
                 "Mobile Access should be a Configuration tab.");
+            TestAssert.True(Equals(tabs.Items.OfType<TabItem>().Last().Header, "Maintenance"), "Maintenance should be the last tab.");
+            OpenTab("Maintenance");
+            Click("Collect diagnostic information");
+            var diagnostics = window.OwnedWindows.Single();
+            var timeframe = diagnostics.GetVisualDescendants().OfType<ComboBox>().Single();
+            TestAssert.Equal("Last 48 hours", (string)timeframe.SelectedItem!);
+            timeframe.SelectedItem = "Custom range";
+            Dispatcher.UIThread.RunJobs();
+            var dates = diagnostics.GetVisualDescendants().OfType<CalendarDatePicker>().ToArray();
+            TestAssert.Equal(2, dates.Length);
+            dates[0].SelectedDate = DateTime.Today.AddDays(1);
+            Click("Collect", diagnostics);
+            TestAssert.True(diagnostics.GetVisualDescendants().OfType<TextBlock>().Any(text =>
+                text.IsVisible && text.Text?.StartsWith("Choose valid start and end times") == true),
+                "An invalid time range should keep the dialog open and explain the problem.");
+            Click("Cancel", diagnostics);
             OpenTab("iCUE Widget");
             var widgetTabs = window.GetVisualDescendants().OfType<TabControl>().Single(tab => tab.TabStripPlacement == Dock.Left);
             var panels = window.GetVisualDescendants().OfType<RTXLens.App.Controls.SectionPanel>().ToArray();

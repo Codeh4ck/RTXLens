@@ -26,7 +26,7 @@ internal static class WireViewPollingTests
         for (ushort volts = 11000; volts <= 12000; volts += 100)
         {
             device.Millivolts = volts;
-            TestAssert.Equal(volts / 1000.0, reader.TryReadSensors(default)?.ReportedAverageVoltageV);
+            TestAssert.Equal(volts / 1000.0, reader.TryReadSensors(CancellationToken.None)?.ReportedAverageVoltageV);
         }
 
         TestAssert.Equal(11, device.SensorRequests);
@@ -39,15 +39,15 @@ internal static class WireViewPollingTests
         var bus = new FakeBus();
         bus.Plug("COM3");
         using var reader = bus.CreateReader();
-        TestAssert.Equal(12d, reader.TryReadSensors(default)?.ReportedAverageVoltageV);
+        TestAssert.Equal(12d, reader.TryReadSensors(CancellationToken.None)?.ReportedAverageVoltageV);
 
         bus.Devices.Clear();
-        TestAssert.True(reader.TryReadSensors(default) is null, "Unplugging must stop publication.");
+        TestAssert.True(reader.TryReadSensors(CancellationToken.None) is null, "Unplugging must stop publication.");
         TestAssert.Equal(string.Empty, reader.PortName);
 
         var other = bus.Plug("COM3", product: 0xff);
         bus.Plug("COM8", product: 0x06).Millivolts = 11950;
-        TestAssert.Equal(11.95, reader.TryReadSensors(default)?.ReportedAverageVoltageV);
+        TestAssert.Equal(11.95, reader.TryReadSensors(CancellationToken.None)?.ReportedAverageVoltageV);
         TestAssert.Equal("COM8", reader.PortName);
         TestAssert.Equal(0, other.SensorRequests);
     }
@@ -57,11 +57,11 @@ internal static class WireViewPollingTests
         var bus = new FakeBus();
         bus.Plug("COM3");
         using var reader = bus.CreateReader();
-        TestAssert.Equal(12d, reader.TryReadSensors(default)?.ReportedAverageVoltageV);
+        TestAssert.Equal(12d, reader.TryReadSensors(CancellationToken.None)?.ReportedAverageVoltageV);
 
         var other = bus.Plug("COM3", product: 0xff);
         bus.FailNextOpen = true;
-        TestAssert.True(reader.TryReadSensors(default) is null,
+        TestAssert.True(reader.TryReadSensors(CancellationToken.None) is null,
             "Rediscovery after an open failure must recheck the device identity, even on the same COM number.");
         TestAssert.Equal(2, bus.Discoveries);
         TestAssert.Equal(0, other.SensorRequests);
@@ -73,9 +73,9 @@ internal static class WireViewPollingTests
         var device = bus.Plug("COM3");
         device.FrameLength = 96;
         using var reader = bus.CreateReader();
-        TestAssert.True(reader.TryReadSensors(default) is null, "A truncated frame must not publish readings.");
+        TestAssert.True(reader.TryReadSensors(CancellationToken.None) is null, "A truncated frame must not publish readings.");
         device.FrameLength = 100;
-        TestAssert.Equal(12d, reader.TryReadSensors(default)?.ReportedAverageVoltageV);
+        TestAssert.Equal(12d, reader.TryReadSensors(CancellationToken.None)?.ReportedAverageVoltageV);
     }
 
     private static void CancelledPollDoesNotDiscoverOrOpenPorts()

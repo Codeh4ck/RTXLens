@@ -115,7 +115,7 @@ internal static class ServiceLogTests
             using (var input = new ActivityLoggerProvider(clock))
             using (var journal = new ServiceLogJournal(input, settings, new TestConfiguration(), clock, NullLogger<ServiceLogJournal>.Instance))
             {
-                await journal.StartAsync(default);
+                await journal.StartAsync(CancellationToken.None);
                 try
                 {
                     var newest = journal.ReadHistory(0, 2);
@@ -126,13 +126,13 @@ internal static class ServiceLogTests
                 }
                 finally
                 {
-                    await journal.StopAsync(default);
+                    await journal.StopAsync(CancellationToken.None);
                 }
             }
 
             using var recoveredInput = new ActivityLoggerProvider(clock);
             using var recovered = new ServiceLogJournal(recoveredInput, settings, new TestConfiguration(), clock, NullLogger<ServiceLogJournal>.Instance);
-            await recovered.StartAsync(default);
+            await recovered.StartAsync(CancellationToken.None);
             try
             {
                 var entry = recovered.ReadHistory(0, 1).Entries.Single();
@@ -141,7 +141,7 @@ internal static class ServiceLogTests
             }
             finally
             {
-                await recovered.StopAsync(default);
+                await recovered.StopAsync(CancellationToken.None);
             }
         }
         finally

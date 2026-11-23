@@ -50,6 +50,9 @@ internal sealed class MobileAccessView : UserControl
     private readonly TextBlock _networkStatus = Caption();
     private readonly TextBlock _noIpStatus = Caption();
     private readonly StackPanel _devices = new() { Spacing = 8 };
+
+    public StackPanel EditActions { get; }
+    private readonly Button _reload;
     private readonly Button _apply;
     private readonly Button _invite;
     private readonly Button _review;
@@ -99,8 +102,28 @@ internal sealed class MobileAccessView : UserControl
 
         noIpFields.IsVisible = false;
 
-        var reload = IconButton("Reload settings", "refresh", () => RefreshAsync(reloadSettings: true));
-        _apply = CommitButton("Apply mobile access", ApplyAsync);
+        _reload = ActionButton("Reload", "refresh", () => RefreshAsync(reloadSettings: true));
+        _apply = CommitButton("Apply", ApplyAsync);
+        EditActions = Actions(_reload, _apply);
+
+        _enabled.IsCheckedChanged += (_, _) => UpdateApplyButton();
+        _firewall.IsCheckedChanged += (_, _) => UpdateApplyButton();
+        _automaticForwarding.IsCheckedChanged += (_, _) => UpdateApplyButton();
+        _localAddress.SelectionChanged += (_, _) => UpdateApplyButton();
+        _mode.SelectionChanged += (_, _) => UpdateApplyButton();
+        _port.ValueChanged += (_, _) => UpdateApplyButton();
+        _historyDays.ValueChanged += (_, _) => UpdateApplyButton();
+
+        foreach (var field in new[] { _publicIp, _hostname, _keyUsername, _keyPassword })
+        {
+            field.PropertyChanged += (_, change) =>
+            {
+                if (change.Property == TextBox.TextProperty)
+                {
+                    UpdateApplyButton();
+                }
+            };
+        }
 
         _listenerStatus.VerticalAlignment = VerticalAlignment.Center;
         ToolTip.SetTip(_firewall, "On Public networks, Windows Firewall allows RTX Lens connections only from the local subnet.");
@@ -126,7 +149,6 @@ internal sealed class MobileAccessView : UserControl
         };
 
         var connection = Section("Connection", settings);
-        connection.HeaderActions = Actions(reload, _apply);
 
         _port.ValueChanged += (_, _) => UpdateForwardingInstructions();
         _localAddress.SelectionChanged += (_, _) => UpdateForwardingInstructions();
@@ -150,7 +172,6 @@ internal sealed class MobileAccessView : UserControl
 
         if (send is null)
         {
-            reload.IsEnabled = false;
             settings.IsEnabled = false;
             _listenerStatus.Text = "Mobile Access is available for the local Windows service.";
         }
@@ -193,7 +214,7 @@ internal sealed class MobileAccessView : UserControl
 
     private async Task ApplyAsync()
     {
-        if (_status is not { } status || !TryCreateSettings(status, out var settings, out var keepCredentials))
+        if (_status is not { } status || !HasSettingsChanges(status) || !TryCreateSettings(status, out var settings, out var keepCredentials))
         {
             return;
         }
@@ -207,6 +228,7 @@ internal sealed class MobileAccessView : UserControl
             var message = settings.PortForwarding is not null
                 ? $"Allow TCP port {settings.Port} through the router to {settings.LocalAddress}?"
                 : $"Allow inbound TCP connections to RTX Lens on port {settings.Port} through Windows Firewall?";
+
             if (settings.OpenFirewall)
             {
                 message += " On Public networks, the Windows Firewall rule only allows devices on the same subnet.";
@@ -266,8 +288,7 @@ internal sealed class MobileAccessView : UserControl
             var username = _keyUsername.Text?.Trim() ?? string.Empty;
             var password = _keyPassword.Text ?? string.Empty;
 
-            keepCredentials = hostname.Length > 0 && string.Equals(status.NoIpHostname, hostname, StringComparison.OrdinalIgnoreCase)
-                && username.Length == 0 && password.Length == 0;
+            keepCredentials = hostname.Length > 0 && string.Equals(status.NoIpHostname, hostname, StringComparison.OrdinalIgnoreCase) && username.Length == 0 && password.Length == 0;
 
             if (!keepCredentials)
             {
@@ -280,8 +301,7 @@ internal sealed class MobileAccessView : UserControl
         }
 
         var forwarding = _automaticForwarding.IsChecked == true ? new MobilePortForwarding(localAddress, (int)port.Value) : null;
-        settings = new MobileAccessSettings(
-            true, (int)port.Value, noIp, _firewall.IsChecked == true, forwarding, localAddress, publicAddress, (int)days);
+        settings = new MobileAccessSettings(true, (int)port.Value, noIp, _firewall.IsChecked == true, forwarding, localAddress, publicAddress, (int)days);
 
         if (!settings.IsValid)
         {
@@ -309,6 +329,7 @@ internal sealed class MobileAccessView : UserControl
 
         var code = new MobilePairingCode(1, new UriBuilder("https", localAddress, status.Port).Uri,
             new UriBuilder("https", remoteAddress, status.Port).Uri, invite.PublicKeyFingerprint, invite.Secret, invite.ExpiresAt);
+
         await OpenPairingWindowAsync(code);
     }
 
@@ -332,11 +353,13 @@ internal sealed class MobileAccessView : UserControl
         {
             dialog.UpdateApproval(_status?.PendingApproval);
         }
+
         UpdateButtons();
 
         try
         {
             var closed = dialog.ShowDialog(owner);
+
             await RefreshAsync(reloadSettings: false);
             await closed;
         }
@@ -356,6 +379,7 @@ internal sealed class MobileAccessView : UserControl
 
         dialog.ReportError(null);
         var response = await SendAsync(new MobileAccessRequest(operation, Id: id));
+
         if (response is { Success: true })
         {
             dialog.ShowDecision(operation);
@@ -430,15 +454,16 @@ internal sealed class MobileAccessView : UserControl
 
             if (response.Status is { } status)
             {
-                var firstLoad = _status is null;
+                var refreshForm = _status is null || (response.Success && reloadSettings) || (!HasSettingsChanges(_status) && HasSettingsChanges(status));
                 _status = status;
 
-                RenderStatus(status, reloadSettings || firstLoad);
+                RenderStatus(status, refreshForm);
             }
 
             if (!response.Success)
             {
                 var message = response.Error ?? "The service could not complete the request.";
+
                 SetAlert(_notice, message, "warning");
                 _pairingWindow?.ReportError(message);
             }
@@ -460,6 +485,7 @@ internal sealed class MobileAccessView : UserControl
             _listenerStatus.IsVisible = false;
 
             var message = error is OperationCanceledException ? "The local service did not respond in time." : error.Message;
+
             SetAlert(_notice, message, "warning");
             _pairingWindow?.ReportError(message);
 
@@ -491,10 +517,7 @@ internal sealed class MobileAccessView : UserControl
             _port.Value = status.Port;
             _historyDays.Value = status.WarningHistoryDays;
 
-            if (status.LocalAddress is { } localAddress && _localAddress.Items.Contains(localAddress))
-            {
-                _localAddress.SelectedItem = localAddress;
-            }
+            _localAddress.SelectedItem = DisplayLocalAddress(status);
 
             _firewall.IsChecked = status.OpenFirewall;
             _automaticForwarding.IsChecked = status.PortForwarding is not null;
@@ -539,19 +562,25 @@ internal sealed class MobileAccessView : UserControl
 
             var details = device.LastConnectedAt is { } connectedAt ? $"Last seen {connectedAt.ToLocalTime():g}" : "No connections yet";
             var title = DialogText(device.Name);
+
             title.FontWeight = FontWeight.SemiBold;
+
             var name = new StackPanel { Spacing = 3, VerticalAlignment = VerticalAlignment.Center, Children = { title, Caption(details) } };
             var revoke = ActionButton("Revoke", "cancel-action", () => RevokeAsync(device));
+
             Control actions = revoke;
+
             if (device.LockScreenNotifications)
             {
                 name.Children.Add(Caption("Lock-screen notifications enabled"));
+
                 var test = ActionButton("Send test", "mail-action", () => SendTestNotificationAsync(device));
                 actions = Actions(test, revoke);
             }
 
             actions.VerticalAlignment = VerticalAlignment.Center;
             actions.HorizontalAlignment = HorizontalAlignment.Right;
+
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 12, Children = { name, actions } };
             Grid.SetColumn(actions, 1);
 
@@ -559,12 +588,55 @@ internal sealed class MobileAccessView : UserControl
         }
     }
 
+    private string? DisplayLocalAddress(MobileAccessStatus status) =>
+        status.LocalAddress is { } saved && _localAddress.Items.Contains(saved)
+            ? saved : _localAddress.Items.OfType<string>().FirstOrDefault();
+
+    private bool HasSettingsChanges(MobileAccessStatus status)
+    {
+        var enabled = _enabled.IsChecked == true;
+        if (enabled != status.Enabled || _historyDays.Value != status.WarningHistoryDays)
+        {
+            return true;
+        }
+
+        if (!enabled)
+        {
+            return false;
+        }
+
+        var useNoIp = Equals(_mode.SelectedItem, NoIpMode);
+
+        if (_port.Value != status.Port || !Equals(_localAddress.SelectedItem, DisplayLocalAddress(status))
+            || (_firewall.IsChecked == true) != status.OpenFirewall
+            || (_automaticForwarding.IsChecked == true) != (status.PortForwarding is not null)
+            || useNoIp != (status.NoIpHostname is not null))
+        {
+            return true;
+        }
+
+        if (useNoIp)
+        {
+            return !string.Equals(_hostname.Text?.Trim(), status.NoIpHostname, StringComparison.OrdinalIgnoreCase)
+                   || !string.IsNullOrWhiteSpace(_keyUsername.Text) || !string.IsNullOrEmpty(_keyPassword.Text);
+        }
+
+        return !string.Equals(_publicIp.Text?.Trim() ?? "", status.PublicAddress ?? "", StringComparison.Ordinal);
+    }
+
+    private void UpdateApplyButton() =>
+        _apply.IsEnabled = !_busy && _status is { } status && HasSettingsChanges(status);
+
     private void UpdateButtons()
     {
-        _apply.IsEnabled = !_busy && _status is not null;
+        _reload.IsEnabled = !_busy && _send is not null;
+
+        UpdateApplyButton();
+
         _invite.IsEnabled = !_busy && _pairingWindow is null
             && _status is { Listening: true, LocalAddress: not null, PendingApproval: null }
             && (_status.NoIpHostname is not null || _status.PublicAddress is not null);
+
         _review.IsVisible = _pairingWindow is null && _status?.PendingApproval is not null;
         _review.IsEnabled = !_busy;
         _pairingWindow?.SetRequestAvailability(_busy, _status?.PendingApproval is not null);

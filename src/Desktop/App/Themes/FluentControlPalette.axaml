@@ -44,6 +44,53 @@
     <Thickness x:Key="ComboBoxPadding">12,7</Thickness>
     <x:Double x:Key="ComboBoxMinHeight">38</x:Double>
 
+    <!-- Calendar and time controls use separate Fluent resources for their fields and popups. -->
+    <SolidColorBrush x:Key="HudTextBrush" Color="{DynamicResource HudTextColor}" />
+    <SolidColorBrush x:Key="HudMutedBrush" Color="{DynamicResource HudMutedTextColor}" />
+    <StaticResource x:Key="CalendarDatePickerBackground" ResourceKey="TextControlBackground" />
+    <StaticResource x:Key="CalendarDatePickerBackgroundDisabled" ResourceKey="TextControlBackground" />
+    <StaticResource x:Key="CalendarViewBackground" ResourceKey="TextControlBackground" />
+    <StaticResource x:Key="TimePickerButtonBackground" ResourceKey="TextControlBackground" />
+    <StaticResource x:Key="TimePickerButtonBackgroundDisabled" ResourceKey="TextControlBackground" />
+    <StaticResource x:Key="TimePickerFlyoutPresenterBackground" ResourceKey="TextControlBackground" />
+    <StaticResource x:Key="CalendarDatePickerBorderBrush" ResourceKey="HudInputStrokeBrush" />
+    <StaticResource x:Key="CalendarDatePickerBorderBrushDisabled" ResourceKey="HudInputStrokeBrush" />
+    <StaticResource x:Key="CalendarViewBorderBrush" ResourceKey="HudInputStrokeBrush" />
+    <StaticResource x:Key="TimePickerButtonBorderBrush" ResourceKey="HudInputStrokeBrush" />
+    <StaticResource x:Key="TimePickerButtonBorderBrushDisabled" ResourceKey="HudInputStrokeBrush" />
+    <StaticResource x:Key="TimePickerSpacerFill" ResourceKey="HudInputStrokeBrush" />
+    <StaticResource x:Key="TimePickerSpacerFillDisabled" ResourceKey="HudInputStrokeBrush" />
+    <StaticResource x:Key="TimePickerFlyoutPresenterBorderBrush" ResourceKey="HudInputStrokeBrush" />
+    <StaticResource x:Key="TimePickerFlyoutPresenterSpacerFill" ResourceKey="HudInputStrokeBrush" />
+    <StaticResource x:Key="CalendarDatePickerBackgroundPointerOver" ResourceKey="HudHoverSurfaceBrush" />
+    <StaticResource x:Key="DateTimePickerFlyoutButtonBackgroundPointerOver" ResourceKey="HudHoverSurfaceBrush" />
+    <StaticResource x:Key="CalendarDatePickerBackgroundPressed" ResourceKey="HudPressedSurfaceBrush" />
+    <StaticResource x:Key="TimePickerButtonBackgroundPressed" ResourceKey="HudPressedSurfaceBrush" />
+    <StaticResource x:Key="DateTimePickerFlyoutButtonBackgroundPressed" ResourceKey="HudPressedSurfaceBrush" />
+    <StaticResource x:Key="CalendarDatePickerCalendarGlyphForeground" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="CalendarDatePickerBorderBrushPointerOver" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="CalendarDatePickerBorderBrushPressed" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="CalendarViewHoverBorderBrush" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="CalendarViewSelectedBorderBrush" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="CalendarViewNavigationButtonForegroundPointerOver" ResourceKey="HudAccentBrush" />
+    <StaticResource x:Key="TimePickerFlyoutPresenterHighlightFill" ResourceKey="HudAccentSurfaceBrush" />
+    <StaticResource x:Key="CalendarViewSelectedHoverBorderBrush" ResourceKey="HudAccentHoverBrush" />
+    <StaticResource x:Key="CalendarViewSelectedPressedBorderBrush" ResourceKey="HudAccentPressedBrush" />
+    <StaticResource x:Key="CalendarViewPressedBorderBrush" ResourceKey="HudAccentPressedBrush" />
+    <StaticResource x:Key="CalendarViewNavigationButtonForegroundPressed" ResourceKey="HudAccentPressedBrush" />
+    <StaticResource x:Key="CalendarViewTodayForeground" ResourceKey="HudOnAccentBrush" />
+    <StaticResource x:Key="CalendarDatePickerForeground" ResourceKey="HudTextBrush" />
+    <StaticResource x:Key="CalendarViewForeground" ResourceKey="HudTextBrush" />
+    <StaticResource x:Key="CalendarViewCalendarItemForeground" ResourceKey="HudTextBrush" />
+    <StaticResource x:Key="TimePickerButtonForeground" ResourceKey="HudTextBrush" />
+    <StaticResource x:Key="TimePickerButtonForegroundPressed" ResourceKey="HudTextBrush" />
+    <StaticResource x:Key="CalendarDatePickerTextForegroundDisabled" ResourceKey="HudMutedBrush" />
+    <StaticResource x:Key="CalendarDatePickerCalendarGlyphForegroundDisabled" ResourceKey="HudMutedBrush" />
+    <StaticResource x:Key="CalendarViewOutOfScopeForeground" ResourceKey="HudMutedBrush" />
+    <StaticResource x:Key="CalendarViewBlackoutForeground" ResourceKey="HudMutedBrush" />
+    <StaticResource x:Key="CalendarViewWeekDayForegroundDisabled" ResourceKey="HudMutedBrush" />
+    <StaticResource x:Key="TimePickerButtonForegroundDisabled" ResourceKey="HudMutedBrush" />
+
     <Thickness x:Key="CheckBoxBorderThemeThickness">1.5</Thickness>
     <StaticResource x:Key="CheckBoxCheckBackgroundFillUnchecked" ResourceKey="TextControlBackground" />
     <StaticResource x:Key="CheckBoxCheckBackgroundStrokeUnchecked" ResourceKey="HudInputStrokeBrush" />

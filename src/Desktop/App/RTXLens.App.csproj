@@ -15,6 +15,11 @@
     <ItemGroup>
         <Compile Remove="Views/Simulation/**/*.cs" Condition="'$(EnableTelemetryDebug)' != 'true'" />
         <Compile Include="../../../Installer/Actions/Startup/ElevatedStartupTask.cs" Link="Platform/Startup/ElevatedStartupTask.cs" />
+        <Compile Include="../../Plugins/Msi/Plugin/Device/MsiPsuModels.cs" Link="Platform/Hardware/MsiPsuModels.cs" />
+        <PackageReference Include="LibreHardwareMonitorLib" />
+        <PackageReference Include="System.Management" />
+        <PackageReference Include="System.Diagnostics.EventLog" />
+        <PackageReference Include="System.ServiceProcess.ServiceController" />
         <InternalsVisibleTo Include="RTXLens.UI.Tests" />
         <AvaloniaResource Include="Assets/monitor.ico;Assets/Icons/*.svg" />
         <Content Include="Assets/monitor.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

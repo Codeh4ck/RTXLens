@@ -48,10 +48,13 @@ const connectorMetrics = [
 export function ConnectorSummary({ readings }: { readings: SensorReading[] }) {
   const local = useThemeStyles(styles);
   const { formatReading } = useContext(ReadingFormatContext);
+  const metrics = readings.some(r => r.identity.component === 'PsuConnector')
+    ? connectorMetrics.filter(({ metric }) => readings.some(r => r.identity.metric === metric))
+    : connectorMetrics;
   const other = readings.filter(r => !connectorMetrics.some(c => c.metric === r.identity.metric));
   return <>
     {other.length < readings.length && <View style={local.connectorRow}>
-      {connectorMetrics.map(({ metric, label }) => {
+      {metrics.map(({ metric, label }) => {
         const reading = readings.find(r => r.identity.metric === metric);
         const value = formatReading(reading);
         return <View key={metric} style={local.connectorCell} accessible accessibilityLabel={`${label}, ${value}`}>

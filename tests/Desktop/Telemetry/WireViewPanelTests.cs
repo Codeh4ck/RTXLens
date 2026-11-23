@@ -150,15 +150,15 @@ internal static class WireViewPanelTests
         var reads = 0;
         var response = new TaskCompletionSource<DeviceConfig>();
 
-        await panel.EnsureDeviceConfigurationAsync(Read, frame.Timestamp, default);
-        await panel.EnsureDeviceConfigurationAsync(Read, frame.Timestamp.AddSeconds(1), default);
+        await panel.EnsureDeviceConfigurationAsync(Read, frame.Timestamp, CancellationToken.None);
+        await panel.EnsureDeviceConfigurationAsync(Read, frame.Timestamp.AddSeconds(1), CancellationToken.None);
         TestAssert.Equal(1, reads);
         var retryTime = frame.Timestamp.AddSeconds(20);
-        var retry = panel.EnsureDeviceConfigurationAsync(Read, retryTime, default);
-        await panel.EnsureDeviceConfigurationAsync(Read, retryTime, default);
+        var retry = panel.EnsureDeviceConfigurationAsync(Read, retryTime, CancellationToken.None);
+        await panel.EnsureDeviceConfigurationAsync(Read, retryTime, CancellationToken.None);
         response.SetResult(new DeviceConfig { WireOcpFaultThresholdA = 9 });
         await retry;
-        await panel.EnsureDeviceConfigurationAsync(Read, retryTime, default);
+        await panel.EnsureDeviceConfigurationAsync(Read, retryTime, CancellationToken.None);
         panel.Apply(frame, prefs, frame.Timestamp);
         TestAssert.Equal(2, reads);
         TestAssert.Equal("+3 A", panel.Pins[0].Headroom);
@@ -179,11 +179,11 @@ internal static class WireViewPanelTests
         var prefs = new AppPreferences();
         panel.Apply(frame, prefs, frame.Timestamp);
         var original = new TaskCompletionSource<DeviceConfig>();
-        var firstRead = panel.EnsureDeviceConfigurationAsync(_ => original.Task, frame.Timestamp, default);
+        var firstRead = panel.EnsureDeviceConfigurationAsync(_ => original.Task, frame.Timestamp, CancellationToken.None);
         panel.MarkDisconnected(prefs);
         panel.Apply(frame, prefs, frame.Timestamp);
         var current = new TaskCompletionSource<DeviceConfig>();
-        var secondRead = panel.EnsureDeviceConfigurationAsync(_ => current.Task, frame.Timestamp, default);
+        var secondRead = panel.EnsureDeviceConfigurationAsync(_ => current.Task, frame.Timestamp, CancellationToken.None);
 
         original.SetResult(new DeviceConfig { WireOcpFaultThresholdA = 8 });
         await firstRead;

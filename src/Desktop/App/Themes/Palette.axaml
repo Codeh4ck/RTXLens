@@ -22,8 +22,10 @@
             <SolidColorBrush x:Key="InsetBrush">#0C1422</SolidColorBrush>
             <SolidColorBrush x:Key="TrackBrush">#1B273C</SolidColorBrush>
             <SolidColorBrush x:Key="PanelBorderBrush">#29384D</SolidColorBrush>
-            <SolidColorBrush x:Key="TextBrush">#E6EEFB</SolidColorBrush>
-            <SolidColorBrush x:Key="MutedTextBrush">#ABBCD0</SolidColorBrush>
+            <Color x:Key="HudTextColor">#E6EEFB</Color>
+            <Color x:Key="HudMutedTextColor">#ABBCD0</Color>
+            <SolidColorBrush x:Key="TextBrush" Color="{StaticResource HudTextColor}" />
+            <SolidColorBrush x:Key="MutedTextBrush" Color="{StaticResource HudMutedTextColor}" />
             <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource DefaultPrimaryColor}" />
             <SolidColorBrush x:Key="SecondaryBrush" Color="{StaticResource DefaultSecondaryColor}" />
             <SolidColorBrush x:Key="TertiaryBrush" Color="{StaticResource DefaultTertiaryColor}" />
@@ -60,8 +62,10 @@
             <SolidColorBrush x:Key="InsetBrush">#F5F8FC</SolidColorBrush>
             <SolidColorBrush x:Key="TrackBrush">#E6EDF5</SolidColorBrush>
             <SolidColorBrush x:Key="PanelBorderBrush">#D1DCE9</SolidColorBrush>
-            <SolidColorBrush x:Key="TextBrush">#172235</SolidColorBrush>
-            <SolidColorBrush x:Key="MutedTextBrush">#52647B</SolidColorBrush>
+            <Color x:Key="HudTextColor">#172235</Color>
+            <Color x:Key="HudMutedTextColor">#52647B</Color>
+            <SolidColorBrush x:Key="TextBrush" Color="{StaticResource HudTextColor}" />
+            <SolidColorBrush x:Key="MutedTextBrush" Color="{StaticResource HudMutedTextColor}" />
             <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource DefaultPrimaryColor}" />
             <SolidColorBrush x:Key="SecondaryBrush" Color="{StaticResource DefaultSecondaryColor}" />
             <SolidColorBrush x:Key="TertiaryBrush" Color="{StaticResource DefaultTertiaryColor}" />

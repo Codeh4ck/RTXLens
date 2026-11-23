@@ -28,7 +28,7 @@ internal static class FrameReaderTests
         using var socket = new FakeWebSocket([new SocketPacket(bytes[..30], WebSocketMessageType.Text, false),
             new SocketPacket(bytes[30..], WebSocketMessageType.Text)]);
         var frames = 0;
-        await foreach (var frame in SensorFrameReader.ReadAsync(socket, default))
+        await foreach (var frame in SensorFrameReader.ReadAsync(socket, CancellationToken.None))
         {
             frames++;
             TestAssert.Equal(5d, frame.Sensors.Single().Value);
@@ -69,7 +69,7 @@ internal static class FrameReaderTests
         using var socket = new FakeWebSocket(packets);
         try
         {
-            await foreach (var _ in SensorFrameReader.ReadAsync(socket, default)) { }
+            await foreach (var _ in SensorFrameReader.ReadAsync(socket, CancellationToken.None)) { }
         }
         catch (InvalidDataException) { return; }
         throw new InvalidOperationException("Invalid frames must be rejected before reaching view models.");

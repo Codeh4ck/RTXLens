@@ -72,8 +72,14 @@ internal sealed partial class ShellWindow : LensWindow
         {
             ClampWindowToScreen();
             CaptureWindowPlacement();
-            InitializeWindowsIntegration(startMinimized || model.Preferences.StartMinimized);
         };
+
+        Opened += OnFirstOpened;
+        void OnFirstOpened(object? sender, EventArgs args)
+        {
+            Opened -= OnFirstOpened;
+            InitializeWindowsIntegration(startMinimized || model.Preferences.StartMinimized);
+        }
 
         Closing += OnClosing;
         Closed += OnClosed;

@@ -13,6 +13,36 @@ namespace RTXLens.UI.Tests.Controls;
 
 internal static class AvaloniaMobileAccessTests
 {
+    public static void PublicIpv4ApplyTracksEdits()
+    {
+        const string localAddress = "192.168.1.20";
+        const string publicAddress = "203.0.113.10";
+        var port = MobileAccessProtocol.DefaultPort;
+        var status = new MobileAccessStatus(true, true, port, null, null, true,
+            new MobilePortForwarding(localAddress, port), null, [new MobileDevice(Guid.NewGuid(), "Test phone", null)],
+            null, localAddress, publicAddress, 30);
+        var view = new MobileAccessView((_, _) => Task.FromResult(new MobileAccessResponse(true, Status: status)),
+            CancellationToken.None, [localAddress]);
+        var window = new Window { Content = new StackPanel { Children = { view.EditActions, view } } };
+        window.Show();
+        try
+        {
+            Dispatcher.UIThread.RunJobs();
+            var apply = window.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Apply");
+            var address = view.GetVisualDescendants().OfType<TextBox>().Single(t => AutomationProperties.GetName(t) == "Public IPv4 address");
+            TestAssert.Equal(publicAddress, address.Text);
+            TestAssert.False(apply.IsEnabled, "Opening a configured Public IPv4 connection must leave Apply disabled.");
+            address.Text = "203.0.113.11";
+            TestAssert.True(apply.IsEnabled, "Editing the saved public address should enable Apply.");
+            address.Text = publicAddress;
+            TestAssert.False(apply.IsEnabled, "Restoring the public address should disable Apply.");
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
     public static void SavesSettingsAndGeneratesPairingCode(string? screenshots)
     {
         MobileAccessRequest? applied = null;
@@ -27,7 +57,7 @@ internal static class AvaloniaMobileAccessTests
         {
             Width = 1100,
             Height = 720,
-            Content = new Border { Padding = new Thickness(18), Child = view }
+            Content = new Border { Padding = new Thickness(18), Child = new StackPanel { Children = { view.EditActions, view } } }
         };
         window.Show();
 
@@ -65,10 +95,33 @@ internal static class AvaloniaMobileAccessTests
 
             var password = view.GetVisualDescendants().OfType<TextBox>()
                 .Single(control => AutomationProperties.GetName(control) == "DDNS key password");
-            TestAssert.True(password.PasswordChar != default && string.IsNullOrEmpty(password.Text),
+            TestAssert.True(password.PasswordChar != 0 && string.IsNullOrEmpty(password.Text),
                 "The DDNS password should be masked and the saved key should not be returned to the UI.");
 
-            Click(view, "Apply mobile access");
+            var port = view.GetVisualDescendants().OfType<NumericUpDown>()
+                .Single(control => AutomationProperties.GetName(control) == "TCP port");
+            var apply = FindButton(window, "Apply");
+            TestAssert.False(apply.IsEnabled, "Freshly loaded settings must be clean.");
+            port.Value = status.Port + 1;
+            TestAssert.True(apply.IsEnabled, "Changing the port should enable Apply.");
+            port.Value = status.Port;
+            TestAssert.False(apply.IsEnabled, "Restoring the saved port should disable Apply.");
+
+            password.Text = "unsaved";
+            TestAssert.True(apply.IsEnabled, "A replacement DDNS password is an edit.");
+            password.Text = string.Empty;
+            TestAssert.False(apply.IsEnabled, "Clearing the replacement keeps the saved credentials.");
+            password.Text = "unsaved";
+            status = status with { Port = status.Port + 2 };
+            Click(window, "Reload");
+            TestAssert.True(applied is null && port.Value == status.Port && string.IsNullOrEmpty(password.Text),
+                "Reload must fetch the updated service settings and clear unsaved credentials without configuring the service.");
+
+            TestAssert.False(apply.IsEnabled, "Reload must leave the form clean.");
+            port.Value = status.Port + 1;
+            Click(window, "Apply");
+            TestAssert.True(applied?.Settings?.Port == port.Value && !apply.IsEnabled,
+                "A successful save must adopt the new port and disable Apply.");
             TestAssert.True(applied is { KeepNoIpCredentials: true, Settings: { NoIp: null, LocalAddress: "192.168.1.20" } },
                 "Saving without entering a replacement key should preserve the saved credentials on the service.");
 
@@ -122,6 +175,7 @@ internal static class AvaloniaMobileAccessTests
             {
                 case MobileAccessOperation.Configure:
                     applied = request;
+                    status = status with { Port = request.Settings!.Port };
                     break;
 
                 case MobileAccessOperation.CreateInvite:

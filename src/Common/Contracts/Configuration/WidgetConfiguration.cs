@@ -7,8 +7,15 @@ public sealed record WidgetConfiguration : System.Text.Json.Serialization.IJsonO
     void System.Text.Json.Serialization.IJsonOnDeserialized.OnDeserialized()
     {
         // Older widget profiles may contain the retired connected badge color.
-        if (Profiles is null) return;
-        foreach (var settings in Profiles.Values) settings?.Remove("connectedColor");
+        if (Profiles is null)
+        {
+            return;
+        }
+
+        foreach (var settings in Profiles.Values)
+        {
+            settings?.Remove("connectedColor");
+        }
     }
 
     public WidgetWarningPreview? Preview { get; init; }

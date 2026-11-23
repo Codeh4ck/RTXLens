@@ -84,7 +84,7 @@ internal static class MobileAccessTests
         using var client = new HttpClient(handler);
         using var delivery = new MobilePushDelivery(pairing, new ExpoMobilePushProvider(client), TimeProvider.System,
             NullLogger<MobilePushDelivery>.Instance);
-        await delivery.StartAsync(default);
+        await delivery.StartAsync(CancellationToken.None);
         try
         {
             delivery.SendSimulation("first");
@@ -99,7 +99,7 @@ internal static class MobileAccessTests
         finally
         {
             release.TrySetResult();
-            await delivery.StopAsync(default);
+            await delivery.StopAsync(CancellationToken.None);
         }
     }
 
@@ -114,7 +114,7 @@ internal static class MobileAccessTests
             logs.CreateLogger<MobilePushDelivery>());
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var receiptWarning = false;
-        await delivery.StartAsync(default);
+        await delivery.StartAsync(CancellationToken.None);
         try
         {
             // One receipt can be waiting on its due time while another 256 occupy the queue.
@@ -134,7 +134,7 @@ internal static class MobileAccessTests
         }
         finally
         {
-            await delivery.StopAsync(default);
+            await delivery.StopAsync(CancellationToken.None);
         }
         while (input.Reader.TryRead(out var record))
         {

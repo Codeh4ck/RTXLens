@@ -65,6 +65,8 @@ internal sealed class PaletteResources(Application application)
         var accent = Readable(palette.Primary, panel, 4.5);
         var onAccent = Contrast(Colors.White, accent) >= Contrast(Colors.Black, accent) ? Colors.White : Colors.Black;
         var input = Blend(inset, accent, 0.04);
+        var text = Readable(foreground, panel, 4.5);
+        var mutedText = Readable(Blend(panel, foreground, 0.65), panel, 4.5);
 
         return new ResourceDictionary
         {
@@ -73,8 +75,10 @@ internal sealed class PaletteResources(Application application)
             ["InsetBrush"] = Brush(inset),
             ["TrackBrush"] = Brush(track),
             [DesktopBrushes.PanelBorder] = Brush(Blend(background, foreground, 0.24)),
-            ["TextBrush"] = Brush(Readable(foreground, panel, 4.5)),
-            [DesktopBrushes.MutedText] = Brush(Readable(Blend(panel, foreground, 0.65), panel, 4.5)),
+            ["HudTextColor"] = text,
+            ["HudMutedTextColor"] = mutedText,
+            ["TextBrush"] = Brush(text),
+            [DesktopBrushes.MutedText] = Brush(mutedText),
             ["PrimaryBrush"] = Brush(accent),
             ["SecondaryBrush"] = Brush(Readable(palette.Secondary, panel, 4.5)),
             ["TertiaryBrush"] = Brush(Readable(palette.Tertiary, panel, 4.5)),

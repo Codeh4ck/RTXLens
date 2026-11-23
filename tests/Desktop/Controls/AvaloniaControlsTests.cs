@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
+using Avalonia.Controls.Templates;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Input;
@@ -32,6 +33,7 @@ internal static class AvaloniaControlsTests
         var runner = new TestRunner();
         runner.Run(() => RunPreviewChecks(screenshotDirectory));
         runner.Run(SavedAppearanceRoundTrips);
+        runner.Run(() => DiagnosticPickersFollowPalette(screenshotDirectory));
         runner.Run(PendingActionsDisableTheButtonAndRecoverAfterCancellation);
         runner.Run(ErrorReportsRetainSeparateCrashAndActionHistories);
         runner.Run(EditableListVirtualizesRows);
@@ -55,6 +57,7 @@ internal static class AvaloniaControlsTests
         runner.Run(() => AvaloniaDashboardTests.SafeguardLoadsAndReloadsConnectors(screenshotDirectory));
         runner.Run(AvaloniaDashboardTests.SafeguardScriptDialogsFitTheirParameters);
         runner.Run(() => AvaloniaSettingsParityTests.ExercisesSettingsAndProfiles(screenshotDirectory));
+        runner.Run(AvaloniaMobileAccessTests.PublicIpv4ApplyTracksEdits);
         runner.Run(() => AvaloniaMobileAccessTests.SavesSettingsAndGeneratesPairingCode(screenshotDirectory));
 
         runner.Run(() => RunGalleryChecks(screenshotDirectory));
@@ -434,6 +437,61 @@ internal static class AvaloniaControlsTests
         finally
         {
             File.Delete(path);
+        }
+    }
+
+    private static void DiagnosticPickersFollowPalette(string? screenshots)
+    {
+        var app = Application.Current!;
+        var previousTheme = app.RequestedThemeVariant;
+        var palette = new PaletteResources(app);
+        var dialog = new RTXLens.App.Views.Diagnostics.DiagnosticReportWindow("http://localhost:59273/", CancellationToken.None);
+        dialog.Show();
+        try
+        {
+            dialog.GetVisualDescendants().OfType<ComboBox>().Single().SelectedItem = "Custom range";
+            foreach (var mode in new[] { "dark", "light", "custom" })
+            {
+                app.RequestedThemeVariant = mode == "light" ? ThemeVariant.Light : ThemeVariant.Dark;
+                palette.Apply(mode == "custom" ? ThemePreset.All.Single(p => p.Id == "ultraviolet").Dark : null);
+                dialog.MouseMove(new Point(0, 0), RawInputModifiers.None);
+                dialog.GetVisualDescendants().OfType<ComboBox>().Single().Focus();
+                Dispatcher.UIThread.RunJobs();
+                TestAssert.True(app.TryGetResource("HudInputColor", dialog.ActualThemeVariant, out var inputColor), "Missing input color.");
+                TestAssert.True(app.TryGetResource("HudInputStrokeColor", dialog.ActualThemeVariant, out var borderColor), "Missing input border.");
+                var fill = (Color)inputColor!;
+                var stroke = (Color)borderColor!;
+                var date = dialog.GetVisualDescendants().OfType<CalendarDatePicker>().First();
+                var time = dialog.GetVisualDescendants().OfType<TimePicker>().First();
+                var dateFrame = date.GetTemplateDescendants().OfType<Border>().Single(b => b.Name == "Background" && b.TemplatedParent == date);
+                var timeButton = FindPart<Button>(time, "PART_FlyoutButton");
+                TestAssert.Equal(fill, ReadColor(dateFrame.Background));
+                TestAssert.Equal(stroke, ReadColor(dateFrame.BorderBrush));
+                TestAssert.Equal(fill, ReadColor(timeButton.Background));
+                TestAssert.Equal(stroke, ReadColor(timeButton.BorderBrush));
+                Capture(dialog, screenshots, $"diagnostic-range-{mode}.png");
+
+                date.IsDropDownOpen = true;
+                Dispatcher.UIThread.RunJobs();
+                var calendar = (Calendar)date.GetTemplateDescendants().OfType<Popup>().Single().Child!;
+                TestAssert.Equal(fill, ReadColor(calendar.Background));
+                TestAssert.Equal(stroke, ReadColor(calendar.BorderBrush));
+                date.IsDropDownOpen = false;
+
+                Click(dialog, timeButton);
+                var popup = time.GetTemplateDescendants().OfType<Popup>().Single();
+                TestAssert.True(popup.IsOpen, "Time flyout should be open.");
+                var presenter = (TimePickerPresenter)popup.Child!;
+                TestAssert.Equal(fill, ReadColor(presenter.Background));
+                TestAssert.Equal(stroke, ReadColor(presenter.BorderBrush));
+                popup.IsOpen = false;
+            }
+        }
+        finally
+        {
+            dialog.Close();
+            palette.Apply(null);
+            app.RequestedThemeVariant = previousTheme;
         }
     }
 

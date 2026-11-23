@@ -61,7 +61,7 @@ internal static class UpdateTests
             """;
 
         using var http = new HttpClient(new JsonResponseHandler(json));
-        var notes = await new ReleaseNotesClient(http).GetAsync(default);
+        var notes = await new ReleaseNotesClient(http).GetAsync(CancellationToken.None);
 
         TestAssert.Equal("v1.0.6", notes.ReleaseTag);
         TestAssert.Equal("- Add **Safeguard+ History**.\n- Improve updates.", notes.Changelog);
@@ -76,20 +76,20 @@ internal static class UpdateTests
         using var fixture = new UpdateTestFixture();
         var first = fixture.Create();
         first.Configure(true, UpdateFrequency.Weekly);
-        await first.CheckAsync(false, default);
-        await first.CheckAsync(false, default);
+        await first.CheckAsync(false, CancellationToken.None);
+        await first.CheckAsync(false, CancellationToken.None);
         TestAssert.Equal(1, fixture.Requests);
         fixture.Clock.Now = fixture.Clock.Now.AddDays(6);
-        await first.CheckAsync(false, default);
+        await first.CheckAsync(false, CancellationToken.None);
         TestAssert.Equal(1, fixture.Requests);
         fixture.Clock.Now = fixture.Clock.Now.AddDays(1);
-        await first.CheckAsync(false, default);
+        await first.CheckAsync(false, CancellationToken.None);
         TestAssert.Equal(2, fixture.Requests);
 
         var restarted = fixture.Create();
         TestAssert.False(restarted.LastChecked == "Never", "The last successful check must survive restart.");
         restarted.Configure(true, UpdateFrequency.Weekly);
-        await restarted.CheckAsync(false, default);
+        await restarted.CheckAsync(false, CancellationToken.None);
         TestAssert.Equal(3, fixture.Requests);
     }
 
@@ -98,9 +98,9 @@ internal static class UpdateTests
         using var fixture = new UpdateTestFixture();
         var model = fixture.Create();
         model.Configure(false, UpdateFrequency.Daily);
-        await model.CheckAsync(false, default);
+        await model.CheckAsync(false, CancellationToken.None);
         TestAssert.Equal(0, fixture.Requests);
-        await model.CheckAsync(true, default);
+        await model.CheckAsync(true, CancellationToken.None);
         TestAssert.Equal(1, fixture.Requests);
         TestAssert.Equal(2, model.Available.Count);
     }
@@ -109,15 +109,15 @@ internal static class UpdateTests
     {
         using var fixture = new UpdateTestFixture();
         var model = fixture.Create();
-        await model.CheckAsync(false, default);
-        await model.DismissAsync(model.Available.Single(notice => notice.Component == "desktop"), true, default);
+        await model.CheckAsync(false, CancellationToken.None);
+        await model.DismissAsync(model.Available.Single(notice => notice.Component == "desktop"), true, CancellationToken.None);
         TestAssert.Equal("service", model.Available.Single().Component);
 
         var restarted = fixture.Create();
-        await restarted.CheckAsync(false, default);
+        await restarted.CheckAsync(false, CancellationToken.None);
         TestAssert.Equal("service", restarted.Available.Single().Component);
         fixture.Manifest = fixture.Manifest with { Desktop = "1.2.0", ReleaseTag = "v1.2.0" };
-        await restarted.CheckAsync(true, default);
+        await restarted.CheckAsync(true, CancellationToken.None);
         TestAssert.Equal(2, restarted.Available.Count);
         TestAssert.True(restarted.Available.All(notice => notice.ReleaseUrl.EndsWith("/v1.2.0", StringComparison.Ordinal)),
             "Every notice must link to the release that supplied its manifest.");
@@ -128,16 +128,16 @@ internal static class UpdateTests
         using var fixture = new UpdateTestFixture();
         var model = fixture.Create();
         model.Configure(true, UpdateFrequency.Weekly);
-        await model.CheckAsync(false, default);
+        await model.CheckAsync(false, CancellationToken.None);
 
         foreach (var notice in model.Available.ToArray())
         {
-            await model.DismissAsync(notice, false, default);
+            await model.DismissAsync(notice, false, CancellationToken.None);
         }
 
         TestAssert.False(model.HasUpdates, "Remind later hides the current notices.");
         fixture.Clock.Now = fixture.Clock.Now.AddHours(24);
-        await model.CheckAsync(false, default);
+        await model.CheckAsync(false, CancellationToken.None);
         TestAssert.Equal(1, fixture.Requests);
         TestAssert.Equal(2, model.Available.Count);
     }
@@ -146,13 +146,13 @@ internal static class UpdateTests
     {
         using var fixture = new UpdateTestFixture { Fail = true };
         var model = fixture.Create();
-        await model.CheckAsync(false, default);
-        await model.CheckAsync(false, default);
+        await model.CheckAsync(false, CancellationToken.None);
+        await model.CheckAsync(false, CancellationToken.None);
         TestAssert.Equal(1, fixture.Requests);
         TestAssert.False(model.Checking, "Offline checks must complete without throwing.");
         fixture.Fail = false;
         fixture.ServiceVersion = null;
-        await model.CheckAsync(true, default);
+        await model.CheckAsync(true, CancellationToken.None);
         TestAssert.Equal("desktop", model.Available.Single().Component);
         TestAssert.Equal("Version unavailable", model.ServiceVersion);
     }
@@ -160,7 +160,7 @@ internal static class UpdateTests
     private static async Task OlderServicesCanOmitTheVersionEndpointAsync()
     {
         using var http = new HttpClient(new VersionResponseHandler(HttpStatusCode.NotFound)) { BaseAddress = new Uri("http://localhost:59273/") };
-        TestAssert.True(await new MonitoringApiClient(http).GetVersionAsync(default) is null, "An older service must remain usable.");
+        TestAssert.True(await new MonitoringApiClient(http).GetVersionAsync(CancellationToken.None) is null, "An older service must remain usable.");
     }
 
     private static async Task MigratesUpdateDefaultsAndPersistsOptOutAsync()

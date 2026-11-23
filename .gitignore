@@ -349,6 +349,7 @@ healthchecksdb
 MigrationBackup/
 
 # RTX Lens generated output and local tooling
+/tools/RTXLens.Diagnostics/
 /.dist/
 /artifacts/
 /.idea/

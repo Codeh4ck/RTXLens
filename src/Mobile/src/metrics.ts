@@ -55,8 +55,16 @@ export function groupMetrics(sensors: SensorReading[], kind: 'power' | 'gpu'): M
 }
 
 export function hardwareTabGroups(sensors: SensorReading[], kind: 'power' | 'gpu') {
-  return groupMetrics(sensors, kind).sort((left, right) =>
+  const groups = groupMetrics(sensors, kind).sort((left, right) =>
     (hardwareOrder.get(left.source) ?? hardwareOrder.size) - (hardwareOrder.get(right.source) ?? hardwareOrder.size));
+  if (kind !== 'power') return groups;
+
+  const astralReadings = groups.filter(group => group.source === AsusId).flatMap(group => group.readings)
+    .filter(reading => reading.quality === 'Valid' && reading.value !== null);
+  return groups.filter(group => group.source !== NvidiaId || group.readings.some(({ identity, quality, value }) =>
+    quality === 'Valid' && value !== null && !astralReadings.some(({ identity: other }) =>
+      other.deviceId === identity.deviceId && other.component === identity.component && other.metric === identity.metric
+      && other.channel === identity.channel && other.connectorId === identity.connectorId)));
 }
 
 // NVIDIA and Astral use the same adapter ID from the shared hardware reader.

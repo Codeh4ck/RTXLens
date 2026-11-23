@@ -126,13 +126,13 @@ internal static class MsiPanelTests
             {
                 ["msi-psu"] = settings with { Options = JsonSerializer.SerializeToElement(options, ClientJsonContext.Default.MsiOptions) }
             }
-        }, baseline.Version!, default);
+        }, baseline.Version!, CancellationToken.None);
 
         editor.ReceiveMsiCurveUpdate(saved, curve, baseline.Version!);
         TestAssert.Equal(2000d, msi.PollIntervalMs);
         TestAssert.True(editor.IsDirty, "Unrelated local drafts must remain unsaved.");
         msi.Msi.FanModeIndex = (int)MsiFanControl.Automatic;
-        await editor.ApplyAsync(default);
+        await editor.ApplyAsync(CancellationToken.None);
         var actual = api.Configuration.Configuration.Plugins["msi-psu"].Options!.Value.Deserialize(ClientJsonContext.Default.MsiOptions)!;
         TestAssert.Equal(MsiFanControl.Automatic, actual.FanControl);
         TestAssert.False(editor.HasExternalChanges, "The main Apply must use the updated version after a curve save.");
