@@ -81,6 +81,20 @@ function Invoke-SetupProcess
     return $process.ExitCode
 }
 
+function Assert-AutomaticServiceStart
+{
+    $settings = Get-ItemProperty -LiteralPath "HKLM:\SYSTEM\CurrentControlSet\Services\$serviceName"
+    if ($settings.Start -ne 2 -or $settings.DelayedAutoStart)
+    {
+        throw 'The monitoring service must use Automatic startup with delayed start disabled.'
+    }
+}
+
+function Set-LegacyDelayedStart
+{
+    [void](Invoke-SetupProcess (Join-Path $env:SystemRoot 'System32\sc.exe') "config $serviceName start= delayed-auto" @(0))
+}
+
 function Assert-Installed
 {
     param([bool] $Desktop)
@@ -120,6 +134,10 @@ $logs = [IO.Path]::GetFullPath($OutputDirectory)
 
 [void](Invoke-SetupProcess $setup ('-quiet -norestart -log "' + (Join-Path $logs 'install.log') + '"'))
 Assert-Installed $true
+if (-not $UpgradeSetupPath)
+{
+    Assert-AutomaticServiceStart
+}
 
 [void](Invoke-SetupProcess $msiexec ('/i ' + $quoteMsi + ' /qn /norestart ADDLOCAL=Service REMOVE=Desktop /l*v "' + (Join-Path $logs 'remove-desktop.log') + '"'))
 Assert-Installed $false
@@ -134,6 +152,10 @@ if (-not $repairFile.StartsWith([IO.Path]::GetFullPath($installDirectory) + '\',
     throw 'Invalid repair-test file path.'
 }
 
+if (-not $UpgradeSetupPath)
+{
+    Set-LegacyDelayedStart
+}
 Remove-Item -LiteralPath $repairFile
 
 [void](Invoke-SetupProcess $msiexec ('/fa ' + $quoteMsi + ' /qn /norestart /l*v "' + (Join-Path $logs 'repair.log') + '"'))
@@ -147,9 +169,11 @@ Assert-Installed $true
 
 if ($UpgradeSetupPath)
 {
+    Set-LegacyDelayedStart
     [void](Invoke-SetupProcess ([IO.Path]::GetFullPath($UpgradeSetupPath)) ('-quiet -norestart -log "' + (Join-Path $logs 'upgrade.log') + '"'))
     Assert-Installed $true
 }
+Assert-AutomaticServiceStart
 
 [void](Invoke-SetupProcess $setup ('-uninstall -quiet -norestart -log "' + (Join-Path $logs 'uninstall.log') + '"'))
 

@@ -21,11 +21,12 @@ export const homeCards = [
 export type HomeCardId = typeof homeCards[number]['id'];
 export type HomePinPanel = { kind: 'pins'; pluginId: string; deviceId: string; connectorId: string | null };
 export type HomePanel = { kind: 'metric'; id: HomeCardId } | HomePinPanel;
-export type DisplayPreferences = { homePanels: HomePanel[]; hideIdleMsiConnectors: boolean };
+export type DisplayPreferences = { homePanels: HomePanel[]; hideIdleMsiConnectors: boolean; useGrouping: boolean };
 
 export const defaultDisplayPreferences: DisplayPreferences = {
   homePanels: homeCards.map(card => ({ kind: 'metric', id: card.id })),
   hideIdleMsiConnectors: false,
+  useGrouping: false,
 };
 
 export function homePanelKey(panel: HomePanel): string {
@@ -73,6 +74,7 @@ export function decodeDisplayPreferences(value: string): DisplayPreferences {
 
   return {
     homePanels: panels,
+    useGrouping: 'useGrouping' in parsed && parsed.useGrouping === true,
     hideIdleMsiConnectors: 'hideIdleMsiConnectors' in parsed && parsed.hideIdleMsiConnectors === true,
   };
 }

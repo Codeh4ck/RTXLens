@@ -1,15 +1,16 @@
-import { NvidiaId, WireViewId } from './pluginIds.ts';
+import { BoardPower, ConnectorSummary, GpuOverview, LinkLanes, MetricGrid } from './gpuInstruments';
+import { AsusId, NvidiaId, WireViewId } from './pluginIds.ts';
 import { useColors, useThemeStyles, type Colors } from './appearance';
 import { HomeLayout } from './homeLayout';
 import { useContext, useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import {
-  boostLimitRows, findMetric, formatReading, groupMetrics, isPin, metricLabel, number, pinCurrentSummary, pinMetrics, pinPanelSources, pinPanelTitle, powerConnectorGroups,
-  sourceName, wireViewFaults, type PinMetric,
+  boostLimitRows, findMetric, groupMetrics, hardwareTabGroups, isPin, metricLabel, pinCurrentSummary, pinMetrics, pinPanelSources, pinPanelTitle, powerConnectorGroups,
+  gpuStatusRows, isGpuPowerReading, sourceName, wireViewFaults, type PinMetric,
 } from './metrics';
 import { homeCards, homePanelKey, type HomeCardId, type HomePanel } from './mobilePreferences';
-import { TemperatureUnitContext } from './mobileSettings';
+import { ReadingFormatContext } from './mobileSettings';
 import type { SensorFrame, SensorReading } from './protocol';
 import { Card, Icon, Page, PanelList, Selection, useStyles, type IconName, type Tab } from './ui';
 
@@ -25,7 +26,7 @@ export function Home({
   const styles = useStyles();
   const colors = useColors();
   const local = useThemeStyles(createLocalStyles);
-  const temperatureUnit = useContext(TemperatureUnitContext);
+  const { formatReading } = useContext(ReadingFormatContext);
   const sensors = frame?.sensors ?? [];
   const gpuGroups = groupMetrics(sensors, 'gpu');
   const gpu = (gpuGroups.find(group => group.source === NvidiaId) ?? gpuGroups[0])?.readings ?? [];
@@ -41,7 +42,7 @@ export function Home({
   const tiles: Record<Exclude<HomeCardId, 'status'>, { value: string; icon: IconName; tab: Tab }> = {
     gpuUsage: { value: formatReading(findMetric(gpu, 'GpuCore', 'Utilization')), icon: 'activity', tab: 'gpu' },
     coreTemperature: {
-      value: formatReading(findMetric(gpu, 'GpuCore', 'Temperature'), temperatureUnit), icon: 'temp', tab: 'gpu',
+      value: formatReading(findMetric(gpu, 'GpuCore', 'Temperature')), icon: 'temp', tab: 'gpu',
     },
     connectorPower: { value: formatReading(connectorPower), icon: 'power', tab: 'power' },
     activeWarnings: { value: String(warningCount), icon: 'warnings', tab: 'warnings' },
@@ -108,7 +109,7 @@ export function Power({ frame, live, connectionCard, hideIdleMsiConnectors }: Te
   const [pinMetric, setPinMetric] = useState<PinMetric>('Current');
   if (!frame) return <Page title="Power">{connectionCard}</Page>;
 
-  const groups = groupMetrics(frame.sensors, 'power');
+  const groups = hardwareTabGroups(frame.sensors, 'power');
   const selected = groups.find(group => group.key === source) ?? groups[0];
   const connectors = selected ? powerConnectorGroups(selected, hideIdleMsiConnectors) : [];
   const faults = selected?.source === WireViewId ? wireViewFaults(selected.readings) : [];
@@ -121,18 +122,18 @@ export function Power({ frame, live, connectionCard, hideIdleMsiConnectors }: Te
       {selected ? (
         <>
           {connectors.length === 0 && <Card title="No MSI connectors drawing current" icon="power">{null}</Card>}
-          {connectors.map(([id, readings]) => {
+          {connectors.map(([id, sourceReadings]) => {
+            const readings = selected.source === AsusId
+              ? sourceReadings.filter(r => r.identity.metric !== 'ImbalanceDetected') : sourceReadings;
             const pins = readings.filter(isPin);
-            const totalOrder = ['PowerCapability', 'Power', 'Current', 'Voltage'];
-            const totals = readings.filter(reading => ['GpuConnector', 'PsuConnector'].includes(reading.identity.component))
-              .sort((a, b) => totalOrder.indexOf(a.identity.metric) - totalOrder.indexOf(b.identity.metric));
+            const totals = readings.filter(reading => ['GpuConnector', 'PsuConnector'].includes(reading.identity.component));
             const detail = readings.filter(reading => !isPin(reading) && !totals.includes(reading));
             const limit = frame?.pinLimits.find(limit => limit.pluginId === selected.source
               && limit.deviceId === readings[0]?.identity.deviceId)?.overcurrentAmperes;
             return (
               <View key={id ?? 'default'} style={local.section}>
                 {totals.length > 0 && <Card title={id ? `Connector ${id}` : selected.name} icon="power">
-                  <PanelList>{totals.map(reading => <Reading key={reading.identity.key} reading={reading} />)}</PanelList>
+                  <ConnectorSummary readings={totals} />
                 </Card>}
                 {pins.length > 0 && <PinChart pins={pins} metric={pinMetric} limit={limit} onSelect={setPinMetric} />}
                 {detail.length > 0 && <Card title={totals.length ? 'Device readings' : selected.name} icon="monitor">
@@ -166,6 +167,7 @@ function PinChart({ title = 'Pin distribution', pins, metric, limit, onSelect }:
   const styles = useStyles();
   const colors = useColors();
   const local = useThemeStyles(createLocalStyles);
+  const { number, formatReading } = useContext(ReadingFormatContext);
   const options = pinMetrics.filter(name => pins.some(pin => pin.identity.metric === name));
   const selected = options.includes(metric) ? metric : options[0];
   if (!selected) {
@@ -232,22 +234,25 @@ function PinStat({ label, description, value, icon }: { label: string; descripti
 export function Gpu({ frame, live, connectionCard }: TelemetryProps) {
   const styles = useStyles();
   const local = useThemeStyles(createLocalStyles);
+  const { number, formatReading } = useContext(ReadingFormatContext);
   const [source, setSource] = useState('');
   if (!frame) return <Page title="GPU">{connectionCard}</Page>;
 
-  const groups = groupMetrics(frame.sensors, 'gpu');
+  const groups = hardwareTabGroups(frame.sensors, 'gpu');
   const selected = groups.find(group => group.key === source) ?? groups.find(group => group.source === NvidiaId) ?? groups[0];
   const readings = selected?.readings ?? [];
-  const diagnostics = ['GpuPowerLimits', 'GpuPerformance', 'GpuPcie', 'GpuCrossbar', 'GpuSystem'];
-  const gpuPower = readings.filter(reading => reading.identity.component === 'GpuPowerLimits'
-    || (reading.identity.component === 'GpuBoard' && reading.identity.metric === 'Power'));
-  const health = readings.filter(reading => !diagnostics.includes(reading.identity.component) && !gpuPower.includes(reading)
-    && !['MemoryTotal', 'MemoryFree'].includes(reading.identity.metric));
+  const gpuPower = readings.filter(isGpuPowerReading);
+  const health = gpuStatusRows(readings, formatReading);
   const performance = readings.filter(reading => reading.identity.component === 'GpuPerformance'
     && !['SupportedClockReasons', 'ClockLimitDuration'].includes(reading.identity.metric));
+  const boardPower = gpuPower.find(r => r.identity.component === 'GpuBoard' && r.identity.metric === 'Power');
+  const enforced = findMetric(gpuPower, 'GpuPowerLimits', 'EnforcedPowerLimit');
   const limits = boostLimitRows(readings);
   const pcie = readings.filter(reading => reading.identity.component === 'GpuPcie');
-  const memoryTotal = findMetric(readings, 'GpuMemory', 'MemoryTotal');
+
+  const link = linkSpeed(pcie, 'LinkGeneration', 'LinkWidth', number);
+  const maximumLink = linkSpeed(pcie, 'MaximumSystemLinkGeneration', 'MaximumLinkWidth', number);
+  const traffic = pcie.filter(r => ['ReceiveThroughput', 'TransmitThroughput'].includes(r.identity.metric));
 
   return (
     <Page title="GPU" description={lastReading(frame, live)}>
@@ -256,15 +261,10 @@ export function Gpu({ frame, live, connectionCard }: TelemetryProps) {
         options={groups.map(group => ({ id: group.key, label: group.name }))} onSelect={setSource} />}
       {selected ? (
         <>
-          {health.length > 0 && <Card title="GPU status" icon="gpu">
-            <PanelList>{health.map(reading => (
-              <Reading key={reading.identity.key} reading={reading}
-                value={reading.identity.metric === 'MemoryUsed' && memoryTotal && reading.quality === 'Valid' && reading.value !== null
-                  ? `${formatReading(reading)} / ${formatReading(memoryTotal)}` : undefined} />
-            ))}</PanelList>
-          </Card>}
+          <GpuOverview rows={health} readings={readings} />
           {(gpuPower.length > 0 || performance.length > 0) && <Card title="GPU power status" icon="power">
-            <PanelList>{[...performance, ...gpuPower].map(reading => <Reading key={reading.identity.key} reading={reading} />)}</PanelList>
+            {boardPower && <BoardPower watts={boardPower} limit={enforced} />}
+            <MetricGrid rows={[...gpuPower.filter(r => r !== boardPower), ...performance].map(reading => ({ reading }))} />
           </Card>}
           {limits.length > 0 && <Card title="GPU boost limits" icon="activity">
             <PanelList>
@@ -283,10 +283,18 @@ export function Gpu({ frame, live, connectionCard }: TelemetryProps) {
             </PanelList>
           </Card>}
           {pcie.length > 0 && <Card title="GPU PCIe status" icon="pcie">
+            <View style={local.linkSummary}>
+              <Text style={styles.caption}>Current link</Text>
+              <View style={local.linkLine}>
+                <Text style={local.linkValue}>{link.name}</Text>
+                {link.rate && <Text style={styles.caption}>{link.rate}</Text>}
+              </View>
+              <LinkLanes readings={pcie} />
+              <Text style={styles.caption}>Maximum link · {[maximumLink.name, maximumLink.rate].filter(Boolean).join(' · ')}</Text>
+            </View>
+            {traffic.length > 0 && <MetricGrid rows={traffic.map(reading => ({ reading }))} />}
             <PanelList>
-              <ReadingRow icon="pcie" label="PCIe Link Speed" value={linkSpeed(pcie, 'LinkGeneration', 'LinkWidth')} />
-              <ReadingRow icon="pcie" label="Max PCIe Link Speed" value={linkSpeed(pcie, 'MaximumSystemLinkGeneration', 'MaximumLinkWidth')} />
-              {pcie.filter(reading => !['LinkGeneration', 'LinkWidth', 'LinkSpeed', 'MaximumSystemLinkGeneration', 'MaximumLinkWidth',
+              {pcie.filter(reading => !traffic.includes(reading) && !['LinkGeneration', 'LinkWidth', 'LinkSpeed', 'MaximumSystemLinkGeneration', 'MaximumLinkWidth',
                 'MaximumLinkSpeed'].includes(reading.identity.metric)).map(reading => <Reading key={reading.identity.key} reading={reading}
                   value={reading.identity.metric === 'MaximumGpuLinkGeneration' && reading.quality === 'Valid' && reading.value !== null
                     ? `Gen ${reading.value}` : undefined} />)}
@@ -298,12 +306,14 @@ export function Gpu({ frame, live, connectionCard }: TelemetryProps) {
   );
 }
 
-function linkSpeed(readings: SensorReading[], genMetric: string, widthMetric: string) {
+function linkSpeed(readings: SensorReading[], genMetric: string, widthMetric: string, number: (value: number, digits: number) => string) {
   const generation = findMetric(readings, 'GpuPcie', genMetric)?.value;
   const width = findMetric(readings, 'GpuPcie', widthMetric)?.value;
   const rate = generation ? [0, 2.5, 5, 8, 16, 32, 64, 128][generation] : undefined;
-  return [generation && `Gen ${generation}`, width && `×${width}`, rate && `· ${number(rate, 1)} GT/s per lane`]
-    .filter(Boolean).join(' ') || 'Unavailable';
+  return {
+    name: [generation && `Gen ${generation}`, width && `×${width}`].filter(Boolean).join(' ') || 'Unavailable',
+    rate: rate ? `${number(rate, 1)} GT/s per lane` : undefined,
+  };
 }
 
 export function Warnings({ frame, live, connectionCard, simulations, history, showHistory }: TelemetryProps & {
@@ -355,11 +365,11 @@ function Empty({ icon, title, live }: { icon: IconName; title: string; live: boo
   </Card>;
 }
 
-function Reading({ reading, value }: { reading: SensorReading; value?: string }) {
-  const temperatureUnit = useContext(TemperatureUnitContext);
+function Reading({ reading, label, value }: { reading: SensorReading; label?: string; value?: string }) {
+  const { formatReading } = useContext(ReadingFormatContext);
   const fault = (reading.identity.metric === 'FaultLog' || reading.identity.metric === 'FaultStatus')
     && reading.quality === 'Valid' && reading.value !== null && reading.value !== 0;
-  return <ReadingRow label={metricLabel(reading)} value={value ?? formatReading(reading, temperatureUnit)} icon={readingIcon(reading)} fault={fault} />;
+  return <ReadingRow label={label ?? metricLabel(reading)} value={value ?? formatReading(reading)} icon={readingIcon(reading)} fault={fault} />;
 }
 
 const metricIcons: Partial<Record<string, IconName>> = {
@@ -402,7 +412,10 @@ function time(date: string) {
 const createLocalStyles = (colors: Colors) => StyleSheet.create({
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   status: { fontSize: 14, fontWeight: '700' },
-  tileValue: { color: colors.text, fontWeight: '700', fontSize: 22, fontVariant: ['tabular-nums'] },
+  linkSummary: { gap: 8 },
+  linkLine: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', justifyContent: 'space-between', gap: 6 },
+  linkValue: { color: colors.tertiary, fontSize: 25, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  tileValue: { color: colors.secondary, fontWeight: '700', fontSize: 22, fontVariant: ['tabular-nums'] },
   unavailable: { color: colors.muted, fontSize: 13 },
   section: { gap: 12 },
   reading: { flexDirection: 'row', alignItems: 'center', gap: 9, minHeight: 43, paddingVertical: 7, paddingHorizontal: 2 },

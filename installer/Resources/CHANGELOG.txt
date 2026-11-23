@@ -1,3 +1,6 @@
+1.1.8 - Windows service startup
+- Fresh installs, upgrades and repairs set RTX Lens Service to Automatic and clear the delayed-start flag.
+
 1.1.7 - NVIDIA clock reporting fix
 - Fixed the NVIDIA clock readings in the desktop app and iCUE widget. Crossbar previously showed the System clock, and System showed the Memory clock.
 

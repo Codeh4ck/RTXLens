@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { decodeFrame, decodePairingCode, decodeSavedComputer, requestPairing } from '../src/protocol.ts';
-import { boostLimitRows, groupMetrics, metricLabel, formatReading, pinCurrentSummary, pinPanelSources, powerConnectorGroups, wireViewFaults } from '../src/metrics.ts';
+import { number, boostLimitRows, gpuStatusRows, groupMetrics, hardwareTabGroups, metricLabel, formatReading, pinCurrentSummary, pinPanelSources, powerConnectorGroups, wireViewFaults } from '../src/metrics.ts';
 import { destinations, localProbeTimeout, localSwitchAddress, retryDelay, selectConnectionIssue, sessionResult } from '../src/connection.ts';
 import { decodeIncident, decodeIncidentPage, warningNotificationIncident } from '../src/incidentProtocol.ts';
 import {
@@ -93,6 +93,49 @@ test('decodes a versioned frame and ignores malformed readings', () => {
   assert.equal(decodeFrame(JSON.stringify({ ...frame, schemaVersion: 2 })), null);
 });
 
+test('GPU status shows reported clocks together and pairs fan readings by channel', () => {
+  const sensor = (component, metric, channel, unit, value) => ({
+    identity: { key: `${component}/${metric}/${channel}`, pluginId: 'generic-nvidia',
+      deviceId: 'gpu-1', connectorId: null, component, metric, channel },
+    unit, value, quality: value === null ? 'Unavailable' : 'Valid',
+  });
+  const clock = (component, value) => sensor(component, 'Clock', null, 'Megahertz', value);
+  const speed = (channel, rpm) => sensor('GpuFan', 'FanSpeed', channel, 'Rpm', rpm);
+  const duty = (channel, percent) => sensor('GpuFan', 'FanDuty', channel, 'Percent', percent);
+  const display = readings => gpuStatusRows(readings).map(({ reading, label, value }) =>
+    [label ?? metricLabel(reading), value ?? formatReading(reading)]);
+  assert.deepEqual(display([
+    duty(2, 35), clock('GpuSystem', 800), speed(1, 0), clock('GpuMemory', 405),
+    duty(1, 0), speed(2, 620), clock('GpuCrossbar', 700), clock('GpuCore', 225),
+  ]), [
+    ['Core clock', '225 MHz'], ['Memory clock', '405 MHz'], ['Crossbar clock', '700 MHz'],
+    ['System clock', '800 MHz'], ['Fan 1', '0 RPM (0%)'], ['Fan 2', '620 RPM (35%)'],
+  ]);
+  assert.deepEqual(display([clock('GpuSystem', null), speed(2, 475), duty(2, null), duty(4, 30)]),
+    [['System clock', 'Unavailable'], ['Fan 2', '475 RPM'], ['Fan 4', '30% duty']]);
+  assert.deepEqual(display([]), []);
+});
+
+test('groups thousands only when enabled and retains the locale decimal separator', () => {
+  assert.equal(decodeDisplayPreferences('{}').useGrouping, false);
+  assert.equal(decodeDisplayPreferences('{"useGrouping":true}').useGrouping, true);
+  assert.equal(number(17500.5, 1, false, 'de-DE'), '17500,5');
+  assert.equal(number(17500.5, 1, true, 'de-DE'), '17.500,5');
+  assert.equal(number(17500.5, 1, true, 'en-US'), '17,500.5');
+});
+
+test('orders available Power and GPU source tabs independently of telemetry arrival order', () => {
+  const expected = ['wireview-pro2', 'asus-astral', 'msi-psu', 'generic-nvidia', 'extra-source'];
+  for (const [page, component] of [['power', 'GpuConnector'], ['gpu', 'GpuCore']]) {
+    const readings = expected.toReversed().map(pluginId => ({
+      identity: { pluginId, deviceId: 'device', component }, quality: 'Valid', value: 1,
+    }));
+    const sources = sensors => hardwareTabGroups(sensors, page).map(group => group.source);
+    assert.deepEqual(sources(readings), expected);
+    assert.deepEqual(sources(readings.filter(r => r.identity.pluginId !== 'asus-astral')), expected.filter(id => id !== 'asus-astral'));
+  }
+});
+
 test('keeps pin measurements from different devices and PSU connectors distinguishable', () => {
   const pin = (deviceId, connectorId, channel) => ({
     identity: { key: `${deviceId}/${connectorId}/${channel}`, pluginId: 'msi-psu', deviceId, connectorId,
@@ -129,10 +172,10 @@ test('keeps default Home cards and restores custom selections including an empty
   assert.deepEqual(decodeDisplayPreferences('{"layoutVersion":2,"homePanels":[]}').homePanels, []);
   assert.deepEqual(decodeDisplayPreferences('{}'), defaultDisplayPreferences);
   assert.deepEqual(decodeDisplayPreferences('{"visibleHomeCards":[],"hideIdleMsiConnectors":true}'), {
-    homePanels: [{ kind: 'metric', id: 'status' }], hideIdleMsiConnectors: true,
+    homePanels: [{ kind: 'metric', id: 'status' }], hideIdleMsiConnectors: true, useGrouping: false,
   });
   assert.deepEqual(decodeDisplayPreferences('{"visibleHomeCards":["activeWarnings","coreTemperature","missing","activeWarnings"]}'), {
-    homePanels: [{ kind: 'metric', id: 'status' }, { kind: 'metric', id: 'coreTemperature' }, { kind: 'metric', id: 'activeWarnings' }], hideIdleMsiConnectors: false,
+    homePanels: [{ kind: 'metric', id: 'status' }, { kind: 'metric', id: 'coreTemperature' }, { kind: 'metric', id: 'activeWarnings' }], hideIdleMsiConnectors: false, useGrouping: false,
   });
 });
 

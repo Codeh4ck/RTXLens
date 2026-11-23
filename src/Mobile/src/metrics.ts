@@ -1,7 +1,11 @@
 import { pluginNames } from './pluginNames.ts';
-import { MsiId } from './pluginIds.ts';
+import { AsusId, MsiId, NvidiaId, WireViewId } from './pluginIds.ts';
 import { homePanelKey, type HomePinPanel, type TemperatureUnit } from './mobilePreferences.ts';
 import type { SensorReading } from './protocol';
+
+const hardwareOrder = new Map<string, number>(
+  [WireViewId, AsusId, MsiId, NvidiaId].map((id, index) => [id, index]),
+);
 
 export const pinMetrics = ['Current', 'Power', 'Voltage'] as const;
 export type PinMetric = typeof pinMetrics[number];
@@ -48,6 +52,11 @@ export function groupMetrics(sensors: SensorReading[], kind: 'power' | 'gpu'): M
       labels.set(group.name, index);
       return index === 1 ? group : { ...group, name: `${group.name} ${index}` };
     });
+}
+
+export function hardwareTabGroups(sensors: SensorReading[], kind: 'power' | 'gpu') {
+  return groupMetrics(sensors, kind).sort((left, right) =>
+    (hardwareOrder.get(left.source) ?? hardwareOrder.size) - (hardwareOrder.get(right.source) ?? hardwareOrder.size));
 }
 
 export function findMetric(sensors: SensorReading[], component: string, metric: string, channel?: number) {
@@ -115,8 +124,64 @@ const labels: Record<string, string> = {
   ReplayCount: 'PCIe replays', ReplayRolloverCount: 'PCIe replay rollovers', SupportedPerformanceStates: 'Supported P-states',
 };
 
+const gpuClockLabels = new Map([
+  ['GpuCore', 'Core clock'], ['GpuMemory', 'Memory clock'],
+  ['GpuCrossbar', 'Crossbar clock'], ['GpuSystem', 'System clock'],
+]);
+
+export function isGpuPowerReading({ identity }: SensorReading) {
+  return identity.component === 'GpuPowerLimits' || (identity.component === 'GpuBoard' && identity.metric === 'Power');
+}
+
+type GpuStatusRow = { reading: SensorReading; label?: string; value?: string };
+
+// The GPU page passes readings for a single selected device.
+export function gpuStatusRows(readings: SensorReading[], format = formatReading): GpuStatusRow[] {
+  const clocks = new Map<string, GpuStatusRow>();
+  const other: GpuStatusRow[] = [];
+  const fans = new Map<number, { reading: SensorReading; speed?: SensorReading; duty?: SensorReading }>();
+  const memoryTotal = findMetric(readings, 'GpuMemory', 'MemoryTotal');
+  for (const reading of readings) {
+    const { component, metric, channel } = reading.identity;
+    if (isGpuPowerReading(reading) || component === 'GpuPcie' || component === 'GpuPerformance'
+      || metric === 'MemoryTotal' || metric === 'MemoryFree') continue;
+    if (metric === 'Clock' && gpuClockLabels.has(component)) {
+      clocks.set(component, { reading });
+    } else if (component === 'GpuFan' && (metric === 'FanSpeed' || metric === 'FanDuty')) {
+      const index = channel ?? 1;
+      const fan = fans.get(index) ?? { reading };
+      if (metric === 'FanSpeed') fan.speed = reading;
+      else fan.duty = reading;
+      fans.set(index, fan);
+    } else if (metric === 'MemoryUsed' && memoryTotal && reading.quality === 'Valid' && reading.value !== null) {
+      other.push({ reading, value: `${format(reading)} / ${format(memoryTotal)}` });
+    } else {
+      other.push({ reading });
+    }
+  }
+
+  const rows: GpuStatusRow[] = [];
+  for (const component of gpuClockLabels.keys()) {
+    const clock = clocks.get(component);
+    if (clock) rows.push(clock);
+  }
+  rows.push(...other);
+  for (const [index, { reading, speed, duty }] of [...fans].sort(([a], [b]) => a - b)) {
+    const rpm = format(speed);
+    const hasDuty = duty?.quality === 'Valid' && duty.value !== null;
+    let value = rpm;
+    if (hasDuty) {
+      const percent = format(duty);
+      value = speed?.quality === 'Valid' && speed.value !== null ? `${rpm} (${percent})` : `${percent} duty`;
+    }
+    rows.push({ reading, label: `Fan ${index}`, value });
+  }
+  return rows;
+}
+
 export function metricLabel({ identity }: SensorReading) {
   const { component, metric, channel } = identity;
+  if (metric === 'Clock') return gpuClockLabels.get(component) ?? words(metric);
   if (metric === 'Temperature') {
     if (component === 'GpuCore') return 'Core temperature';
     if (component === 'GpuMemory') return 'VRAM temperature';
@@ -126,12 +191,10 @@ export function metricLabel({ identity }: SensorReading) {
     if (component === 'Psu') return 'PSU temperature';
   }
   if (component === 'GpuCore') {
-    if (metric === 'Clock') return 'Core clock';
     if (metric === 'Voltage') return 'Core voltage';
     if (metric === 'Utilization') return 'GPU usage';
   }
   if (component === 'GpuMemory') {
-    if (metric === 'Clock') return 'Memory clock';
     if (metric === 'Utilization') return 'Memory usage';
   }
   if (component === 'GpuFan' || component === 'Psu') {
@@ -188,7 +251,7 @@ export function boostLimitRows(readings: SensorReading[]) {
   return rows;
 }
 
-export function formatReading(sensor?: SensorReading, temperatureUnit: TemperatureUnit = 'celsius') {
+export function formatReading(sensor?: SensorReading, temperatureUnit: TemperatureUnit = 'celsius', useGrouping = false) {
   if (!sensor || sensor.value === null || sensor.quality !== 'Valid') {
     return 'Unavailable';
   }
@@ -207,20 +270,20 @@ export function formatReading(sensor?: SensorReading, temperatureUnit: Temperatu
   }
   if (metric === 'FanAutomatic') return value ? 'Automatic' : 'Manual';
   if (unit === 'Boolean') return value ? 'Yes' : 'No';
-  if (component === 'GpuCore' && metric === 'Voltage' && unit === 'Volts') return `${number(value * 1000, 1)} mV`;
-  if (unit === 'Megabytes' && value >= 1024) return `${number(value / 1024, 2)} GiB`;
-  if (unit === 'Celsius' && temperatureUnit === 'fahrenheit') return `${number(value * 9 / 5 + 32, 1)} °F`;
+  if (component === 'GpuCore' && metric === 'Voltage' && unit === 'Volts') return `${number(value * 1000, 1, useGrouping)} mV`;
+  if (unit === 'Megabytes' && value >= 1024) return `${number(value / 1024, 2, useGrouping)} GiB`;
+  if (unit === 'Celsius' && temperatureUnit === 'fahrenheit') return `${number(value * 9 / 5 + 32, 1, useGrouping)} °F`;
   if (unit === 'BytesPerSecond' && value >= 1024) {
     const exponent = Math.min(3, Math.floor(Math.log(value) / Math.log(1024)));
-    return `${number(value / 1024 ** exponent, 2)} ${['B/s', 'KiB/s', 'MiB/s', 'GiB/s'][exponent]}`;
+    return `${number(value / 1024 ** exponent, 2, useGrouping)} ${['B/s', 'KiB/s', 'MiB/s', 'GiB/s'][exponent]}`;
   }
 
   const [suffix, digits] = Object.hasOwn(formats, unit) ? formats[unit] : ['', 2];
-  return suffix === '%' ? `${number(value, digits)}%` : [number(value, digits), suffix].filter(Boolean).join(' ');
+  return suffix === '%' ? `${number(value, digits, useGrouping)}%` : [number(value, digits, useGrouping), suffix].filter(Boolean).join(' ');
 }
 
-export function number(value: number, digits: number) {
-  return value.toLocaleString(undefined, { maximumFractionDigits: digits });
+export function number(value: number, digits: number, useGrouping = false, locale?: string) {
+  return value.toLocaleString(locale, { maximumFractionDigits: digits, useGrouping });
 }
 
 function words(value: string) {

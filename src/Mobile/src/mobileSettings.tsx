@@ -1,3 +1,5 @@
+import { formatReading, number } from './metrics';
+import type { SensorReading } from './protocol';
 import { mobileProtocol } from './mobileProtocol.ts';
 import { useColors } from './appearance';
 import * as SecureStore from 'expo-secure-store';
@@ -18,7 +20,14 @@ const notificationKey = 'rtxlens.notification-preferences';
 const temperatureKey = 'rtxlens.temperature-unit';
 const displayKey = 'rtxlens.display-preferences';
 
-export const TemperatureUnitContext = createContext<TemperatureUnit>('celsius');
+export function readingFormat(unit: TemperatureUnit, useGrouping: boolean) {
+  return {
+    formatReading: (reading?: SensorReading) => formatReading(reading, unit, useGrouping),
+    number: (value: number, digits: number) => number(value, digits, useGrouping),
+  };
+}
+
+export const ReadingFormatContext = createContext(readingFormat('celsius', false));
 
 export function useMobilePreferences() {
   const [loaded, setLoaded] = useState(false);
@@ -306,7 +315,7 @@ export function TemperatureSettings({ unit, save }: { unit: TemperatureUnit; sav
   );
 }
 
-export function MsiDisplaySettings({ value, busy, save }: {
+export function DisplaySettings({ value, busy, save }: {
   value: DisplayPreferences; busy: boolean; save: (value: DisplayPreferences) => Promise<void>;
 }) {
   const styles = useStyles();
@@ -323,6 +332,15 @@ export function MsiDisplaySettings({ value, busy, save }: {
 
   return (
     <>
+      <Card title="Number format" icon="activity">
+        <View style={styles.row}>
+          <Text style={[styles.text, { flex: 1 }]}>Use thousands separator</Text>
+          <Switch accessibilityLabel="Use thousands separator" value={value.useGrouping} disabled={busy}
+            trackColor={{ true: colors.accentSurface, false: colors.line }}
+            onValueChange={useGrouping => void change({ ...value, useGrouping })} />
+        </View>
+        <Text style={styles.caption}>{number(17500, 0, value.useGrouping)} MHz</Text>
+      </Card>
       <Card title="MSI PSU" icon="power">
         <View style={styles.row}>
           <Text style={[styles.text, { flex: 1 }]}>Hide connectors with zero current</Text>
