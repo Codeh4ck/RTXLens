@@ -1,4 +1,4 @@
-using LibreHardwareMonitor.Hardware;
+using RTXLens.Hardware.Nvidia;
 using RTXLens.Contracts.Enums;
 
 namespace RTXLens.Plugins.Asus.Mapping;

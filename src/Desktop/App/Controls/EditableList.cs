@@ -14,32 +14,17 @@ public sealed class EditableList : TemplatedControl
 {
     public static readonly StyledProperty<IEnumerable?> ItemsSourceProperty = ItemsControl.ItemsSourceProperty.AddOwner<EditableList>();
     public static readonly StyledProperty<IDataTemplate?> ItemTemplateProperty = ItemsControl.ItemTemplateProperty.AddOwner<EditableList>();
-    public static readonly StyledProperty<object?> SelectedItemProperty =
-        AvaloniaProperty.Register<EditableList, object?>(nameof(SelectedItem), defaultBindingMode: BindingMode.TwoWay);
 
-    public static readonly StyledProperty<ICommand?> AddCommandProperty =
-        AvaloniaProperty.Register<EditableList, ICommand?>(nameof(AddCommand));
+    public static readonly StyledProperty<ICommand?> AddCommandProperty = AvaloniaProperty.Register<EditableList, ICommand?>(nameof(AddCommand));
+    public static readonly StyledProperty<ICommand?> MoveUpCommandProperty = AvaloniaProperty.Register<EditableList, ICommand?>(nameof(MoveUpCommand));
+    public static readonly StyledProperty<ICommand?> MoveDownCommandProperty = AvaloniaProperty.Register<EditableList, ICommand?>(nameof(MoveDownCommand));
+    public static readonly StyledProperty<ICommand?> RemoveCommandProperty = AvaloniaProperty.Register<EditableList, ICommand?>(nameof(RemoveCommand));
 
-    public static readonly StyledProperty<ICommand?> MoveUpCommandProperty =
-        AvaloniaProperty.Register<EditableList, ICommand?>(nameof(MoveUpCommand));
-
-    public static readonly StyledProperty<ICommand?> MoveDownCommandProperty =
-        AvaloniaProperty.Register<EditableList, ICommand?>(nameof(MoveDownCommand));
-
-    public static readonly StyledProperty<ICommand?> RemoveCommandProperty =
-        AvaloniaProperty.Register<EditableList, ICommand?>(nameof(RemoveCommand));
-
-    public static readonly StyledProperty<bool> ShowAddButtonProperty =
-        AvaloniaProperty.Register<EditableList, bool>(nameof(ShowAddButton), true);
-
-    public static readonly StyledProperty<bool> ShowMoveUpButtonProperty =
-        AvaloniaProperty.Register<EditableList, bool>(nameof(ShowMoveUpButton), true);
-
-    public static readonly StyledProperty<bool> ShowMoveDownButtonProperty =
-        AvaloniaProperty.Register<EditableList, bool>(nameof(ShowMoveDownButton), true);
-
-    public static readonly StyledProperty<bool> ShowRemoveButtonProperty =
-        AvaloniaProperty.Register<EditableList, bool>(nameof(ShowRemoveButton), true);
+    public static readonly StyledProperty<bool> ShowAddButtonProperty = AvaloniaProperty.Register<EditableList, bool>(nameof(ShowAddButton), true);
+    public static readonly StyledProperty<bool> ShowMoveUpButtonProperty = AvaloniaProperty.Register<EditableList, bool>(nameof(ShowMoveUpButton), true);
+    public static readonly StyledProperty<bool> ShowMoveDownButtonProperty = AvaloniaProperty.Register<EditableList, bool>(nameof(ShowMoveDownButton), true);
+    public static readonly StyledProperty<bool> ShowRemoveButtonProperty = AvaloniaProperty.Register<EditableList, bool>(nameof(ShowRemoveButton), true);
+    public static readonly StyledProperty<object?> SelectedItemProperty = AvaloniaProperty.Register<EditableList, object?>(nameof(SelectedItem), defaultBindingMode: BindingMode.TwoWay);
 
     public IEnumerable? ItemsSource
     {

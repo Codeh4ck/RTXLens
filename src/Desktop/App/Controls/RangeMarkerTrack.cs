@@ -6,20 +6,12 @@ namespace RTXLens.App.Controls;
 
 public sealed class RangeMarkerTrack : Control
 {
-    public static readonly StyledProperty<double?> ActivePositionProperty =
-        AvaloniaProperty.Register<RangeMarkerTrack, double?>(nameof(ActivePosition));
+    public static readonly StyledProperty<double?> ActivePositionProperty = AvaloniaProperty.Register<RangeMarkerTrack, double?>(nameof(ActivePosition));
+    public static readonly StyledProperty<double?> ReferencePositionProperty = AvaloniaProperty.Register<RangeMarkerTrack, double?>(nameof(ReferencePosition));
 
-    public static readonly StyledProperty<double?> ReferencePositionProperty =
-        AvaloniaProperty.Register<RangeMarkerTrack, double?>(nameof(ReferencePosition));
-
-    public static readonly StyledProperty<IBrush?> TrackBrushProperty =
-        AvaloniaProperty.Register<RangeMarkerTrack, IBrush?>(nameof(TrackBrush));
-
-    public static readonly StyledProperty<IBrush?> ActiveBrushProperty =
-        AvaloniaProperty.Register<RangeMarkerTrack, IBrush?>(nameof(ActiveBrush));
-
-    public static readonly StyledProperty<IBrush?> ReferenceBrushProperty =
-        AvaloniaProperty.Register<RangeMarkerTrack, IBrush?>(nameof(ReferenceBrush));
+    public static readonly StyledProperty<IBrush?> TrackBrushProperty = AvaloniaProperty.Register<RangeMarkerTrack, IBrush?>(nameof(TrackBrush));
+    public static readonly StyledProperty<IBrush?> ActiveBrushProperty = AvaloniaProperty.Register<RangeMarkerTrack, IBrush?>(nameof(ActiveBrush));
+    public static readonly StyledProperty<IBrush?> ReferenceBrushProperty = AvaloniaProperty.Register<RangeMarkerTrack, IBrush?>(nameof(ReferenceBrush));
 
     static RangeMarkerTrack()
     {
@@ -62,7 +54,8 @@ public sealed class RangeMarkerTrack : Control
         base.Render(context);
 
         const double inset = 5;
-        var width = Bounds.Width - 2 * inset;
+        var width = Bounds.Width - (2 * inset);
+
         if (width <= 0)
         {
             return;

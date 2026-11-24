@@ -1,4 +1,3 @@
-using LibreHardwareMonitor.Hardware;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -7,6 +6,7 @@ namespace RTXLens.Hardware.Nvidia;
 internal sealed class NvidiaIdentityReader : IDisposable
 {
     private nint _library;
+    private bool _initialized;
     private readonly Dictionary<string, nint> _handles = new(StringComparer.Ordinal);
     private readonly Dictionary<(string DeviceId, nint Handle, uint Domain), bool> _clockSupport = [];
     private MeasureClock? _measureClock;
@@ -41,36 +41,45 @@ internal sealed class NvidiaIdentityReader : IDisposable
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate int GetName(nint handle, [Out] StringBuilder name);
 
-    public Dictionary<string, string> DiscoverDesktopIds()
+    public NvidiaDevice[] Discover()
     {
         _handles.Clear();
 
-        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        var result = new List<NvidiaDevice>();
         if (!OperatingSystem.IsWindows() || (_library == 0 && !NativeLibrary.TryLoad(Path.Combine(Environment.SystemDirectory, "nvapi64.dll"), out _library)))
         {
-            return result;
+            return [];
         }
 
-        var query = Marshal.GetDelegateForFunctionPointer<QueryInterface>(NativeLibrary.GetExport(_library, "nvapi_QueryInterface"));
-        var initialize = Get<Initialize>(0x0150E828);
-        var enumerate = Get<Enumerate>(0xE5AC921F);
-        var systemType = Get<GetNumber>(0xBAAABFCC);
-        var bus = Get<GetNumber>(0x1BE0B8E5);
-        var slot = Get<GetNumber>(0x2A0A350F);
-        var pci = Get<GetPciIds>(0x2DDFB66E);
-        var fullName = Get<GetName>(0xCEEE8E9F);
-
-        if (initialize is null || initialize() != 0 || enumerate is null || systemType is null || bus is null || slot is null || pci is null || fullName is null)
+        if (!_initialized)
         {
-            return result;
+            var initialize = Query<Initialize>(0x0150E828);
+            if (initialize is null || initialize() != 0)
+            {
+                return [];
+            }
+
+            _initialized = true;
         }
 
-        _measureClock = Get<MeasureClock>(0x527FC458);
+        var enumerate = Query<Enumerate>(0xE5AC921F);
+        var systemType = Query<GetNumber>(0xBAAABFCC);
+        var bus = Query<GetNumber>(0x1BE0B8E5);
+        var slot = Query<GetNumber>(0x2A0A350F);
+        var pci = Query<GetPciIds>(0x2DDFB66E);
+        var fullName = Query<GetName>(0xCEEE8E9F);
+
+        if (enumerate is null || systemType is null || bus is null || slot is null || pci is null || fullName is null)
+        {
+            return [];
+        }
+
+        _measureClock = Query<MeasureClock>(0x527FC458);
 
         var handles = new nint[64];
         if (enumerate(handles, out var count) != 0)
         {
-            return result;
+            return [];
         }
 
         for (var index = 0; index < Math.Min(count, handles.Length); index++)
@@ -91,7 +100,7 @@ internal sealed class NvidiaIdentityReader : IDisposable
             }
 
             var id = $"nvidia-pci/{busId:x2}/{slotId:x2}/{device:x8}/{subsystem:x8}";
-            result[$"/gpu-nvidia/{index}"] = id;
+            result.Add(new NvidiaDevice(id, $"/gpu-nvidia/{index}", name.ToString()) { SubsystemId = subsystem });
 
             if (!_handles.TryAdd(id, handle))
             {
@@ -104,13 +113,22 @@ internal sealed class NvidiaIdentityReader : IDisposable
             _clockSupport.Remove(key);
         }
 
-        return result;
+        return [.. result.Where(device => Handle(device.Id) != 0).OrderBy(device => device.Id, StringComparer.Ordinal)];
+    }
 
-        T? Get<T>(uint id) where T : Delegate
+    internal nint Handle(string deviceId) => _handles.GetValueOrDefault(deviceId);
+
+    internal T? Query<T>(uint id) where T : Delegate
+    {
+        if (_library == 0)
         {
-            var address = query(id);
-            return address == 0 ? null : Marshal.GetDelegateForFunctionPointer<T>(address);
+            return null;
         }
+
+        var query = Marshal.GetDelegateForFunctionPointer<QueryInterface>(NativeLibrary.GetExport(_library, "nvapi_QueryInterface"));
+        var address = query(id);
+
+        return address == 0 ? null : Marshal.GetDelegateForFunctionPointer<T>(address);
     }
 
     public NvidiaSensor[] ReadDomainClocks(string deviceId)
@@ -174,6 +192,14 @@ internal sealed class NvidiaIdentityReader : IDisposable
 
     public void Dispose()
     {
+        ResetClocks();
+
+        if (_initialized)
+        {
+            Query<Initialize>(0xD22BDD7E)?.Invoke(); // NvAPI_Unload balances the successful Initialize.
+            _initialized = false;
+        }
+
         if (_library != 0)
         {
             NativeLibrary.Free(_library);

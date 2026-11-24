@@ -36,6 +36,7 @@ public static class AfterburnerBackupCleanup
         }
 
         TryClean(Path.Combine(programData, LegacyFolder), Folder.Legacy);
+        return;
 
         void TryClean(string path, Folder kind)
         {

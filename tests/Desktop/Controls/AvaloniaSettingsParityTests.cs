@@ -158,6 +158,17 @@ internal static class AvaloniaSettingsParityTests
             window.Content = new ConfigurationPage(shell);
             Dispatcher.UIThread.RunJobs();
             var tabs = window.GetVisualDescendants().OfType<TabControl>().Single();
+            OpenTab("Nvidia");
+            var gpuPicker = window.GetVisualDescendants().OfType<ComboBox>()
+                .Single(input => AutomationProperties.GetName(input) == "Selected GPU");
+            shell.Configuration.SetNvidiaDevices([]);
+            Dispatcher.UIThread.RunJobs();
+            TestAssert.Equal("gpu-2", nvidia.Nvidia.SelectedDevice.Id);
+            TestAssert.Equal(nvidia.Nvidia.SelectedDevice, gpuPicker.SelectedItem);
+            Wait(shell.RefreshDeviceListAsync(nvidia, true));
+            TestAssert.Equal("GPU Two - gpu-2", nvidia.Nvidia.SelectedDevice.Name);
+            TestAssert.Equal(nvidia.Nvidia.SelectedDevice, gpuPicker.SelectedItem);
+
             TestAssert.True(tabs.Items.OfType<TabItem>().Any(tab => Equals(tab.Header, "Mobile Access")),
                 "Mobile Access should be a Configuration tab.");
             TestAssert.True(Equals(tabs.Items.OfType<TabItem>().Last().Header, "Maintenance"), "Maintenance should be the last tab.");
@@ -246,7 +257,7 @@ internal static class AvaloniaSettingsParityTests
             SetToggle("Pulse active service alerts", true);
             SetToggle("Disable alert animation", true);
             var pulse = window.GetVisualDescendants().OfType<ToggleSwitch>().Single(input => AutomationProperties.GetName(input) == "Pulse active service alerts");
-            TestAssert.True(!pulse.IsEffectivelyEnabled && pulse.IsChecked == true, "Reduced motion takes precedence and preserves the pulse preference.");
+            TestAssert.True(pulse is { IsEffectivelyEnabled: false, IsChecked: true }, "Reduced motion takes precedence and preserves the pulse preference.");
             SetToggle("Disable alert animation", false);
             TestAssert.True(pulse.IsEffectivelyEnabled, "Turning animation back on restores pulse control.");
             SetToggle("Pulse active service alerts", false);
@@ -475,6 +486,54 @@ internal static class AvaloniaSettingsParityTests
         }
     }
 
+    public static void RepairsLegacyAstralWarningProfile()
+    {
+        const string pciId = "nvidia-pci/01/00/2b8510de/89e31043";
+        var fixture = new SettingsService();
+        var original = new DeviceWarningProfile
+        {
+            Id = Guid.NewGuid().ToString("N"), Name = "Cable guard", PluginId = "asus-astral", DeviceId = "/gpu-nvidia/0",
+            Limits = ConnectorWarningLimits.From(SettingsProfile.Rtx5090), ShutdownAfterSeconds = 45
+        };
+        void Add(string name, string source, string? deviceId) => fixture.WarningProfiles.Add(original with
+            { Id = Guid.NewGuid().ToString("N"), Name = name, PluginId = source, DeviceId = deviceId });
+        Add("Automatic GPU", "asus-astral", null);
+        Add("Offline PCI card", "asus-astral", pciId + "-offline");
+        Add("Other source", "msi-psu", "/gpu-nvidia/0");
+        Add("Still reporting", "asus-astral", "/gpu-nvidia/1");
+        fixture.WarningProfiles.Add(original);
+        fixture.WarningTargets = [new("asus-astral", pciId, "Astral card"), new("asus-astral", "/gpu-nvidia/1", "Other GPU")];
+
+        var directory = Path.Combine(Path.GetTempPath(), $"rtxlens-{Guid.NewGuid():N}");
+        var preferences = new PreferencesStore(Path.Combine(directory, "preferences.json"));
+        var appearance = new AppearanceViewModel(Application.Current!, new AppearanceStore(Path.Combine(directory, "appearance.json")));
+        using var shell = new ShellViewModel(preferences, appearance, address => new HttpClient(fixture, false) { BaseAddress = address });
+        var window = new Window { Width = 1000, Height = 800, Content = new DeviceWarningProfilesView(shell) };
+        window.Show();
+        try
+        {
+            ContentControl? Notice() => window.GetVisualDescendants().OfType<ContentControl>().FirstOrDefault(control =>
+                control.IsEffectivelyVisible && control.Classes.Contains("warning") && control.Content is string text && text.StartsWith("Select a GPU again"));
+            PumpUntil(() => Notice() is not null);
+            TestAssert.True(((string)Notice()!.Content!).StartsWith("Select a GPU again for Cable guard."),
+                "Only an unmatched, numbered Astral target needs repair, even when another profile is selected.");
+            ComboBox Picker(string name) => window.GetVisualDescendants().OfType<ComboBox>()
+                .Single(box => AutomationProperties.GetName(box) == name);
+            Picker("Warning profile").SelectedIndex = fixture.WarningProfiles.IndexOf(original);
+            Picker("Device").SelectedItem = "Astral card";
+            TestAssert.True(Notice() is not null, "An unsaved change must keep the notice visible.");
+            var save = window.GetVisualDescendants().OfType<Button>().Single(button => AutomationProperties.GetName(button) == "Save profile configuration");
+            InvokeButton(save);
+            PumpUntil(() => Notice() is null);
+            TestAssert.Equal(original with { DeviceId = pciId }, fixture.WarningProfiles.Single(profile => profile.Id == original.Id));
+        }
+        finally
+        {
+            window.Close();
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+        }
+    }
+
     private static void Wait(Task task)
     {
         PumpUntil(() => task.IsCompleted);
@@ -483,6 +542,7 @@ internal static class AvaloniaSettingsParityTests
 
     private sealed class SettingsService : HttpMessageHandler
     {
+        public WarningProfileTarget[] WarningTargets { get; set; } = [];
         public bool ExtraGpu { get; set; }
         public bool CachedDiscovery { get; private set; }
         public List<DeviceWarningProfile> WarningProfiles { get; } = [];
@@ -520,7 +580,7 @@ internal static class AvaloniaSettingsParityTests
                     }
 
                     var defaults = ConnectorWarningLimits.From(SettingsProfile.Rtx5090);
-                    return Respond(new DeviceWarningProfileCatalog([.. WarningProfiles], [], defaults, defaults, "5090", new WarningPolicy()));
+                    return Respond(new DeviceWarningProfileCatalog([.. WarningProfiles], WarningTargets, defaults, defaults, "5090", new WarningPolicy()));
                 case "/settings-profiles":
                     if (request.Method == HttpMethod.Put)
                     {

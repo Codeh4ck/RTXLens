@@ -319,6 +319,8 @@ internal sealed class PerformancePage : UserControl
                 table.Children.Add(separator);
             }
 
+            return;
+
             void AddCell(string text, int column, FontWeight weight)
             {
                 var cell = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, FontSize = 16, FontWeight = weight };

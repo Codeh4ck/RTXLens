@@ -169,7 +169,8 @@ internal static partial class SupportReportData
             case "wireview-config":
             case "msi-settings":
                 return Measurements(data, "enabled", "automaticallyDisabled", "pollIntervalMs", "staleAfterMs", "fanDutyPercent");
-            default: throw new InvalidDataException("Unknown diagnostic section.");
+            default:
+                throw new InvalidDataException("Unknown diagnostic section.");
         }
     }
 

@@ -30,9 +30,8 @@ internal sealed class TrayService : IDisposable
         _taskbarCreated = NativeMethods.RegisterWindowMessageW("TaskbarCreated");
 
         WindowProcedure procedure = ProcessMessage;
-
-        // Windows retains a function pointer; root the delegate until the window subclass is removed.
         _procedureHandle = GCHandle.Alloc(procedure);
+
         try
         {
             _previous = NativeMethods.SetWindowLongPtr(window, NativeConstants.WindowProcedureIndex, Marshal.GetFunctionPointerForDelegate(procedure));
@@ -62,13 +61,6 @@ internal sealed class TrayService : IDisposable
         };
 
         AddIcon();
-    }
-
-    public void SetStatus(string status)
-    {
-        var tip = DesktopBuild.WindowTitle + " · " + status;
-        _data.Tip = tip[..Math.Min(tip.Length, 127)];
-        NativeMethods.Shell_NotifyIconW(NativeConstants.NotifyModify, ref _data);
     }
 
     public void Notify(string title, string message)
@@ -131,6 +123,7 @@ internal sealed class TrayService : IDisposable
     private void ShowMenu()
     {
         var menu = NativeMethods.CreatePopupMenu();
+
         try
         {
             NativeMethods.AppendMenuW(menu, 0, NativeConstants.CommandOpen, "Open RTX Lens");

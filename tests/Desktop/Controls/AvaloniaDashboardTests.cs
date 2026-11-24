@@ -468,6 +468,7 @@ internal static class AvaloniaDashboardTests
             Changelog = "1. **NVIDIA diagnostics.** Report active GPU boost limits and PCIe link status.\n"
                 + "2. **Desktop GPU Status.** Show power and PCIe details alongside clocks, memory usage, temperatures, and fans."
         }), "release-notes.png");
+        return;
 
         void CheckDialog(Window dialog, string fileName)
         {
@@ -605,6 +606,8 @@ internal static class AvaloniaDashboardTests
         {
             window.Close();
         }
+
+        return;
 
         SectionPanel[] Sections() => [.. window.GetVisualDescendants().OfType<SectionPanel>()];
 

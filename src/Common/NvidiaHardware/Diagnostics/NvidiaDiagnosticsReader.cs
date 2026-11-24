@@ -1,9 +1,10 @@
+using RTXLens.Hardware.Nvidia;
 using System.Globalization;
 using RTXLens.Plugins.GenericNvidia.Contracts.Devices;
 
-namespace RTXLens.Plugins.GenericNvidia.Diagnostics;
+namespace RTXLens.Hardware.Nvidia.Diagnostics;
 
-internal sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnosticsReader, IDisposable
+public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnosticsReader, IDisposable
 {
     private const int PStateCount = 16;
     private const int UnknownPState = 32;
@@ -31,14 +32,7 @@ internal sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagn
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
-            if (_api is null && (_lastInitializationAttempt is not { } lastAttempt
-                || clock.GetElapsedTime(lastAttempt) >= TimeSpan.FromSeconds(5)))
-            {
-                _lastInitializationAttempt = clock.GetTimestamp();
-                _api = NvmlApi.TryOpen();
-            }
-
-            if (_api is not { } api || FindDevice(api, identity) is not { } handle)
+            if (Open() is not { } api || FindDevice(api, identity) is not { } handle)
             {
                 return null;
             }
@@ -47,10 +41,74 @@ internal sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagn
         }
     }
 
+    private NvmlApi? Open()
+    {
+        if (_api is null && (_lastInitializationAttempt is not { } lastAttempt || clock.GetElapsedTime(lastAttempt) >= TimeSpan.FromSeconds(5)))
+        {
+            _lastInitializationAttempt = clock.GetTimestamp();
+            _api = NvmlApi.TryOpen();
+        }
+
+        return _api;
+    }
+
+    internal NvidiaSensor[] ReadBoard(string deviceId)
+    {
+        if (!TryGetPciIdentity(deviceId, out var identity))
+        {
+            return [];
+        }
+
+        lock (_gate)
+        {
+            if (Open() is not { } api || FindDevice(api, identity) is not { } handle)
+            {
+                return [];
+            }
+
+            var sensors = new List<NvidiaSensor>();
+            var power = api.Get<NvmlApi.GetUInt>("nvmlDeviceGetPowerUsage");
+            if (power is not null && power(handle, out var milliwatts) == 0)
+            {
+                sensors.Add(new("GPU Package", SensorType.Power, 0, milliwatts / 1000f));
+            }
+
+            var utilization = api.Get<NvmlApi.GetUtilization>("nvmlDeviceGetUtilizationRates");
+            if (utilization is not null && utilization(handle, out var rates) == 0 && rates.Gpu <= 100)
+            {
+                sensors.Add(new("GPU Core", SensorType.Load, 0, rates.Gpu));
+            }
+
+            var memory = api.Get<NvmlApi.GetMemory>("nvmlDeviceGetMemoryInfo");
+            if (memory is not null && memory(handle, out var vram) == 0 && vram.Total > 0)
+            {
+                const float mib = 1024 * 1024;
+
+                sensors.Add(new("GPU Memory Total", SensorType.SmallData, 0, vram.Total / mib));
+                sensors.Add(new("GPU Memory Used", SensorType.SmallData, 0, vram.Used / mib));
+                sensors.Add(new("GPU Memory Free", SensorType.SmallData, 0, vram.Free / mib));
+                sensors.Add(new("GPU Memory", SensorType.Load, 0, 100f * vram.Used / vram.Total));
+            }
+
+            return [.. sensors];
+        }
+    }
+
+    internal void Reset()
+    {
+        lock (_gate)
+        {
+            _api?.Dispose();
+
+            _api = null;
+            _lastInitializationAttempt = null;
+            _clockCapabilities = null;
+        }
+    }
+
     private NvidiaDiagnostics ReadDiagnostics(NvmlApi api, nint handle, string deviceId)
     {
-        var activeReasons = api.Get<NvmlApi.GetULong>("nvmlDeviceGetCurrentClocksEventReasons")
-            ?? api.Get<NvmlApi.GetULong>("nvmlDeviceGetCurrentClocksThrottleReasons");
+        var activeReasons = api.Get<NvmlApi.GetULong>("nvmlDeviceGetCurrentClocksEventReasons") ?? api.Get<NvmlApi.GetULong>("nvmlDeviceGetCurrentClocksThrottleReasons");
         var state = Query("nvmlDeviceGetPerformanceState");
         var currentState = state < PStateCount ? (int?)state : null;
         var clockCapabilities = ReadClockCapabilities(api, handle, deviceId);
@@ -87,6 +145,7 @@ internal sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagn
         uint minimum = 0;
         uint maximum = 0;
         var haveRange = getRange is not null && getRange(handle, out minimum, out maximum) == 0;
+
         var powerLimits = new NvidiaPowerLimits(Query("nvmlDeviceGetPowerManagementDefaultLimit") / 1000d,
             Query("nvmlDeviceGetEnforcedPowerLimit") / 1000d, haveRange ? minimum / 1000d : null,
             haveRange ? maximum / 1000d : null);
@@ -94,11 +153,9 @@ internal sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagn
         return new NvidiaDiagnostics(deviceId, clock.GetUtcNow(), Reasons(activeReasons), clockCapabilities.SupportedReasons, limits,
             currentState, clockCapabilities.SupportedStates, pcie, powerLimits);
 
-        uint? Query(string symbol) => api.Get<NvmlApi.GetUInt>(symbol) is { } query
-            && query(handle, out var value) == 0 ? value : null;
+        uint? Query(string symbol) => api.Get<NvmlApi.GetUInt>(symbol) is { } query && query(handle, out var value) == 0 ? value : null;
 
-        ulong? Reasons(NvmlApi.GetULong? query) => query is not null
-            && query(handle, out var value) == 0 ? value : null;
+        ulong? Reasons(NvmlApi.GetULong? query) => query is not null && query(handle, out var value) == 0 ? value : null;
 
         double? Seconds(int index) => haveFields ? fields[index].UnsignedValue / 1_000_000_000d : null;
 
@@ -109,6 +166,7 @@ internal sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagn
     private ClockCapabilities ReadClockCapabilities(NvmlApi api, nint handle, string deviceId)
     {
         var timestamp = clock.GetTimestamp();
+
         if (_clockCapabilities is { } cached && cached.Handle == handle && cached.DeviceId == deviceId
             && clock.GetElapsedTime(cached.Timestamp, timestamp) < TimeSpan.FromSeconds(5))
         {
@@ -117,6 +175,7 @@ internal sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagn
 
         var getSupportedReasons = api.Get<NvmlApi.GetULong>("nvmlDeviceGetSupportedClocksEventReasons")
             ?? api.Get<NvmlApi.GetULong>("nvmlDeviceGetSupportedClocksThrottleReasons");
+
         ulong? supportedReasons = getSupportedReasons is not null && getSupportedReasons(handle, out var reasons) == 0
             ? reasons : null;
 
@@ -124,46 +183,50 @@ internal sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagn
         return _clockCapabilities;
     }
 
-    private sealed record ClockCapabilities(nint Handle, string DeviceId, long Timestamp,
-        ulong? SupportedReasons, int[]? SupportedStates);
+    private sealed record ClockCapabilities(nint Handle, string DeviceId, long Timestamp, ulong? SupportedReasons, int[]? SupportedStates);
 
     private static int[]? ReadSupportedStates(NvmlApi api, nint handle)
     {
         var getStates = api.Get<NvmlApi.GetSupportedStates>("nvmlDeviceGetSupportedPerformanceStates");
         var states = new int[PStateCount];
+
         Array.Fill(states, UnknownPState);
+
         return getStates is not null && getStates(handle, states, PStateCount * sizeof(int)) == 0
             ? [.. states.Where(state => state is >= 0 and < PStateCount).Distinct().Order()]
             : null;
     }
 
-    private static bool TryGetPciIdentity(string id, out (uint Bus, uint Slot, uint DeviceId, uint SubsystemId) identity)
+    internal static bool TryGetPciIdentity(string id, out (uint Bus, uint Slot, uint DeviceId, uint SubsystemId) identity)
     {
         identity = default;
+
         var parts = id.Split('/');
+
         return parts is ["nvidia-pci", _, _, _, _]
                && Hex(parts[1], out identity.Bus) && Hex(parts[2], out identity.Slot)
                && Hex(parts[3], out identity.DeviceId) && Hex(parts[4], out identity.SubsystemId);
 
-        static bool Hex(string text, out uint value) =>
-            uint.TryParse(text, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out value);
+        static bool Hex(string text, out uint value) => uint.TryParse(text, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out value);
     }
 
-    private static nint? FindDevice(NvmlApi api, (uint Bus, uint Slot, uint DeviceId, uint SubsystemId) identity)
+    internal static nint? FindDevice(NvmlApi api, (uint Bus, uint Slot, uint DeviceId, uint SubsystemId) identity)
     {
         var getCount = api.Get<NvmlApi.GetCount>("nvmlDeviceGetCount_v2");
         var getHandle = api.Get<NvmlApi.GetHandle>("nvmlDeviceGetHandleByIndex_v2");
         var getPci = api.Get<NvmlApi.GetPciInfo>("nvmlDeviceGetPciInfo_v3");
+
         if (getCount is null || getHandle is null || getPci is null || getCount(out var count) != 0)
         {
             return null;
         }
 
         nint? match = null;
+
         for (uint index = 0; index < count; index++)
         {
-            if (getHandle(index, out var device) != 0 || getPci(device, out var pci) != 0
-                || pci.Bus != identity.Bus || pci.Device != identity.Slot || pci.DeviceId != identity.DeviceId || pci.SubsystemId != identity.SubsystemId)
+            if (getHandle(index, out var device) != 0 || getPci(device, out var pci) != 0 || pci.Bus != identity.Bus
+                || pci.Device != identity.Slot || pci.DeviceId != identity.DeviceId || pci.SubsystemId != identity.SubsystemId)
             {
                 continue;
             }
@@ -184,6 +247,7 @@ internal sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagn
         lock (_gate)
         {
             _api?.Dispose();
+            
             _api = null;
             _disposed = true;
         }

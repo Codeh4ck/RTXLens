@@ -16,9 +16,7 @@ internal sealed record AppearanceSettings(bool LightTheme, string? Primary, stri
         return Color.TryParse(Primary, out var primary)
             && Color.TryParse(Secondary, out var secondary)
             && Color.TryParse(Tertiary, out var tertiary)
-            && Color.TryParse(Background, out var background)
-                ? new ThemePalette(primary, secondary, tertiary, background)
-                : null;
+            && Color.TryParse(Background, out var background) ? new ThemePalette(primary, secondary, tertiary, background) : null;
     }
 
     public static AppearanceSettings FromPalette(bool lightTheme, ThemePalette? palette) => new(lightTheme,

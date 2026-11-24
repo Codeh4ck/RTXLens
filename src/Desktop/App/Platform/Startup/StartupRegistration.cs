@@ -13,8 +13,10 @@ internal static class StartupRegistration
     public static void SetEnabled(bool enabled)
     {
         using var identity = WindowsIdentity.GetCurrent();
+
         var sid = identity.User?.Value ?? throw new IOException("The Windows account could not be identified.");
         var executable = Path.Combine(AppContext.BaseDirectory, "RTXLens.App.exe");
+
         if (enabled)
         {
             ElevatedStartupTask.Register(sid, executable);
@@ -25,9 +27,9 @@ internal static class StartupRegistration
         }
 
         using var key = Registry.CurrentUser.OpenSubKey(Key, writable: true);
+
         if (key?.GetValue(Name) is string command
-            && (string.Equals(command, $"\"{executable}\"", StringComparison.OrdinalIgnoreCase)
-                || command.StartsWith($"\"{executable}\" ", StringComparison.OrdinalIgnoreCase)))
+            && (string.Equals(command, $"\"{executable}\"", StringComparison.OrdinalIgnoreCase) || command.StartsWith($"\"{executable}\" ", StringComparison.OrdinalIgnoreCase)))
         {
             key.DeleteValue(Name, throwOnMissingValue: false);
         }

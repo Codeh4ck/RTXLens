@@ -1,7 +1,7 @@
 using RTXLens.Plugins.Asus.Contracts.Warnings;
 using RTXLens.Plugins.Asus.Contracts.Configuration;
 using System.Text.Json;
-using LibreHardwareMonitor.Hardware;
+using RTXLens.Hardware.Nvidia;
 using RTXLens.Contracts.Enums;
 using RTXLens.Contracts.Configuration;
 using RTXLens.Plugins.Asus;
@@ -18,7 +18,8 @@ internal static class AsusPluginTests
 {
     public static async Task RunAsync(TestRunner runner)
     {
-        runner.Run(PreservesTheOriginalGpuFilter);
+        runner.Run(IdentifiesSupportedBoards);
+        await runner.RunAsync(RequiresFreshShuntEvidenceForAlternativeInputsAsync);
         runner.Run(ComparesPluginOptionsByValue);
         runner.Run(ValidatesTheOriginalPersistedThresholdBounds);
         await runner.RunAsync(MapsEveryOriginalSensorWithoutMixingGpusAsync);
@@ -28,11 +29,40 @@ internal static class AsusPluginTests
         await runner.RunAsync(AppliesThresholdsToTheNextSampleAsync);
     }
 
-    private static void PreservesTheOriginalGpuFilter()
+    private static void IdentifiesSupportedBoards()
     {
-        TestAssert.True(AsusGpuReader.Matches(HardwareType.GpuNvidia, "NVIDIA GeForce RTX 5090"), "5090 should match.");
-        TestAssert.True(AsusGpuReader.Matches(HardwareType.GpuNvidia, "NVIDIA GeForce RTX 5080"), "5080 should match.");
-        TestAssert.False(AsusGpuReader.Matches(HardwareType.GpuNvidia, "NVIDIA GeForce RTX 4090"), "4090 must not match.");
+        TestAssert.True(AstralBoard.IsSupported(0x89E31043), "5090 OC should match.");
+        TestAssert.True(AstralBoard.IsSupported(0x89DF1043), "5080 non-OC should match.");
+        TestAssert.False(AstralBoard.IsSupported(0x89E310DE), "Wrong board vendor must not match.");
+    }
+
+    private static async Task RequiresFreshShuntEvidenceForAlternativeInputsAsync()
+    {
+        var clock = new TestTimeProvider();
+        var state = new AsusTestState();
+        using var stream = new AsusStream();
+        using var plugin = new AsusPlugin(new PluginSettings(), clock, new TestAsusReader(state), stream);
+        var active = AsusTestData.Create() with { AlternativeInput = true };
+        var noPins = active with { Sensors = [.. active.Sensors.Where(sensor =>
+            sensor.Definition.Component is not (SensorComponent.GpuPin or SensorComponent.GpuConnector))] };
+
+        TestAssert.Equal("Power path undetermined", await Observe(active));
+        TestAssert.Equal("16-pin cable active", await Observe(active));
+        TestAssert.Equal("16-pin cable active", await Observe(active, 0));
+        TestAssert.Equal("Power path undetermined", await Observe(noPins));
+        TestAssert.Equal("Power path undetermined", await Observe(noPins));
+        var low = noPins with { CablePinsBelowThreshold = true };
+        TestAssert.Equal("Power path undetermined", await Observe(low));
+        TestAssert.Equal("Cable load not observed", await Observe(low));
+        TestAssert.Equal("Power path undetermined", await Observe(low, 60));
+        return;
+
+        async Task<string?> Observe(AsusGpuData sample, int seconds = 1)
+        {
+            clock.Advance(TimeSpan.FromSeconds(seconds));
+            state.Data = [sample with { ObservedAt = clock.GetUtcNow() }];
+            return (await plugin.PollAsync(CancellationToken.None)).Message;
+        }
     }
 
     private static void ComparesPluginOptionsByValue()

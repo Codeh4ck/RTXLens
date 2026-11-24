@@ -52,6 +52,11 @@ internal sealed class HardwarePage : UserControl
 
             if (panel.IsAsus)
             {
+                var cable = Caption();
+                BindTo(cable, TextBlock.TextProperty, panel, nameof(panel.Message));
+                BindTo(cable, IsVisibleProperty, panel, nameof(panel.HasCableStatus));
+                body.Children.Add(cable);
+
                 var warning = Message(tone: "error");
                 BindTo(warning, ContentProperty, panel, nameof(panel.WarningText));
                 BindTo(warning, IsVisibleProperty, panel, nameof(panel.HasWarning));

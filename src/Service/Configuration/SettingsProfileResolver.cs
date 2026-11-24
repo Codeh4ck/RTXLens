@@ -74,6 +74,12 @@ internal sealed partial class SettingsProfileResolver(SettingsProfileStore profi
         }
 
         var selectedId = hardware.SelectedDevice(configuration);
+        if (selectedId is null && selectedGpuReadings.Count == 0)
+        {
+            var pinGpus = connectorReadings.Where(identity => hardware.Find(identity.PluginId)?.Association == GpuAssociation.GpuDevice)
+                .Select(identity => identity.DeviceId).Distinct(StringComparer.Ordinal).Take(2).ToArray();
+            if (pinGpus.Length == 1) selectedId = pinGpus[0];
+        }
         var gpu = selectedId is null ? devices.FirstOrDefault() : devices.FirstOrDefault(device => device.Id == selectedId || device.LegacyId == selectedId);
 
         if (gpu is null)
@@ -110,6 +116,6 @@ internal sealed partial class SettingsProfileResolver(SettingsProfileStore profi
         return new(hardware.ApplyDefaults(defaults, configuration) with { Notifications = configuration.Warnings }, gpu.Id, inlineDevice);
     }
 
-    [GeneratedRegex(@"\bRTX\s+(5080|5090)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\bRTX\s+(5080|5090)(?:D)?\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex NvidiaModelNameRegex();
 }

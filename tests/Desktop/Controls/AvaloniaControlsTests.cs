@@ -57,6 +57,7 @@ internal static class AvaloniaControlsTests
         runner.Run(() => AvaloniaDashboardTests.SafeguardLoadsAndReloadsConnectors(screenshotDirectory));
         runner.Run(AvaloniaDashboardTests.SafeguardScriptDialogsFitTheirParameters);
         runner.Run(() => AvaloniaSettingsParityTests.ExercisesSettingsAndProfiles(screenshotDirectory));
+        runner.Run(AvaloniaSettingsParityTests.RepairsLegacyAstralWarningProfile);
         runner.Run(AvaloniaMobileAccessTests.PublicIpv4ApplyTracksEdits);
         runner.Run(() => AvaloniaMobileAccessTests.SavesSettingsAndGeneratesPairingCode(screenshotDirectory));
 

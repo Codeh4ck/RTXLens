@@ -24,12 +24,13 @@ internal sealed class SingleInstance : IDisposable
     public void RequestActivation() => _activation.Set();
 
     public void ListenForActivation(Action activate) =>
-        _activationListener = ThreadPool.RegisterWaitForSingleObject(
-            _activation, (_, _) => activate(), null, Timeout.Infinite, executeOnlyOnce: false);
+        _activationListener = ThreadPool.RegisterWaitForSingleObject(_activation, (_, _) => activate(), null,
+            Timeout.Infinite, executeOnlyOnce: false);
 
     public void Dispose()
     {
         _activationListener?.Unregister(null);
+
         _activation.Dispose();
         _mutex.Dispose();
     }

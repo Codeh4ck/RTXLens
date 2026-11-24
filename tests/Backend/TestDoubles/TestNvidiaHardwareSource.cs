@@ -7,6 +7,15 @@ internal sealed class TestNvidiaHardwareSource : INvidiaHardwareSource
     public NvidiaDevice[] Devices { get; set; } = [];
     public NvidiaSensor[] Sensors { get; set; } = [];
     public int Reads { get; private set; }
+    public NvidiaSensor[] Pins { get; set; } = [];
+    public int PinReads { get; private set; }
+
+    public NvidiaSensor[] ReadPins(NvidiaDevice device)
+    {
+        PinReads++;
+        return Pins;
+    }
+
     public int Resets { get; private set; }
 
     public Action? BeforeDiscovery { get; init; }

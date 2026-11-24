@@ -2,9 +2,9 @@ using RTXLens.Contracts.Enums;
 using RTXLens.Contracts.Sensors;
 using RTXLens.Plugins.GenericNvidia.Contracts.Devices;
 
-namespace RTXLens.Plugins.GenericNvidia.Mapping;
+namespace RTXLens.Hardware.Nvidia.Mapping;
 
-internal static class NvidiaDiagnosticsMapper
+public static class NvidiaDiagnosticsMapper
 {
     private const double MaximumExactMask = 9_007_199_254_740_991;
 
@@ -15,8 +15,7 @@ internal static class NvidiaDiagnosticsMapper
         Add(SensorComponent.GpuPerformance, SensorMetric.ActiveClockReasons, Mask(sample.ActiveClockReasons));
         Add(SensorComponent.GpuPerformance, SensorMetric.SupportedClockReasons, Mask(sample.SupportedClockReasons));
         Add(SensorComponent.GpuPerformance, SensorMetric.PerformanceState, sample.PerformanceState);
-        Add(SensorComponent.GpuPerformance, SensorMetric.SupportedPerformanceStates,
-            sample.SupportedPerformanceStates?.Aggregate(0, (mask, state) => mask | (1 << state)));
+        Add(SensorComponent.GpuPerformance, SensorMetric.SupportedPerformanceStates, sample.SupportedPerformanceStates?.Aggregate(0, (mask, state) => mask | (1 << state)));
 
         AddDuration(NvidiaClockReason.SoftwarePowerCap, sample.LimitDurations.SoftwarePowerCapSeconds);
         AddDuration(NvidiaClockReason.SoftwareThermalSlowdown, sample.LimitDurations.SoftwareThermalSlowdownSeconds);
@@ -25,6 +24,7 @@ internal static class NvidiaDiagnosticsMapper
         AddDuration(NvidiaClockReason.SyncBoost, sample.LimitDurations.SyncBoostSeconds);
 
         var pcie = sample.Pcie;
+
         Add(SensorComponent.GpuPcie, SensorMetric.ReceiveThroughput, pcie.ReceiveKilobytesPerSecond * 1024d);
         Add(SensorComponent.GpuPcie, SensorMetric.TransmitThroughput, pcie.TransmitKilobytesPerSecond * 1024d);
         Add(SensorComponent.GpuPcie, SensorMetric.LinkGeneration, pcie.CurrentGeneration);
@@ -51,7 +51,7 @@ internal static class NvidiaDiagnosticsMapper
 
         void Add(SensorComponent component, SensorMetric metric, double? value, int? channel = null)
         {
-            readings.Add(new SensorReading(new SensorIdentity(GenericNvidiaPlugin.PluginId, sample.DeviceId, component, metric, channel),
+            readings.Add(new SensorReading(new SensorIdentity(RTXLens.Plugins.GenericNvidia.Contracts.NvidiaIdentity.Id, sample.DeviceId, component, metric, channel),
                 SensorUnits.For(metric), value, sample.ObservedAt, value.HasValue ? ReadingQuality.Valid : ReadingQuality.Unavailable));
         }
     }

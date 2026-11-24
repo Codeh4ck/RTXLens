@@ -13,7 +13,8 @@ public static class ServiceCollectionEx
     public static IServiceCollection AddAsusPlugin(this IServiceCollection services)
     {
         services.ConfigureHttpJsonOptions(options => options.SerializerOptions.TypeInfoResolverChain.Insert(0, AsusJsonContext.Default));
-        services.TryAddSingleton<INvidiaHardwareSource, LibreNvidiaHardwareSource>();
+        services.TryAddSingleton<NativeNvidiaHardwareSource>();
+        services.TryAddSingleton<INvidiaHardwareSource>(provider => provider.GetRequiredService<NativeNvidiaHardwareSource>());
         services.TryAddSingleton<NvidiaTelemetryReader>();
         services.AddSingleton<AsusStream>();
         services.AddSingleton<ISensorPluginFactory, AsusPluginFactory>();

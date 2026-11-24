@@ -16,10 +16,12 @@ internal sealed partial class DiagnosticReport
         var client = new ServiceLogClient(http);
         try
         {
-            using var writer = File.CreateText(PathFor("history/service-api.jsonl"));
+            await using var writer = File.CreateText(PathFor("history/service-api.jsonl"));
+
             long before = 0;
             string? instance = null;
             var summary = new HistorySummary();
+
             while (true)
             {
                 var page = await client.ReadHistoryAsync(before, token);
@@ -47,6 +49,7 @@ internal sealed partial class DiagnosticReport
                         summary.Write(writer, entry);
                     }
                 }
+
                 if (oldest <= page.FirstSequence)
                 {
                     break;
@@ -54,6 +57,7 @@ internal sealed partial class DiagnosticReport
 
                 before = oldest;
             }
+
             _notes.AddRange(summary.Describe("Service log API"));
             return;
         }
@@ -64,16 +68,21 @@ internal sealed partial class DiagnosticReport
 
         var debug = http.BaseAddress!.Port == ServiceEndpoint.DebugPort;
         var root = Environment.GetFolderPath(debug ? Environment.SpecialFolder.LocalApplicationData : Environment.SpecialFolder.CommonApplicationData);
+
         TryCollect("Service journal", () =>
         {
             var path = Path.Combine(root, debug ? "RTXLens.Debug" : "RTXLens", "Logs", "events.jsonl");
+
             using var input = new StreamReader(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete));
             using var writer = File.CreateText(PathFor("history/service-journal.jsonl"));
+
             var invalid = 0;
             var summary = new HistorySummary();
+
             while (input.ReadLine() is { } line)
             {
                 token.ThrowIfCancellationRequested();
+
                 try
                 {
                     var entry = JsonSerializer.Deserialize<ServiceLogEntry>(line, Json);
@@ -86,9 +95,14 @@ internal sealed partial class DiagnosticReport
                         summary.Write(writer, entry);
                     }
                 }
-                catch (JsonException) { invalid++; }
+                catch (JsonException)
+                {
+                    invalid++;
+                }
             }
+
             _notes.AddRange(summary.Describe("Local service journal"));
+
             if (invalid > 0)
             {
                 _notes.Add($"Malformed journal entries skipped: {invalid}");
@@ -100,9 +114,11 @@ internal sealed partial class DiagnosticReport
     {
         private readonly Dictionary<ServiceLogLevel, int> _counts = [];
         private readonly List<string> _messages = [];
+
         public void Write(TextWriter output, ServiceLogEntry entry)
         {
             output.WriteLine(JsonSerializer.Serialize(SupportReportData.Event(entry), Json));
+
             _counts[entry.Level] = _counts.GetValueOrDefault(entry.Level) + 1;
             if (entry.Level is ServiceLogLevel.Warning or ServiceLogLevel.Error && _messages.Count < 30)
             {
@@ -111,8 +127,7 @@ internal sealed partial class DiagnosticReport
         }
 
         public IEnumerable<string> Describe(string source) =>
-            new[] { $"{source}: {_counts.Values.Sum()} events ({string.Join(", ", _counts.Select(c => $"{c.Value} {c.Key}"))})." }
-                .Concat(_messages);
+            new[] { $"{source}: {_counts.Values.Sum()} events ({string.Join(", ", _counts.Select(c => $"{c.Value} {c.Key}"))})." }.Concat(_messages);
     }
 
     private async Task CollectLiveAsync(HttpClient http)
@@ -125,18 +140,21 @@ internal sealed partial class DiagnosticReport
             ("plugins/msi-psu/settings", "msi-settings"), ("plugins/msi-psu/device", "msi-device"),
             ("plugins/wireview-pro2/config", "wireview-config"), ("plugins/wireview-pro2/sensors", "wireview-sensors")
         ];
-        // Read current endpoints once. A missing plugin does not prevent the other captures.
+
         var results = await Task.WhenAll(routes.Select(async item =>
         {
             try
             {
                 using var response = await http.GetAsync(item.route, token);
+
                 if (response.IsSuccessStatusCode)
                 {
                     using var data = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(token));
+
                     var section = SupportReportData.Endpoint(item.file, data.RootElement);
                     await File.WriteAllTextAsync(PathFor("current/" + item.file + ".json"), JsonSerializer.Serialize(section, Json), token);
                 }
+
                 return $"GET {item.route}: HTTP {(int)response.StatusCode}";
             }
             catch (Exception error) when (!token.IsCancellationRequested)
@@ -144,28 +162,36 @@ internal sealed partial class DiagnosticReport
                 return $"GET {item.route} unavailable: {error.GetType().Name}";
             }
         }));
+
         _notes.AddRange(results);
 
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
         deadline.CancelAfter(TimeSpan.FromSeconds(20));
+
         using var socket = new ClientWebSocket();
         socket.Options.Proxy = null;
+
         var uri = new UriBuilder(new Uri(http.BaseAddress!, ServiceRoutes.Sensors))
         {
             Scheme = http.BaseAddress!.Scheme == "https" ? "wss" : "ws", Port = http.BaseAddress.Port
         };
+
         var count = 0;
         var invalidFrames = 0;
         SensorSnapshot? latest = null;
+
         try
         {
             await socket.ConnectAsync(uri.Uri, deadline.Token);
+
             var buffer = new byte[16 * 1024];
             using var frame = new MemoryStream();
+
             while (count < 5)
             {
                 frame.SetLength(0);
                 ValueWebSocketReceiveResult received;
+
                 do
                 {
                     received = await socket.ReceiveAsync(buffer.AsMemory(), deadline.Token);
@@ -176,13 +202,14 @@ internal sealed partial class DiagnosticReport
 
                     frame.Write(buffer, 0, received.Count);
                 } while (!received.EndOfMessage);
+
                 var bytes = frame.GetBuffer().AsMemory(0, (int)frame.Length);
                 SensorSnapshot snapshot;
                 string safeFrame;
+
                 try
                 {
-                    snapshot = JsonSerializer.Deserialize(bytes.Span, ClientJsonContext.Default.SensorSnapshot)
-                        ?? throw new JsonException("Missing snapshot.");
+                    snapshot = JsonSerializer.Deserialize(bytes.Span, ClientJsonContext.Default.SensorSnapshot) ?? throw new JsonException("Missing snapshot.");
                     safeFrame = JsonSerializer.Serialize(SupportReportData.Snapshot(snapshot), Json);
                 }
                 catch (Exception error) when (error is JsonException or ArgumentException or NullReferenceException)
@@ -192,9 +219,11 @@ internal sealed partial class DiagnosticReport
                 }
 
                 await File.WriteAllTextAsync(PathFor($"live/snapshot-{count + 1:D3}.json"), safeFrame, token);
+
                 latest = snapshot;
                 count++;
             }
+
             await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Capture complete", deadline.Token);
         }
         catch (Exception error) when (!token.IsCancellationRequested)
@@ -207,10 +236,17 @@ internal sealed partial class DiagnosticReport
         }
 
         _notes.Add($"Live sensor frames collected: {count}/5.");
+
         var readings = (latest?.Sensors ?? []).Where(s => s.Identity is
-            { PluginId: "generic-nvidia" or "wireview-pro2", Component: SensorComponent.GpuConnector, Channel: 1,
-              Metric: SensorMetric.Power or SensorMetric.Current or SensorMetric.Voltage });
-        File.WriteAllText(PathFor("live/electrical-readings.json"), JsonSerializer.Serialize(readings.Select(SupportReportData.Reading), Json));
-        File.WriteAllText(PathFor("live/electrical-sources.json"), JsonSerializer.Serialize(SupportReportData.Sources(latest), Json));
+        {
+            PluginId: "generic-nvidia" or "wireview-pro2", Component: SensorComponent.GpuConnector, Channel: 1,
+            Metric: SensorMetric.Power or SensorMetric.Current or SensorMetric.Voltage
+        });
+
+        await Task.WhenAll
+        (
+            File.WriteAllTextAsync(PathFor("live/electrical-readings.json"), JsonSerializer.Serialize(readings.Select(SupportReportData.Reading), Json), deadline.Token),
+            File.WriteAllTextAsync(PathFor("live/electrical-sources.json"), JsonSerializer.Serialize(SupportReportData.Sources(latest), Json), deadline.Token)
+        );
     }
 }

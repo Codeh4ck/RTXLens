@@ -61,6 +61,8 @@ internal static class AvaloniaChartsTests
             window.Close();
         }
 
+        return;
+
         ContentControl FindWarning() => page.GetVisualDescendants().OfType<ContentControl>()
             .Single(control => control.Classes.Contains("banner") && control.Classes.Contains("warning"));
 
@@ -202,7 +204,7 @@ internal static class AvaloniaChartsTests
             var chart = window.GetVisualDescendants().OfType<XyLineChart>().Single();
             var visible = chart.GetPlotLayout().X;
             var plotted = chart.Series.Single().Samples.ToArray().Select(sample => sample.X).ToHashSet();
-            var omitted = samples.First(sample => sample.Seconds > 1 && sample.Seconds < 19 && !plotted.Contains(sample.Seconds));
+            var omitted = samples.First(sample => sample.Seconds is > 1 and < 19 && !plotted.Contains(sample.Seconds));
 
             TestAssert.Equal<XySample?>(new XySample(omitted.Seconds, omitted.Value),
                 chart.ReadHoverSamples(omitted.Seconds, visible)[0]);

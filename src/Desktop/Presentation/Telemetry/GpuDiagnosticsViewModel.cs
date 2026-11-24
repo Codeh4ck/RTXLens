@@ -127,6 +127,7 @@ public sealed class GpuDiagnosticsViewModel : ObservableObject
 
         HasPowerScale = minimum.HasValue && maximum > minimum;
         PowerLimitPositions = (Position(enforced), Position(defaultLimit));
+        return;
 
         double? Position(double? limit) => HasPowerScale && limit >= minimum && limit <= maximum
             ? (limit - minimum) / (maximum - minimum)

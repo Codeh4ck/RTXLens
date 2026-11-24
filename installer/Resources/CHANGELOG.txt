@@ -1,3 +1,9 @@
+1.2.0 - Native ROG Astral telemetry
+- Read connector pin current and voltage directly through the NVIDIA driver on supported ASUS boards, including additional RTX 5080 and RTX 5090 variants. Compute per-pin power and connector totals from those readings.
+- Configure GPU Status polling on the Nvidia tab and connector pin polling on the ROG Astral tab. Each has its own device selection, interval and freshness timeout.
+- Warn when an Astral pin warning profile still points to an old GPU number, with instructions for selecting the GPU again.
+- Fix a desktop configuration crash when the selected GPU or connector profile is temporarily unavailable.
+
 1.1.9 - Desktop diagnostics, tray fixes and mobile readings
 - Collect a diagnostic ZIP from Configuration > Maintenance for a selected time range. The report includes filtered logs, crash and hang events, current service state and live readings.
 - Include CPU, RAM module, graphics adapter and identifiable USB PSU models and vendors in diagnostic reports, including graphics adapters outside the RTX Lens plugins.

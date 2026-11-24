@@ -167,6 +167,7 @@ internal static class SafeguardReportRenderer
         var telemetry = report.Telemetry;
         var title = simulation ? "Safeguard+ simulation" : "Safeguard+ execution report";
         var blocks = new List<SafeguardReportBlock>();
+
         if (report.IsTestEmail)
         {
             blocks.Add(new SafeguardReportNotice("TEST EMAIL. This report uses live sensor readings from the time the test was requested. No Safeguard+ action ran.", IsWarning: true));
@@ -279,8 +280,7 @@ internal static class SafeguardReportRenderer
 
         return blocks;
 
-        void AddPanel(string heading, string? subtitle, IEnumerable<(string Label, string Value)> rows) =>
-            blocks.Add(new SafeguardReportRows(heading, subtitle, [.. rows]));
+        void AddPanel(string heading, string? subtitle, IEnumerable<(string Label, string Value)> rows) => blocks.Add(new SafeguardReportRows(heading, subtitle, [.. rows]));
     }
 
     private static (string Label, string Unit, double Min, double Max)? PinScale(SensorMetric metric, SettingsProfile? profile, double? cableRating) => metric switch
@@ -375,16 +375,8 @@ internal static class SafeguardReportRenderer
 }
 
 internal abstract record SafeguardReportBlock;
-
 internal sealed record SafeguardReportHeading(string Title, string? Subtitle = null) : SafeguardReportBlock;
-
 internal sealed record SafeguardReportNotice(string Text, bool IsWarning = false) : SafeguardReportBlock;
-
-internal sealed record SafeguardReportRows(string Title, string? Subtitle, IReadOnlyList<(string Label, string Value)> Rows)
-    : SafeguardReportBlock;
-
-internal sealed record SafeguardReportPinChart(
-    string Title, string Subtitle, string Unit, double Minimum, double Maximum, IReadOnlyList<SafeguardReportPin> Pins)
-    : SafeguardReportBlock;
-
+internal sealed record SafeguardReportRows(string Title, string? Subtitle, IReadOnlyList<(string Label, string Value)> Rows) : SafeguardReportBlock;
+internal sealed record SafeguardReportPinChart(string Title, string Subtitle, string Unit, double Minimum, double Maximum, IReadOnlyList<SafeguardReportPin> Pins) : SafeguardReportBlock;
 internal sealed record SafeguardReportPin(string Label, string Value, double Fraction);

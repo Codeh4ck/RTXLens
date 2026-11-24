@@ -35,7 +35,7 @@ internal static class AsusSnapshotMapper
         foreach (var sensor in data.Sensors)
         {
             double? value = sensor.Value is { } number && float.IsFinite(number) ? number : null;
-            readings.Add(CreateReading(data.DeviceId, sensor.Definition.Component, sensor.Definition.Metric, value, now, sensor.Definition.Channel));
+            readings.Add(CreateReading(data.DeviceId, sensor.Definition.Component, sensor.Definition.Metric, value, sensor.ObservedAt ?? now, sensor.Definition.Channel));
         }
 
         var voltages = data.Sensors.Where(sensor => sensor is { Definition: { Component: SensorComponent.GpuPin, Metric: SensorMetric.Voltage }, Value: > 0 }).ToArray();

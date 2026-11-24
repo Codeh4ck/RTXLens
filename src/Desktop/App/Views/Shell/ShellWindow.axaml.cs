@@ -75,11 +75,6 @@ internal sealed partial class ShellWindow : LensWindow
         };
 
         Opened += OnFirstOpened;
-        void OnFirstOpened(object? sender, EventArgs args)
-        {
-            Opened -= OnFirstOpened;
-            InitializeWindowsIntegration(startMinimized || model.Preferences.StartMinimized);
-        }
 
         Closing += OnClosing;
         Closed += OnClosed;
@@ -116,6 +111,14 @@ internal sealed partial class ShellWindow : LensWindow
             default:
                 RefreshHardwarePage();
                 break;
+        }
+
+        return;
+
+        void OnFirstOpened(object? sender, EventArgs args)
+        {
+            Opened -= OnFirstOpened;
+            InitializeWindowsIntegration(startMinimized || model.Preferences.StartMinimized);
         }
     }
 

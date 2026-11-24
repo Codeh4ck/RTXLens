@@ -9,10 +9,9 @@ public sealed class MetricDisplay : TemplatedControl
     public static readonly StyledProperty<string> LabelProperty = AvaloniaProperty.Register<MetricDisplay, string>(nameof(Label), "");
     public static readonly StyledProperty<string> ValueProperty = AvaloniaProperty.Register<MetricDisplay, string>(nameof(Value), "");
     public static readonly StyledProperty<string?> UnitProperty = AvaloniaProperty.Register<MetricDisplay, string?>(nameof(Unit));
-    public static readonly StyledProperty<IImage?> IconProperty = AvaloniaProperty.Register<MetricDisplay, IImage?>(nameof(Icon));
 
-    public static readonly StyledProperty<IBrush?> IconBackgroundProperty =
-        AvaloniaProperty.Register<MetricDisplay, IBrush?>(nameof(IconBackground));
+    public static readonly StyledProperty<IImage?> IconProperty = AvaloniaProperty.Register<MetricDisplay, IImage?>(nameof(Icon));
+    public static readonly StyledProperty<IBrush?> IconBackgroundProperty = AvaloniaProperty.Register<MetricDisplay, IBrush?>(nameof(IconBackground));
 
     public IBrush? IconBackground
     {

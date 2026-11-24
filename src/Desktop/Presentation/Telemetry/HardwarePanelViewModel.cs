@@ -78,6 +78,7 @@ public sealed class HardwarePanelViewModel : ObservableObject
             if (Set(ref field, value))
             {
                 Raise(nameof(Tone));
+                Raise(nameof(HasCableStatus));
             }
         }
     }
@@ -116,10 +117,18 @@ public sealed class HardwarePanelViewModel : ObservableObject
 
     public string PsuComparisonLabel => $"MSI PSU · CONNECTOR {_psuConnector} · A";
 
+    public bool HasCableStatus => IsAsus && State == "Ready" && Message is "Power path undetermined" or "Cable load not observed" or "16-pin cable active";
+
     public string Message
     {
         get;
-        private set => Set(ref field, value);
+        private set
+        {
+            if (Set(ref field, value))
+            {
+                Raise(nameof(HasCableStatus));
+            }
+        }
     }
 
     public string PowerText

@@ -1,4 +1,4 @@
-using LibreHardwareMonitor.Hardware;
+using RTXLens.Hardware.Nvidia;
 using RTXLens.Plugins.Asus.Device;
 using RTXLens.Plugins.Asus.Mapping;
 

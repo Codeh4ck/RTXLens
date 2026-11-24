@@ -81,6 +81,7 @@ internal sealed class SafeguardScriptWindow : LensWindow
         footer.Children.Add(save);
         Body = new StackPanel { Margin = new Thickness(20), Spacing = 12, Children = { fields, _message, footer } };
         Closing += (_, args) => args.Cancel = _busy;
+        return;
 
         async Task SaveAsync()
         {

@@ -34,6 +34,17 @@ test('legacy GPU status selections migrate to GenericNvidia without changing pin
     assert.equal(present().vramUsagePercent, 75);
 });
 
+test('GPU status and Astral pins follow their own freshness and enablement settings', () => {
+    const { store, present } = context();
+    const plugins = store.configuration.configuration.plugins;
+    plugins['generic-nvidia'].staleAfterMs = 5000;
+    plugins['asus-astral'].staleAfterMs = 2200;
+    plugins['asus-astral'].enabled = false;
+    assert.equal(store.staleAfter('generic-nvidia'), 5000);
+    assert.equal(store.staleAfter('asus-astral'), 2200);
+    assert.equal(present().state, 'Ready');
+});
+
 test('a disabled GenericNvidia source cannot silently switch to ASUS', () => {
     const { store, present } = context();
     store.configuration.configuration.plugins['generic-nvidia'].enabled = false;
