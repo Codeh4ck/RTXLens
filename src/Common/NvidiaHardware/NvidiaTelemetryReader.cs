@@ -15,7 +15,7 @@ public sealed class NvidiaTelemetryReader(INvidiaHardwareSource source, TimeProv
     private SensorReading[] _lastGpuReadings = [];
 
     private readonly Selection _gpuSelection = new();
-    private bool _awaitingPinSample;
+    private string? _awaitingPinsFor;
     private readonly Selection _pinSelection = new();
     private readonly Dictionary<string, DateTimeOffset> _retryAfter = [];
 
@@ -23,6 +23,8 @@ public sealed class NvidiaTelemetryReader(INvidiaHardwareSource source, TimeProv
     {
         private string? _requested;
         private string? _pciId;
+
+        public string? PciId => _pciId;
 
         public void Forget() => _pciId = null;
 
@@ -62,7 +64,7 @@ public sealed class NvidiaTelemetryReader(INvidiaHardwareSource source, TimeProv
         lock (_lock)
         {
             _pinSelection.Forget();
-            _awaitingPinSample = false;
+            _awaitingPinsFor = null;
         }
     }
 
@@ -152,7 +154,7 @@ public sealed class NvidiaTelemetryReader(INvidiaHardwareSource source, TimeProv
             cachedGpu = null;
             if (_pinSelection.Resolve(GetDevices().Where(item => item.IsAstral), deviceId) is not { } device || IsWaitingForDriver(device.Id))
             {
-                _awaitingPinSample = true;
+                _awaitingPinsFor = _pinSelection.PciId;
                 return null;
             }
 
@@ -167,18 +169,18 @@ public sealed class NvidiaTelemetryReader(INvidiaHardwareSource source, TimeProv
             catch (NvidiaSessionLostException)
             {
                 InvalidateSession(device.Id);
-                _awaitingPinSample = true;
+                _awaitingPinsFor = _pinSelection.PciId;
                 return null;
             }
 
             token.ThrowIfCancellationRequested();
 
-            if (_awaitingPinSample && pins.Length == 0)
+            if (_awaitingPinsFor == device.Id && pins.Length == 0)
             {
                 return null;
             }
 
-            _awaitingPinSample = false;
+            _awaitingPinsFor = null;
 
             var now = clock.GetUtcNow();
             if (_latestGpu is { } gpu && gpu.Device.Id == device.Id && now - gpu.ObservedAt <= _gpuFreshness)

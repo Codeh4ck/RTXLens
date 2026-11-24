@@ -161,8 +161,7 @@ try {
     const gpuRecording = { ...recording, sampleCount: 2, series: [gpu],
         gpuDetails: [{ deviceId: 'gpu0', description: 'Supported P-states: P0, P5' }] };
     await page.setContent(document(false, gpuRecording));
-    await page.locator('#gpu-details summary').click();
-    assert.match(await page.locator('#gpu-details').innerText(), /Supported P-states: P0, P5/);
+    assert.equal(await page.getByText('GPU capabilities', { exact: true }).count(), 0);
     await page.locator('#legend-values').check();
     const gpuPlot = await page.locator('canvas:not(.overlay)').first().boundingBox();
     await page.mouse.move(gpuPlot.x + gpuPlot.width * 0.8, gpuPlot.y + gpuPlot.height * 0.5);

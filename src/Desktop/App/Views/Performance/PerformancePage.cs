@@ -27,8 +27,6 @@ internal sealed class PerformancePage : UserControl
     private readonly Dictionary<string, (PerformanceSample[] Samples, XySeries Series)> _traceSamples = new(StringComparer.Ordinal);
     private readonly Dictionary<string, IBrush> _traceColors = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _cursors = new(StringComparer.Ordinal);
-    private readonly TextBlock _gpuDetails = Caption();
-    private readonly Expander _detailsPanel = new() { Header = "GPU capabilities" };
     private readonly TextBlock _status = Caption();
     private readonly ContentControl _importAlert;
     private readonly TextBlock _emptySources = Caption("Waiting for supported sensor readings.");
@@ -70,13 +68,10 @@ internal sealed class PerformancePage : UserControl
             button.Classes.Add("desktop-action");
         }
 
-        _gpuDetails.TextWrapping = TextWrapping.Wrap;
-        _detailsPanel.Content = _gpuDetails;
-        _detailsPanel.IsVisible = false;
         var title = new StackPanel
         {
             Spacing = 4,
-            Children = { new TextBlock { Text = "Performance Chart", Classes = { "heading" } }, _status, _detailsPanel }
+            Children = { new TextBlock { Text = "Performance Chart", Classes = { "heading" } }, _status }
         };
 
         var heading = new Grid
@@ -380,9 +375,6 @@ internal sealed class PerformancePage : UserControl
             SetAlert(_importAlert, imported ? $"Imported recording · {samples}" : null, "success");
         }
 
-        _detailsPanel.IsVisible = frame.GpuDetails.Length > 0;
-        _gpuDetails.Text = string.Join(Environment.NewLine, frame.GpuDetails.GroupBy(detail => detail.DeviceId)
-            .Select(device => $"{device.Key} · {string.Join(" · ", device.Select(detail => detail.Description))}"));
         _status.Text = imported ? samples : $"{frame.Status} · {samples}";
         _status.IsVisible = !(_importAlert.IsVisible && _importAlert.Classes.Contains("success"));
         _start.IsEnabled = !frame.Recording && frame.Series.Any(series => series is { Available: true, Selected: true });

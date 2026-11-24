@@ -92,7 +92,7 @@ footer { margin: 12px; color: var(--muted); font-size: 12px; }
 </style>
 </head>
 <body>
-<header><h1>RTX Lens - Performance Chart</h1><p id="session-info">No session</p><p id="status"></p><details id="gpu-details" hidden><summary>GPU capabilities</summary><div></div></details></header>
+<header><h1>RTX Lens - Performance Chart</h1><p id="session-info">No session</p><p id="status"></p></header>
 <div id="chart-controls">
 <nav aria-label="Chart navigation">
     <div class="nav-main">
@@ -272,18 +272,6 @@ footer { margin: 12px; color: var(--muted); font-size: 12px; }
         document.getElementById("session-info").textContent = update.startedAt
             ? new Date(update.startedAt).toLocaleString() + " - " + time(update.durationSeconds)
             : "No session";
-        const details = document.getElementById("gpu-details");
-        details.hidden = !update.gpuDetails?.length;
-        const rows = new Map();
-        for (const detail of update.gpuDetails ?? []) {
-            if (!rows.has(detail.deviceId)) rows.set(detail.deviceId, []);
-            rows.get(detail.deviceId).push(detail.description);
-        }
-        details.lastElementChild.replaceChildren(...Array.from(rows, ([device, values]) => {
-            const row = document.createElement("p");
-            row.textContent = device + " · " + values.join(" · ");
-            return row;
-        }));
         document.getElementById("status").textContent = update.status;
         document.getElementById("summary").textContent = update.sampleCount.toLocaleString()
             + " readings - " + time(update.durationSeconds) + (update.recording ? " - Recording" : "");
