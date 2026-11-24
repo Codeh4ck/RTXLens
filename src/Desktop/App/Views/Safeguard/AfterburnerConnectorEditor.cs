@@ -66,6 +66,7 @@ internal sealed class AfterburnerConnectorEditor : UserControl
         _action.SelectionChanged += (_, _) => UpdateActions();
         _scripts.SelectionChanged += (_, _) => UpdateActions();
         UpdateActions();
+        return;
 
         void UpdateActions()
         {

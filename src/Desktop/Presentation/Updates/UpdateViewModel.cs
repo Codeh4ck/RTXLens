@@ -184,6 +184,8 @@ public sealed class UpdateViewModel : ObservableObject
             Raise(nameof(Summary));
         }
 
+        return;
+
         void Add(string component, string name, string? installed, string latest)
         {
             if (!SemanticVersion.TryParse(installed, out var current) || !SemanticVersion.TryParse(latest, out var remote)

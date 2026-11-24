@@ -44,6 +44,7 @@ public static class ServiceHealth
     public static bool HasVersion(string json, string expectedVersion)
     {
         var manifest = new JavaScriptSerializer().DeserializeObject(json);
+
         return manifest is System.Collections.Generic.Dictionary<string, object> fields
             && fields.TryGetValue("version", out var version) && version is string value
             && string.Equals(value, expectedVersion, StringComparison.Ordinal);
@@ -54,8 +55,10 @@ public static class ServiceHealth
         var request = WebRequest.CreateHttp("http://localhost:59273/" + endpoint);
         request.Timeout = request.ReadWriteTimeout = 2000;
         request.Proxy = null!;
+
         using var response = request.GetResponse();
         using var reader = new StreamReader(response.GetResponseStream()!);
+
         return reader.ReadToEnd();
     }
 }

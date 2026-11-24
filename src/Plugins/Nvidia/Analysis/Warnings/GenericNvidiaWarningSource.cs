@@ -45,6 +45,7 @@ public sealed class GenericNvidiaWarningSource : IWarningSource
         {
             Add(GenericNvidiaWarningIds.CoreTemperature, SensorComponent.GpuCore, options.CoreTemperatureWarningC);
             Add(GenericNvidiaWarningIds.MemoryTemperature, SensorComponent.GpuMemory, options.MemoryTemperatureWarningC);
+            continue;
 
             void Add(string typeId, SensorComponent component, double? threshold)
             {

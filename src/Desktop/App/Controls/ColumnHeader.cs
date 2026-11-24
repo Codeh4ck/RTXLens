@@ -8,10 +8,8 @@ namespace RTXLens.App.Controls;
 public sealed class ColumnHeader : TemplatedControl
 {
     public static readonly StyledProperty<string> LabelProperty = AvaloniaProperty.Register<ColumnHeader, string>(nameof(Label), "");
-    public static readonly StyledProperty<string?> SortIndicatorProperty =
-        AvaloniaProperty.Register<ColumnHeader, string?>(nameof(SortIndicator));
-    public static readonly StyledProperty<ICommand?> SortCommandProperty =
-        AvaloniaProperty.Register<ColumnHeader, ICommand?>(nameof(SortCommand));
+    public static readonly StyledProperty<string?> SortIndicatorProperty = AvaloniaProperty.Register<ColumnHeader, string?>(nameof(SortIndicator));
+    public static readonly StyledProperty<ICommand?> SortCommandProperty = AvaloniaProperty.Register<ColumnHeader, ICommand?>(nameof(SortCommand));
 
     private Thumb? _resizeGrip;
 

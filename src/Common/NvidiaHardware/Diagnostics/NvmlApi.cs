@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace RTXLens.Plugins.GenericNvidia.Diagnostics;
+namespace RTXLens.Hardware.Nvidia.Diagnostics;
 
 internal sealed class NvmlApi : IDisposable
 {
@@ -23,8 +23,7 @@ internal sealed class NvmlApi : IDisposable
         var libraryPath = Path.Combine(Environment.SystemDirectory, "nvml.dll");
         if (!NativeLibrary.TryLoad(libraryPath, out var library))
         {
-            libraryPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-                "NVIDIA Corporation", "NVSMI", "nvml.dll");
+            libraryPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "NVIDIA Corporation", "NVSMI", "nvml.dll");
             if (!NativeLibrary.TryLoad(libraryPath, out library))
             {
                 return null;
@@ -33,6 +32,7 @@ internal sealed class NvmlApi : IDisposable
 
         var initialize = Export<Initialize>(library, "nvmlInit_v2");
         var shutdown = Export<Initialize>(library, "nvmlShutdown");
+
         if (initialize is not null && shutdown is not null && initialize() == 0)
         {
             return new NvmlApi(library, shutdown);
@@ -58,6 +58,18 @@ internal sealed class NvmlApi : IDisposable
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate int Initialize();
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct Utilization { public uint Gpu, Memory; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct Memory { public ulong Total, Free, Used; }
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    internal delegate int GetUtilization(nint device, out Utilization value);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    internal delegate int GetMemory(nint device, out Memory value);
+
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     internal delegate int GetCount(out uint count);
 
@@ -80,13 +92,12 @@ internal sealed class NvmlApi : IDisposable
     internal delegate int GetSupportedStates(nint device, [Out, MarshalAs(UnmanagedType.LPArray, SizeConst = 16)] int[] states, uint sizeBytes);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    internal delegate int GetFields(nint device, int count,
-        [In, Out, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 1)] FieldValue[] values);
+    internal delegate int GetFields(nint device, int count, [In, Out, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 1)] FieldValue[] values);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     internal delegate int GetPowerRange(nint device, out uint minimum, out uint maximum);
 
-    // nvmlPciInfo_t has a 16-byte legacy bus ID and a 32-byte bus ID after the numeric fields.
+    // nvmlPciInfo_t has a 16-byte legacy bus ID and a 32-byte bus ID after the numeric fields
     [StructLayout(LayoutKind.Explicit, Size = 68)]
     internal struct PciInfo
     {
@@ -109,7 +120,7 @@ internal sealed class NvmlApi : IDisposable
 
         public readonly ulong? UnsignedValue => Result != 0 ? null : ValueType switch
         {
-            1 or 2 => (uint)Value, // On Windows C unsigned long is 32 bits.
+            1 or 2 => (uint)Value,
             3 => Value,
             _ => null
         };

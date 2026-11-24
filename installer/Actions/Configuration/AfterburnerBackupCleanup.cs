@@ -17,16 +17,13 @@ public static class AfterburnerBackupCleanup
     private const FileAttributes UnsafeEntry = FileAttributes.Directory | FileAttributes.ReparsePoint;
 
     private static readonly Regex InstallationKey = new(@"\A[0-9a-f]{20}\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-    private static readonly Regex ArchiveName = new(@"\A(?:[0-9]{8}-[0-9]{6}-[0-9]{3}-|\.import-)[0-9a-f]{32}\z",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-    private static readonly Regex ImportMarker = new(@"\Alegacy-import-[0-9a-f]{20}\.txt\z",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex ArchiveName = new(@"\A(?:[0-9]{8}-[0-9]{6}-[0-9]{3}-|\.import-)[0-9a-f]{32}\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex ImportMarker = new(@"\Alegacy-import-[0-9a-f]{20}\.txt\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly Regex OperationResult = new(@"\A[0-9a-f]{32}\.json\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private enum Folder { Legacy, Store, Archive, Results }
 
-    internal static bool IsKnownBackupDirectory(string path) =>
-        IsPlainDirectory(path) && IsKnownTree(path, Folder.Store);
+    internal static bool IsKnownBackupDirectory(string path) => IsPlainDirectory(path) && IsKnownTree(path, Folder.Store);
 
     public static void Remove(string? installation, string programData, Action<string> log)
     {
@@ -36,6 +33,7 @@ public static class AfterburnerBackupCleanup
         }
 
         TryClean(Path.Combine(programData, LegacyFolder), Folder.Legacy);
+        return;
 
         void TryClean(string path, Folder kind)
         {
@@ -73,6 +71,7 @@ public static class AfterburnerBackupCleanup
     private static void CleanAt(string path, Folder kind)
     {
         path = Path.GetFullPath(path);
+
         var drive = Path.GetPathRoot(path)!;
         if (drive.StartsWith(@"\\", StringComparison.Ordinal) || new DriveInfo(drive).DriveType != DriveType.Fixed)
         {
@@ -123,13 +122,14 @@ public static class AfterburnerBackupCleanup
             foreach (var entry in Directory.GetFileSystemEntries(path))
             {
                 var attributes = File.GetAttributes(entry);
-                if ((attributes & UnsafeEntry) == 0 && IsKnownFile(entry, kind))
+                switch (attributes & UnsafeEntry)
                 {
-                    File.Delete(entry);
-                }
-                else if ((attributes & UnsafeEntry) == FileAttributes.Directory && ChildKind(entry, kind) is { } child)
-                {
-                    CleanDirectory(entry, child);
+                    case 0 when IsKnownFile(entry, kind):
+                        File.Delete(entry);
+                        break;
+                    case FileAttributes.Directory when ChildKind(entry, kind) is { } child:
+                        CleanDirectory(entry, child);
+                        break;
                 }
             }
 
@@ -139,7 +139,7 @@ public static class AfterburnerBackupCleanup
             }
         }
 
-        // This is deliberately nonrecursive. The parent is still pinned when this handle is released.
+        // This is intentionally nonrecursive. The parent is still pinned when this handle is released
         Directory.Delete(path, recursive: false);
     }
 
@@ -153,34 +153,28 @@ public static class AfterburnerBackupCleanup
 
     private static bool IsKnownFile(string path, Folder kind) => kind switch
     {
-        Folder.Store => NameIs(path, "pending.json") || NameIs(path, ".operation.lock") || NameIs(path, "restart-required.txt")
-            || ImportMarker.IsMatch(Path.GetFileName(path)),
+        Folder.Store => NameIs(path, "pending.json") || NameIs(path, ".operation.lock") || NameIs(path, "restart-required.txt") || ImportMarker.IsMatch(Path.GetFileName(path)),
         Folder.Archive => NameIs(path, AfterburnerFiles.PluginConfig) || NameIs(path, AfterburnerFiles.ProfileConfig) || NameIs(path, AfterburnerFiles.BackupManifest),
         Folder.Results => OperationResult.IsMatch(Path.GetFileName(path)),
         _ => false
     };
 
     private static bool NameIs(string path, string name) => string.Equals(Path.GetFileName(path), name, StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsPlainDirectory(string path) =>
-        Directory.Exists(path) && (File.GetAttributes(path) & UnsafeEntry) == FileAttributes.Directory;
+    private static bool IsPlainDirectory(string path) => Directory.Exists(path) && (File.GetAttributes(path) & UnsafeEntry) == FileAttributes.Directory;
 
     private static SafeFileHandle? OpenPlainDirectory(string path)
     {
         const uint readAttributes = 0x80;
         const uint openExisting = 3;
         const uint openDirectoryOrReparsePoint = 0x02000000 | 0x00200000;
+
         var handle = CreateFile(path, readAttributes, FileShare.Read, IntPtr.Zero, openExisting, openDirectoryOrReparsePoint, IntPtr.Zero);
         if (handle.IsInvalid)
         {
             var error = Marshal.GetLastWin32Error();
             handle.Dispose();
-            if (error is 2 or 3)
-            {
-                return null;
-            }
 
-            throw new Win32Exception(error, "Could not open backup folder: " + path);
+            return error is 2 or 3 ? null : throw new Win32Exception(error, "Could not open backup folder: " + path);
         }
 
         if (GetFileInformationByHandleEx(handle, 9, out var information, 8))
@@ -196,6 +190,7 @@ public static class AfterburnerBackupCleanup
 
         var detailsError = Marshal.GetLastWin32Error();
         handle.Dispose();
+
         throw new Win32Exception(detailsError, "Could not inspect backup folder: " + path);
     }
 

@@ -21,10 +21,12 @@ public static class MonitoringServices
 
         services.AddSingleton(new RuntimeConfigurationFile(configurationPath));
         services.ConfigureHttpJsonOptions(options => options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonContext.Default));
+
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(new MonitoringServiceLifetime(TimeProvider.System));
         services.AddSingleton(_ => new SensorStateStore([]));
         services.AddSingleton<SensorStreamHub>();
+        services.AddKeyedSingleton<SensorStreamHub>(RTXLens.Contracts.Monitoring.ServiceRoutes.WarningStream);
         services.AddSingleton<PluginRuntimeManager>();
         services.AddSingleton<HardwareCatalog>();
         services.AddSingleton<ActivityLoggerProvider>();

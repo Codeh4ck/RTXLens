@@ -1,4 +1,3 @@
-using RTXLens.Plugins.GenericNvidia.Contracts;
 using RTXLens.Plugins.Asus.Contracts;
 using RTXLens.Contracts.Enums;
 using RTXLens.Contracts.Sensors;
@@ -25,6 +24,7 @@ public sealed class AsusPluginFactory(TimeProvider clock, AsusStream stream, Nvi
     public PluginHardwareMetadata Hardware => AsusIdentity.Hardware;
     public string Id => AsusPlugin.PluginId;
     public string Name => AsusIdentity.PluginName;
+
     public PluginCapability[] Capabilities => [PluginCapability.Telemetry, PluginCapability.Configuration,
         PluginCapability.Restart, PluginCapability.DeviceSelection];
 
@@ -62,17 +62,18 @@ public sealed class AsusPluginFactory(TimeProvider clock, AsusStream stream, Nvi
     {
         var selected = AsusSettings.GetOptions(settings).DeviceId;
         return reader.GetDevices().Where(device => selected is null || device.Id == selected || device.LegacyId == selected)
-            .Any(device => AsusGpuReader.IsAstral(reader.Read(device.Id, settings.PollIntervalMs, CancellationToken.None)));
+            .Any(device => device.IsAstral);
     }
 
     public SensorIdentity[] ConnectorSources(SensorSnapshot snapshot, PluginSettings settings, string? connectorId)
     {
         var gpus = snapshot.Sensors
-            .Where(reading => reading.Identity.PluginId == NvidiaIdentity.Id)
+            .Where(reading => reading.Identity.PluginId == Id)
             .Select(reading => reading.Identity.DeviceId)
             .ToHashSet();
 
-        if (gpus.Count != 1)
+        if (gpus.Count != 1 || snapshot.Sensors.Any(reading =>
+                reading.Identity.PluginId == RTXLens.Plugins.GenericNvidia.Contracts.NvidiaIdentity.Id && !gpus.Contains(reading.Identity.DeviceId)))
         {
             return [];
         }

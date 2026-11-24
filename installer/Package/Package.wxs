@@ -12,11 +12,9 @@
         <Property Id="INSTALLFOLDER" Secure="yes">
             <RegistrySearch Id="PreviousInstallFolder" Root="HKLM" Key="SOFTWARE\RTXLens" Name="InstallDirectory" Type="raw" Bitness="always64" />
         </Property>
-        <Property Id="LEGACYINSTALLFOLDER" Secure="yes">
-            <RegistrySearch Id="LegacyInstallFolder" Root="HKLM" Key="SOFTWARE\Rtx5090Monitoring" Name="InstallDirectory" Type="raw" Bitness="always64" />
-        </Property>
         <StandardDirectory Id="ProgramFiles64Folder">
             <Directory Id="INSTALLFOLDER" Name="RTXLens">
+                <Directory Id="NotifierFolder" Name="Notifier" />
                 <Directory Id="ServiceFolder" Name="Service" />
                 <Directory Id="AppInstallFolder" Name="Desktop" />
             </Directory>
@@ -27,6 +25,8 @@
 
         <Feature Id="Service" Title="Monitoring service (required)" Description="Local WireView, ROG Astral and MSI PSU monitoring. Starts with Windows and supplies the widget and app." Level="1" AllowAbsent="no" AllowAdvertise="no" ConfigurableDirectory="INSTALLFOLDER">
             <ComponentGroupRef Id="ServiceFiles" />
+            <ComponentGroupRef Id="NotifierFiles" />
+            <ComponentRef Id="NotifierStartup" />
             <ComponentRef Id="MonitorService" />
             <ComponentRef Id="InstallationRegistration" />
         </Feature>
@@ -36,6 +36,14 @@
             <ComponentRef Id="DesktopShortcut" />
         </Feature>
 
+        <ComponentGroup Id="NotifierFiles" Directory="NotifierFolder">
+            <Files Include="$(var.PayloadDirectory)/Notifier/**"><Exclude Files="$(var.PayloadDirectory)/Notifier/**/*.pdb" /></Files>
+        </ComponentGroup>
+        <Component Id="NotifierStartup" Directory="NotifierFolder" Guid="612BC9E0-27CD-4C48-BEC1-9EBAE2F25B81" Bitness="always64">
+            <RemoveFolder Id="RemoveEmptyNotifier" On="uninstall" />
+            <RegistryValue Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="RTXLensNotifier" Type="string" Value="&quot;[NotifierFolder]RTXLens.Notifier.exe&quot;" KeyPath="yes" />
+        </Component>
+        <util:CloseApplication Id="CloseWarningNotifier" Target="RTXLens.Notifier.exe" CloseMessage="yes" RebootPrompt="no" Timeout="3" TerminateProcess="0" />
         <ComponentGroup Id="ServiceFiles" Directory="ServiceFolder">
             <Files Include="$(var.PayloadDirectory)/Service/**">
                 <Exclude Files="$(var.PayloadDirectory)/Service/RTXLens.Service.exe" />
@@ -70,12 +78,6 @@
         </Component>
 
         <Binary Id="InstallerActions" SourceFile="$(var.RTXLens.Installer.Actions.TargetDir)RTXLens.Installer.Actions.CA.dll" />
-        <CustomAction Id="SelectLegacyInstallFolder" BinaryRef="InstallerActions" DllEntry="SelectLegacyInstallFolder" Execute="immediate" Return="check" />
-        <CustomAction Id="PrepareLegacyMigration" BinaryRef="InstallerActions" DllEntry="PrepareLegacyMigration" Execute="immediate" Return="check" />
-        <CustomAction Id="RestoreLegacyMigration" BinaryRef="InstallerActions" DllEntry="RestoreLegacyMigration" Execute="rollback" Impersonate="no" Return="check" />
-        <CustomAction Id="CaptureLegacyMigration" BinaryRef="InstallerActions" DllEntry="CaptureLegacyMigration" Execute="deferred" Impersonate="no" Return="check" />
-        <CustomAction Id="ApplyLegacyMigration" BinaryRef="InstallerActions" DllEntry="ApplyLegacyMigration" Execute="deferred" Impersonate="no" Return="check" />
-        <CustomAction Id="CleanLegacyMigration" BinaryRef="InstallerActions" DllEntry="CleanLegacyMigration" Execute="commit" Impersonate="no" Return="ignore" />
         <CustomAction Id="PrepareServiceHealth" BinaryRef="InstallerActions" DllEntry="PrepareServiceHealth" Execute="immediate" Return="check" />
         <CustomAction Id="Preflight" BinaryRef="InstallerActions" DllEntry="Preflight" Execute="immediate" Return="check" />
         <CustomAction Id="PortAvailable" BinaryRef="InstallerActions" DllEntry="PortAvailable" Execute="deferred" Impersonate="no" Return="check" />
@@ -91,23 +93,19 @@
         <CustomAction Id="MigrateStartupRegistration" BinaryRef="InstallerActions" DllEntry="MigrateStartupRegistration" Execute="commit" Impersonate="no" Return="ignore" />
         <CustomAction Id="PrepareAfterburnerBackupCleanup" BinaryRef="InstallerActions" DllEntry="PrepareAfterburnerBackupCleanup" Execute="immediate" Return="check" />
         <CustomAction Id="RemoveAfterburnerBackups" BinaryRef="InstallerActions" DllEntry="RemoveAfterburnerBackups" Execute="commit" Impersonate="no" Return="ignore" />
-        <InstallUISequence>
-            <Custom Action="SelectLegacyInstallFolder" Before="CostInitialize" Condition="LEGACYINSTALLFOLDER AND WIX_UPGRADE_DETECTED AND NOT INSTALLFOLDER" />
-        </InstallUISequence>
+        <SetProperty Id="WixUnelevatedShellExecTarget" Value="[NotifierFolder]RTXLens.Notifier.exe" After="CostFinalize" Sequence="execute" />
+        <CustomAction Id="StartWarningNotifier" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixUnelevatedShellExec" Execute="immediate" Return="ignore" />
+        <Binary Id="NotifierFileHashes" SourceFile="$(var.PayloadDirectory)/../notifier-files.sha256" />
         <InstallExecuteSequence>
-            <Custom Action="SelectLegacyInstallFolder" Before="CostInitialize" Condition="LEGACYINSTALLFOLDER AND WIX_UPGRADE_DETECTED AND NOT INSTALLFOLDER" />
-            <Custom Action="PrepareLegacyMigration" After="InstallFiles" Condition="LEGACYINSTALLFOLDER AND WIX_UPGRADE_DETECTED AND NOT Installed" />
-            <Custom Action="RestoreLegacyMigration" After="PrepareLegacyMigration" Condition="LEGACYINSTALLFOLDER AND WIX_UPGRADE_DETECTED AND NOT Installed" />
-            <Custom Action="CaptureLegacyMigration" After="RestoreLegacyMigration" Condition="LEGACYINSTALLFOLDER AND WIX_UPGRADE_DETECTED AND NOT Installed" />
-            <Custom Action="ApplyLegacyMigration" After="CaptureLegacyMigration" Condition="LEGACYINSTALLFOLDER AND WIX_UPGRADE_DETECTED AND NOT Installed" />
-            <Custom Action="CleanLegacyMigration" After="VerifyServiceHealth" Condition="LEGACYINSTALLFOLDER AND WIX_UPGRADE_DETECTED AND NOT Installed" />
+            <Custom Action="override Wix4CloseApplications_$(sys.BUILDARCHSHORT)" Before="RemoveFiles" />
+            <Custom Action="StartWarningNotifier" After="InstallFinalize" Condition="(&amp;Service=3) AND NOT (REMOVE~=&quot;ALL&quot;)" />
             <Custom Action="PrepareServiceHealth" Before="VerifyServiceHealth" Condition="NOT (REMOVE~=&quot;ALL&quot;)" />
             <Custom Action="Preflight" Before="InstallValidate" Condition="NOT UPGRADINGPRODUCTCODE" />
             <Custom Action="PortAvailable" After="StopServices" Condition="NOT (REMOVE~=&quot;ALL&quot;)" />
-            <Custom Action="PrepareConfigurationBackup" After="PortAvailable" Condition="NOT (REMOVE~=&quot;ALL&quot;) AND NOT (LEGACYINSTALLFOLDER AND WIX_UPGRADE_DETECTED AND NOT Installed)" />
-            <Custom Action="RestoreConfiguration" After="PrepareConfigurationBackup" Condition="NOT (REMOVE~=&quot;ALL&quot;) AND NOT (LEGACYINSTALLFOLDER AND WIX_UPGRADE_DETECTED AND NOT Installed)" />
-            <Custom Action="BackupConfiguration" After="RestoreConfiguration" Condition="NOT (REMOVE~=&quot;ALL&quot;) AND NOT (LEGACYINSTALLFOLDER AND WIX_UPGRADE_DETECTED AND NOT Installed)" />
-            <Custom Action="CleanConfigurationBackup" After="BackupConfiguration" Condition="NOT (REMOVE~=&quot;ALL&quot;) AND NOT (LEGACYINSTALLFOLDER AND WIX_UPGRADE_DETECTED AND NOT Installed)" />
+            <Custom Action="PrepareConfigurationBackup" After="PortAvailable" Condition="NOT (REMOVE~=&quot;ALL&quot;)" />
+            <Custom Action="RestoreConfiguration" After="PrepareConfigurationBackup" Condition="NOT (REMOVE~=&quot;ALL&quot;)" />
+            <Custom Action="BackupConfiguration" After="RestoreConfiguration" Condition="NOT (REMOVE~=&quot;ALL&quot;)" />
+            <Custom Action="CleanConfigurationBackup" After="BackupConfiguration" Condition="NOT (REMOVE~=&quot;ALL&quot;)" />
             <Custom Action="VerifyServiceHealth" After="StartServices" Condition="NOT (REMOVE~=&quot;ALL&quot;)" />
             <Custom Action="ConfigureServiceStartup" Before="StartServices" Condition="NOT (REMOVE~=&quot;ALL&quot;)" />
             <Custom Action="RemoveStartupRegistration" Before="InstallFinalize" Condition="(&amp;Desktop=2) AND NOT UPGRADINGPRODUCTCODE" />

@@ -1,3 +1,8 @@
+using Microsoft.Extensions.Logging;
+using RTXLens.Core;
+using RTXLens.Hardware.Nvidia;
+using RTXLens.Plugins.GenericNvidia;
+using RTXLens.Service.Diagnostics;
 using RTXLens.Contracts.Configuration;
 using RTXLens.Core.Plugins;
 using RTXLens.Tests.Infrastructure;
@@ -13,6 +18,7 @@ internal static class PluginIsolationTests
         await runner.RunAsync("Healthy devices stream during a blocked synchronous hardware read", () => StreamsWhileDeviceIsBlockedAsync(blockFirstRead: true));
         await runner.RunAsync(StreamsWireViewWhileGpuProfileDiscoveryIsBlockedAsync);
         await runner.RunAsync(RetriesFailedStartupWithoutRestartingTheServiceAsync);
+        await runner.RunAsync(LogsRepeatedGpuOverrunsAndLossTransitionsAsync);
         await runner.RunAsync(DiscoversReturningHardwareWhileAnotherProbeIsBlockedAsync);
     }
 
@@ -91,6 +97,52 @@ internal static class PluginIsolationTests
         await WebSocketMessageReader.ReadUntilAsync(socket, frame => frame.TryGetProperty("settingsProfile", out var profile)
             && profile.ValueKind == System.Text.Json.JsonValueKind.Object
             && profile.GetProperty("profile").GetProperty("id").GetString() == "rtx-5080", timeout.Token);
+    }
+
+    private static async Task LogsRepeatedGpuOverrunsAndLossTransitionsAsync()
+    {
+        var attempts = 0;
+        var source = new TestNvidiaHardwareSource
+        {
+            Devices = [new("pci-first", "/gpu-nvidia/0", "NVIDIA GeForce RTX 5090")],
+            Sensors = [new("GPU Core", SensorType.Clock, 0, 1500)],
+            BeforeClocks = () =>
+            {
+                var poll = Interlocked.Increment(ref attempts);
+                if (poll <= 3) Thread.Sleep(120);
+                if (poll == 4) NvidiaDriverStatus.NvApi(-10);
+            }
+        };
+        using var reader = new NvidiaTelemetryReader(source, TimeProvider.System);
+        var factory = new GenericNvidiaPluginFactory(reader);
+        using var activity = new ActivityLoggerProvider(TimeProvider.System);
+        using var loggers = LoggerFactory.Create(builder => builder.AddProvider(activity));
+        await using var runtime = new PluginRuntimeManager([factory], new SensorStateStore([]), TimeProvider.System,
+            loggers.CreateLogger<PluginRuntimeManager>());
+        var settings = runtime.CreateDefaults();
+        settings.Plugins[factory.Id] = settings.Plugins[factory.Id] with { Enabled = true, PollIntervalMs = 100 };
+        runtime.Start(settings);
+        var losses = 0;
+        var overruns = 0;
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        await foreach (var record in activity.Reader.ReadAllAsync(timeout.Token))
+        {
+            switch (record.Event.Code)
+            {
+                case "plugin.poll-overrun":
+                    overruns++;
+                    TestAssert.True(record.Event.Detail?.Contains("internal clocks") == true && record.Event.Message.Contains("100 ms"),
+                        "The overrun log must identify the stages and configured interval.");
+                    break;
+                case "plugin.device-lost":
+                    losses++;
+                    break;
+                case "plugin.recovered":
+                    TestAssert.Equal(1, losses);
+                    TestAssert.Equal(1, overruns);
+                    return;
+            }
+        }
     }
 
     private static async Task RetriesFailedStartupWithoutRestartingTheServiceAsync()

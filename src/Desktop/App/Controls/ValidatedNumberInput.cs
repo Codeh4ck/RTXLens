@@ -36,7 +36,6 @@ internal sealed class ValidatedNumberInput : NumericUpDown
         var text = Text;
         if (text is null && !_templateApplied)
         {
-            // An editor on a tab that has never been opened may only have its initial Value.
             text = Value?.ToString("G29", CultureInfo.CurrentCulture);
         }
 
@@ -47,7 +46,8 @@ internal sealed class ValidatedNumberInput : NumericUpDown
 
         var separator = CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator;
         var point = text.IndexOf(separator, StringComparison.Ordinal);
-        var validPrecision = point < 0 || _places > 0 && text.Length - point - separator.Length <= _places;
+        var validPrecision = point < 0 || (_places > 0 && text.Length - point - separator.Length <= _places);
+
         if (validPrecision && decimal.TryParse(text, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint,
                 CultureInfo.CurrentCulture, out var value) && value >= Minimum && value <= Maximum)
         {

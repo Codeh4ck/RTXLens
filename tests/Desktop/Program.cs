@@ -4,6 +4,11 @@ using RTXLens.UI.Tests.Settings;
 using RTXLens.UI.Tests.Streaming;
 using RTXLens.UI.Tests.Telemetry;
 
+if (args is ["--verify-warning-notifier"])
+{
+    return RTXLens.UI.Tests.Controls.NotifierIntegration.Run();
+}
+
 if (args is ["--verify-avalonia-controls"] or ["--verify-avalonia-controls", _])
 {
     return RTXLens.UI.Tests.Controls.AvaloniaControlsTests.Run(args.Length == 2 ? args[1] : null);

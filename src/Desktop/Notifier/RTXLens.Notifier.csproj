@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+        <PlatformTarget>x64</PlatformTarget>
+        <ApplicationIcon>../App/Assets/monitor.ico</ApplicationIcon>
+        <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    </PropertyGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="RTXLens.UI.Tests" />
+        <ProjectReference Include="../WarningUI/RTXLens.WarningUI.csproj" />
+        <PackageReference Include="CommunityToolkit.Mvvm" />
+        <PackageReference Include="Avalonia.Desktop" />
+        <PackageReference Include="Avalonia.Themes.Fluent" />
+        <Compile Include="../App/Themes/*.cs" Link="Themes/%(Filename)%(Extension)" />
+        <Compile Include="../App/Platform/DesktopBuild.cs" Link="DesktopBuild.cs" />
+        <Compile Include="../App/ViewModels/Appearance/AppearanceViewModel.cs" Link="Themes/AppearanceViewModel.cs" />
+        <AvaloniaResource Include="../App/Themes/Palette.axaml" Link="Themes/Palette.axaml" />
+    </ItemGroup>
+</Project>

@@ -43,6 +43,8 @@
     <Folder Name="/UI/">
         <Project Path="src/Desktop/Debugging/RTXLens.Debugging.csproj" />
         <Project Path="src/Desktop/App/RTXLens.App.csproj" />
+        <Project Path="src/Desktop/WarningUI/RTXLens.WarningUI.csproj" />
+        <Project Path="src/Desktop/Notifier/RTXLens.Notifier.csproj" />
         <Project Path="src/Desktop/Client/RTXLens.Client.csproj" />
         <Project Path="src/Desktop/Presentation/RTXLens.Presentation.csproj" />
         <Project Path="tests/Desktop/RTXLens.UI.Tests.csproj" />

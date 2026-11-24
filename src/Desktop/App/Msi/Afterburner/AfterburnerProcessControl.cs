@@ -15,23 +15,16 @@ internal static class AfterburnerProcessControl
     {
         var expectedExecutable = Path.Combine(installation, AfterburnerFiles.Executable);
         var processes = Process.GetProcessesByName("MSIAfterburner");
+
         using var current = Process.GetCurrentProcess();
 
         try
         {
             // Validate every target before requesting any exits. A different installation/session is never stopped.
-            foreach (var process in processes)
+            if (processes.Where(process => !process.HasExited)
+                .Any(process => process.SessionId != current.SessionId || !string.Equals(process.MainModule?.FileName, expectedExecutable, StringComparison.OrdinalIgnoreCase)))
             {
-                if (process.HasExited)
-                {
-                    continue;
-                }
-
-                if (process.SessionId != current.SessionId
-                    || !string.Equals(process.MainModule?.FileName, expectedExecutable, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException("Another Afterburner installation or Windows session is running. Close it manually before restarting this installation.");
-                }
+                throw new InvalidOperationException("Another Afterburner installation or Windows session is running. Close it manually before restarting this installation.");
             }
 
             foreach (var process in processes)
@@ -48,6 +41,7 @@ internal static class AfterburnerProcessControl
                     EnumWindows((candidate, _) =>
                     {
                         GetWindowThreadProcessId(candidate, out var owner);
+
                         if (owner != (uint)process.Id)
                         {
                             return true;
@@ -55,6 +49,7 @@ internal static class AfterburnerProcessControl
 
                         var title = new StringBuilder(256);
                         GetWindowTextW(candidate, title, title.Capacity);
+
                         if (!title.ToString().StartsWith("MSI Afterburner", StringComparison.OrdinalIgnoreCase))
                         {
                             return true;
@@ -101,13 +96,14 @@ internal static class AfterburnerProcessControl
     {
         var expected = Path.Combine(installation, AfterburnerFiles.Executable);
         var processes = Process.GetProcessesByName("MSIAfterburner");
+
         using var current = Process.GetCurrentProcess();
+
         try
         {
             foreach (var process in processes)
             {
-                if (process.SessionId != current.SessionId
-                    || !string.Equals(process.MainModule?.FileName, expected, StringComparison.OrdinalIgnoreCase))
+                if (process.SessionId != current.SessionId || !string.Equals(process.MainModule?.FileName, expected, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
@@ -140,8 +136,7 @@ internal static class AfterburnerProcessControl
 
     [DllImport("advapi32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetTokenInformation(SafeAccessTokenHandle token, int informationClass,
-        out int information, int size, out int returnedSize);
+    private static extern bool GetTokenInformation(SafeAccessTokenHandle token, int informationClass, out int information, int size, out int returnedSize);
 
     private delegate bool WindowCallback(nint window, nint parameter);
 

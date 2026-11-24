@@ -23,7 +23,6 @@ internal sealed partial class ShellViewModel
 {
     private readonly HttpClient _updateHttp = new() { Timeout = TimeSpan.FromSeconds(10), MaxResponseContentBufferSize = 131072 };
     private readonly DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromMinutes(1) };
-    private readonly WarningTransitionTracker _warnings = new();
     private readonly SemaphoreSlim _preferencesGate = new(1);
     private readonly HashSet<(IMonitoringApi Api, string Plugin)> _discoveryRequests = [];
     private AppPreferences _savedPreferences = null!;
@@ -262,9 +261,9 @@ internal sealed partial class ShellViewModel
         }
     }
 
-    private void QueueWarningNotifications(MonitoringSession session, SensorSnapshot snapshot)
+    private void QueueSafeguardNotifications(MonitoringSession session, SensorSnapshot snapshot)
     {
-        if (snapshot.Warnings is null && snapshot.SafeguardExecutions is null)
+        if (snapshot.SafeguardExecutions is null)
         {
             return;
         }
@@ -279,11 +278,6 @@ internal sealed partial class ShellViewModel
             if (OperatingSystem.IsWindows() && snapshot.SafeguardExecutions is { } notices)
             {
                 ReceiveSafeguard(notices);
-            }
-
-            foreach (var warning in _warnings.Evaluate(snapshot, DateTimeOffset.UtcNow, Preferences))
-            {
-                WarningRaised?.Invoke(warning);
             }
         });
     }

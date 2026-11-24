@@ -11,9 +11,28 @@ public sealed class WarningTransitionTracker
     private bool _enabled = true;
 
     public WarningNotification[] Evaluate(SensorSnapshot snapshot, DateTimeOffset now, AppPreferences? preferences = null)
+        => Evaluate(snapshot.Warnings, preferences?.WarningNotifications ?? true);
+
+    public WarningNotification[] Evaluate(WarningSnapshot? feed, bool enabled)
     {
-        var feed = snapshot.Warnings;
-        var enabled = preferences?.WarningNotifications ?? true;
+        var due = TakeDue(feed, enabled);
+        if (due.Length == 0)
+        {
+            return [];
+        }
+
+        var title = due.Length == 1 ? due[0].Title : $"RTX Lens - {due.Length} warnings";
+        var message = string.Join(Environment.NewLine, due.Take(3).Select(state => due.Length == 1 ? state.Detail : state.Title + ": " + state.Detail));
+        if (due.Length > 3)
+        {
+            message += $"{Environment.NewLine}+{due.Length - 3} more warnings";
+        }
+
+        return [new WarningNotification(feed!.InstanceId + "/" + feed.Sequence, title, message)];
+    }
+
+    public WarningState[] TakeDue(WarningSnapshot? feed, bool enabled)
+    {
         if (!enabled)
         {
             _enabled = false;
@@ -45,16 +64,6 @@ public sealed class WarningTransitionTracker
                 due.Add(state);
             }
         }
-        if (due.Count == 0)
-        {
-            return [];
-        }
-        var title = due.Count == 1 ? due[0].Title : $"RTX Lens - {due.Count} warnings";
-        var message = string.Join(Environment.NewLine, due.Take(3).Select(state => due.Count == 1 ? state.Detail : state.Title + ": " + state.Detail));
-        if (due.Count > 3)
-        {
-            message += $"{Environment.NewLine}+{due.Count - 3} more warnings";
-        }
-        return [new WarningNotification(feed.InstanceId + "/" + feed.Sequence, title, message)];
+        return [.. due];
     }
 }

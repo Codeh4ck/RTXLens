@@ -14,10 +14,7 @@ The desktop app's Start with Windows option applies to your Windows user account
 Start minimized is a separate setting. Opening an installed app repairs an enabled startup entry pointing to an old portable folder.
 
 UPDATING AN EXISTING INSTALLATION
-Exit RTX Monitor or RTX Lens from its tray menu, then run the new setup EXE.
-RTX Lens 1.0.7 upgrades installer-managed RTX Monitor installations in place
-and migrates settings and feature choices. Setup may ask you to close MSI
-Afterburner so it can migrate configured Safeguard+ actions.
+Exit RTX Lens from its tray menu, then run the new setup EXE.
 Import the included widget into iCUE separately. Both the updated app and
 widget check rtxlens.com for future releases.
 

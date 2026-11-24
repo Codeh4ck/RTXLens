@@ -141,10 +141,11 @@ internal static class MobileAccessTests
             receiptWarning |= IsReceiptWarning(record);
         }
         TestAssert.True(receiptWarning, "260 accepted pushes filled the receipt queue without reporting a missed check.");
+        return;
 
         static bool IsReceiptWarning(ActivityRecord record) => record.Level >= LogLevel.Warning &&
-            (record.Entry.Code.Contains("receipt", StringComparison.OrdinalIgnoreCase)
-             || record.Entry.Message.Contains("receipt", StringComparison.OrdinalIgnoreCase));
+                                                               (record.Entry.Code.Contains("receipt", StringComparison.OrdinalIgnoreCase)
+                                                                || record.Entry.Message.Contains("receipt", StringComparison.OrdinalIgnoreCase));
     }
 
     private static async Task PairedPhoneReceivesOnlyNewWarningNotificationsAsync()
@@ -391,7 +392,7 @@ internal static class MobileAccessTests
             busy.Stop();
 
             status = await service.ConfigureAsync(settings, cancellationToken);
-            TestAssert.True(status.Listening && status.Error is null, status.Error ?? "The listener should recover when the port is released.");
+            TestAssert.True(status is { Listening: true, Error: null }, status.Error ?? "The listener should recover when the port is released.");
             TestAssert.False(await service.PublishSimulationWarningAsync(new MobileSimulationWarning("Test", ""), cancellationToken),
                 "The release listener should never accept simulated warnings.");
         }
@@ -427,7 +428,7 @@ internal static class MobileAccessTests
             TestAssert.True(await service.CreateInviteAsync(cancellationToken) is not null, "The service should still support pairing.");
 
             status = await service.ConfigureAsync(settings with { PortForwarding = null }, cancellationToken);
-            TestAssert.True(status.Listening && status.Error is null, status.Error ?? "Local pairing should be available.");
+            TestAssert.True(status is { Listening: true, Error: null }, status.Error ?? "Local pairing should be available.");
         }
         finally
         {
@@ -454,7 +455,7 @@ internal static class MobileAccessTests
         {
             var settings = new MobileAccessSettings(Enabled: true, Port: GetUnusedPort());
             var status = await service.ConfigureAsync(settings, cancellationToken);
-            TestAssert.True(status.Listening && status.Error is null, status.Error ?? "The mobile listener did not start.");
+            TestAssert.True(status is { Listening: true, Error: null }, status.Error ?? "The mobile listener did not start.");
 
             var invite = (await service.CreateInviteAsync(cancellationToken))!;
             var address = service.ListenerAddress!;
@@ -540,7 +541,7 @@ internal static class MobileAccessTests
             PortForwarding: new MobilePortForwarding("192.168.1.40", 59275));
 
         var enabled = await first.ConfigureAsync(settings, cancellationToken);
-        TestAssert.True(enabled.Listening && enabled.Error is null, enabled.Error ?? "Mobile access should be listening.");
+        TestAssert.True(enabled is { Listening: true, Error: null }, enabled.Error ?? "Mobile access should be listening.");
         var rules = network.Owned!;
         var invite = (await first.CreateInviteAsync(cancellationToken))!;
         var address = first.ListenerAddress!;

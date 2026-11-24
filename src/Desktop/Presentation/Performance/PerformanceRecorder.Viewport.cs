@@ -37,7 +37,7 @@ public sealed partial class PerformanceRecorder
             {
                 foreach (var state in _traces.Values.Where(IsSelectedForHover))
                 {
-                    values[state.Trace.Key] = NearestSample(state.Samples, seconds)?.Value;
+                    values[state.Trace.Key] = NearestSample(state.Samples, seconds, state.Trace.Stepped)?.Value;
                 }
             }
 
@@ -62,7 +62,7 @@ public sealed partial class PerformanceRecorder
             {
                 if (_traces.TryGetValue(keys[index], out var state) && IsSelectedForHover(state))
                 {
-                    samples[index] = NearestSample(state.Samples, seconds);
+                    samples[index] = NearestSample(state.Samples, seconds, state.Trace.Stepped);
                 }
             }
         }
@@ -71,7 +71,7 @@ public sealed partial class PerformanceRecorder
     private bool IsSelectedForHover(TraceState state) =>
         state.Selected && (state.Imported || _settings.GetValueOrDefault(state.Trace.Identity.PluginId)?.Enabled == true);
 
-    private static PerformanceSample? NearestSample(List<PerformanceSample> samples, double seconds)
+    private static PerformanceSample? NearestSample(List<PerformanceSample> samples, double seconds, bool stepped)
     {
         var index = LowerBound(samples, seconds);
         if (index == samples.Count)
@@ -89,7 +89,7 @@ public sealed partial class PerformanceRecorder
             return null;
         }
 
-        return seconds - samples[index - 1].Seconds <= samples[index].Seconds - seconds
+        return stepped || seconds - samples[index - 1].Seconds <= samples[index].Seconds - seconds
             ? samples[index - 1] : samples[index];
     }
 

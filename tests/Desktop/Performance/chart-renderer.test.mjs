@@ -155,6 +155,17 @@ try {
     await page.waitForTimeout(100);
     assert.equal(await page.evaluate(() => window.baseDraws), baseline,
         'Unchanged data must reuse the cached trace image.');
+    await page.goto('about:blank');
+    const gpu = { ...series[0], trace: { ...series[0].trace, group: 'Current P-state', label: 'ROG Astral · Current P-state',
+        stepped: true, unit: '' }, count: 2, samples: [{ seconds: 0, value: 5 }, { seconds: 100, value: 0 }] };
+    const gpuRecording = { ...recording, sampleCount: 2, series: [gpu],
+        gpuDetails: [{ deviceId: 'gpu0', description: 'Supported P-states: P0, P5' }] };
+    await page.setContent(document(false, gpuRecording));
+    assert.equal(await page.getByText('GPU capabilities', { exact: true }).count(), 0);
+    await page.locator('#legend-values').check();
+    const gpuPlot = await page.locator('canvas:not(.overlay)').first().boundingBox();
+    await page.mouse.move(gpuPlot.x + gpuPlot.width * 0.8, gpuPlot.y + gpuPlot.height * 0.5);
+    await page.waitForFunction(() => document.querySelector('.legend strong').textContent === 'P5');
     assert.deepEqual(network, [], 'The exported viewer must remain offline.');
     assert.deepEqual(errors, [], 'The renderer must not produce JavaScript errors.');
     console.log('PASS: offline and native chart rendering, overlays, viewport requests, exact hover and redraw caching');

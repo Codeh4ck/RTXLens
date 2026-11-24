@@ -8,17 +8,19 @@ using RTXLens.Contracts.Diagnostics;
 
 namespace RTXLens.App.Services;
 
-internal sealed class DesktopEventLog
+internal sealed partial class DesktopEventLog
 {
     private const int Capacity = 1000;
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
-    {
-        Converters = { new JsonStringEnumConverter() }
-    };
+
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
+
     private static readonly string[] PrivateNames = ["password", "secret", "credential", "token", "smtp", "apikey", "privatekey"];
     private readonly string _path;
     private readonly SemaphoreSlim _writeGate = new(1);
     private ServiceLogEntry[] _entries;
+
+    [System.Text.RegularExpressions.GeneratedRegex("([a-z0-9])([A-Z])")]
+    private static partial System.Text.RegularExpressions.Regex HumanizeRegex();
 
     public DesktopEventLog(string path)
     {
@@ -89,8 +91,10 @@ internal sealed class DesktopEventLog
         {
             var timestamp = DateTimeOffset.UtcNow;
             var sequence = _entries.LastOrDefault()?.Sequence ?? long.MinValue;
+
             var additions = changes.TakeLast(Capacity).Select(message => new ServiceLogEntry(++sequence, timestamp,
                 ServiceLogLevel.Information, "desktop.configuration-changed", "Desktop configuration", message, null));
+
             var entries = _entries.Concat(additions).TakeLast(Capacity).ToArray();
 
             Volatile.Write(ref _entries, entries);
@@ -100,7 +104,9 @@ internal sealed class DesktopEventLog
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+
                 await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(entries));
+
                 File.Move(temporary, _path, overwrite: true);
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
@@ -116,8 +122,7 @@ internal sealed class DesktopEventLog
 
     private static void Compare(string path, JsonElement before, JsonElement after, List<string> changes)
     {
-        if (before.ValueKind != JsonValueKind.Undefined && after.ValueKind != JsonValueKind.Undefined
-            && JsonElement.DeepEquals(before, after))
+        if (before.ValueKind != JsonValueKind.Undefined && after.ValueKind != JsonValueKind.Undefined && JsonElement.DeepEquals(before, after))
         {
             return;
         }
@@ -147,8 +152,7 @@ internal sealed class DesktopEventLog
 
             for (var index = 0; index < Math.Max(old.Length, updated.Length); index++)
             {
-                Compare($"{path} [{index + 1}]", index < old.Length ? old[index] : default,
-                    index < updated.Length ? updated[index] : default, changes);
+                Compare($"{path} [{index + 1}]", index < old.Length ? old[index] : default, index < updated.Length ? updated[index] : default, changes);
             }
 
             return;
@@ -160,6 +164,7 @@ internal sealed class DesktopEventLog
     private static Dictionary<string, JsonElement> Properties(JsonElement value)
     {
         var properties = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+
         if (value.ValueKind == JsonValueKind.Object)
         {
             foreach (var property in value.EnumerateObject())
@@ -171,12 +176,9 @@ internal sealed class DesktopEventLog
         return properties;
     }
 
-    private static JsonElement[] Items(JsonElement value) => value.ValueKind == JsonValueKind.Array
-        ? [.. value.EnumerateArray()]
-        : [];
+    private static JsonElement[] Items(JsonElement value) => value.ValueKind == JsonValueKind.Array ? [.. value.EnumerateArray()] : [];
 
-    private static bool IsPrivate(string name) => PrivateNames
-        .Any(part => name.Contains(part, StringComparison.OrdinalIgnoreCase));
+    private static bool IsPrivate(string name) => PrivateNames.Any(part => name.Contains(part, StringComparison.OrdinalIgnoreCase));
 
     private static string Label(string name) => name switch
     {
@@ -189,7 +191,7 @@ internal sealed class DesktopEventLog
 
     private static string Humanize(string name)
     {
-        var label = System.Text.RegularExpressions.Regex.Replace(name, "([a-z0-9])([A-Z])", "$1 $2");
+        var label = HumanizeRegex().Replace(name, "$1 $2");
         return label.Length == 0 ? label : char.ToUpperInvariant(label[0]) + label[1..];
     }
 

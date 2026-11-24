@@ -1,0 +1,16 @@
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="RTXLens.WarningUI.WarningPopup" Title="RTX Lens warning" Width="390" SizeToContent="Height"
+        WindowDecorations="None" CanResize="False" ShowActivated="False" ShowInTaskbar="False" Topmost="True"
+        Background="{DynamicResource PanelBrush}">
+    <Border Padding="16,12" BorderThickness="3,1,1,1" BorderBrush="{DynamicResource WarningBrush}">
+        <StackPanel Spacing="6">
+            <TextBlock Text="RTX Lens" FontWeight="SemiBold" Foreground="{DynamicResource WarningBrush}"/>
+            <TextBlock Name="Heading" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}"/>
+            <TextBlock Name="Details" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,5,0,0">
+                <Button Name="ViewWarnings" Content="View warnings"/>
+                <Button Name="Dismiss" Content="Dismiss"/>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

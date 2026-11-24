@@ -90,9 +90,15 @@ internal static class WarningConfigurationTests
         TestAssert.Equal(5, persisted.Warnings.Defaults.RepeatIntervalSeconds);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(9));
         using var socket = await host.ConnectSensorClientAsync(timeout.Token);
+        using var warningsSocket = await host.ConnectSensorClientAsync(timeout.Token, "/" + ServiceRoutes.WarningStream);
         var first = await WebSocketMessageReader.ReadUntilAsync(socket, frame => frame.GetProperty("warnings").GetProperty("states").GetArrayLength() > 0, timeout.Token);
         var sequence = first.GetProperty("warnings").GetProperty("sequence").GetInt64();
         var next = await WebSocketMessageReader.ReadUntilAsync(socket, frame => frame.GetProperty("warnings").GetProperty("sequence").GetInt64() > sequence, timeout.Token);
+        var warningFrame = await WebSocketMessageReader.ReadUntilAsync(warningsSocket, feed => feed.GetProperty("sequence").GetInt64() > sequence, timeout.Token);
+        TestAssert.False(warningFrame.TryGetProperty("sensors", out _), "The helper stream must only carry warnings.");
+        using var reconnected = await host.ConnectSensorClientAsync(timeout.Token, "/" + ServiceRoutes.WarningStream);
+        var cached = await WebSocketMessageReader.ReadUntilAsync(reconnected, feed => feed.GetProperty("states").GetArrayLength() > 0, timeout.Token);
+        TestAssert.Equal(warningFrame.GetProperty("states")[0].GetProperty("episodeId").GetString(), cached.GetProperty("states")[0].GetProperty("episodeId").GetString());
         var state = next.GetProperty("warnings").GetProperty("states")[0];
         TestAssert.Equal(WireViewWarningIds.PinOvercurrent, state.GetProperty("typeId").GetString());
         TestAssert.Equal("Active", state.GetProperty("phase").GetString());

@@ -93,13 +93,18 @@ public sealed partial class PerformanceRecorder(TimeProvider? timeProvider = nul
             var found = new HashSet<string>(StringComparer.Ordinal);
             UpdateDuration();
 
-            foreach (var reading in snapshot.Sensors)
+            var gpuSources = GpuSources(snapshot);
+            UpdateGpuDetails(snapshot, IsUsable);
+            foreach (var reading in ChartReadings(snapshot, IsUsable))
             {
                 var identity = reading.Identity;
                 var settings = _settings.GetValueOrDefault(identity.PluginId);
-                var usable = settings is { Enabled: true } && ready.Contains(identity.PluginId)
-                    && reading is { Quality: ReadingQuality.Valid, Value: { } value } && double.IsFinite(value)
-                    && reading.ObservedAt <= now && now - reading.ObservedAt <= TimeSpan.FromMilliseconds(settings.StaleAfterMs);
+                var usable = IsUsable(reading);
+                var source = gpuSources.GetValueOrDefault(identity.DeviceId);
+                if (identity.PluginId is not (AsusIdentity.Id or NvidiaIdentity.Id) || source is null)
+                {
+                    source = _sourceNames.GetValueOrDefault(identity.PluginId, identity.PluginId);
+                }
 
                 if (!_traces.TryGetValue(identity.Key, out var state))
                 {
@@ -108,7 +113,7 @@ public sealed partial class PerformanceRecorder(TimeProvider? timeProvider = nul
                         continue;
                     }
 
-                    var trace = PerformanceTrace.Create(reading, _sourceNames.GetValueOrDefault(identity.PluginId, identity.PluginId), _traces.Count);
+                    var trace = PerformanceTrace.Create(reading, source, _traces.Count);
                     if (trace is null)
                     {
                         continue;
@@ -116,6 +121,12 @@ public sealed partial class PerformanceRecorder(TimeProvider? timeProvider = nul
 
                     state = new TraceState(trace);
                     _traces.Add(trace.Key, state);
+                }
+
+                if (!state.Imported && (_recording || state.Samples.Count == 0) && state.Trace.Source != source)
+                {
+                    var definition = PerformanceTrace.Create(reading, source, 0)!;
+                    state.Trace = definition with { Color = state.Trace.Color };
                 }
 
                 usable &= IsActiveConnector(identity) || state.Samples.Count > 0;
@@ -153,6 +164,12 @@ public sealed partial class PerformanceRecorder(TimeProvider? timeProvider = nul
                 state.HasOpenLine = true;
                 _sampleCount++;
             }
+
+            bool IsUsable(SensorReading reading) =>
+                _settings.GetValueOrDefault(reading.Identity.PluginId) is { Enabled: true } settings
+                && ready.Contains(reading.Identity.PluginId)
+                && reading is { Quality: ReadingQuality.Valid, Value: { } value } && double.IsFinite(value)
+                && reading.ObservedAt <= now && now - reading.ObservedAt <= TimeSpan.FromMilliseconds(settings.StaleAfterMs);
 
             foreach (var state in _traces.Values.Where(state => !found.Contains(state.Trace.Key)))
             {
@@ -224,6 +241,7 @@ public sealed partial class PerformanceRecorder(TimeProvider? timeProvider = nul
                 state.HasOpenLine = false;
             }
 
+            _sessionDetails = new(_liveDetails);
             _recording = true;
             _status = _mode == "live" ? "Recording" : "Recording simulated telemetry";
         }
@@ -271,6 +289,7 @@ public sealed partial class PerformanceRecorder(TimeProvider? timeProvider = nul
             }
 
             _sessionId = Guid.NewGuid().ToString("N");
+            _sessionDetails.Clear();
             _startedAt = null;
             _duration = 0;
             _sampleCount = 0;
@@ -313,7 +332,10 @@ public sealed partial class PerformanceRecorder(TimeProvider? timeProvider = nul
                 return new PerformanceSeries(state.Trace, state.Selected, state.Available, offset, state.Samples.Count, samples);
             }).ToArray();
 
-            return new(_sessionId, _startedAt, _duration, _recording, _sampleCount, _status, series);
+            return new(_sessionId, _startedAt, _duration, _recording, _sampleCount, _status, series)
+            {
+                GpuDetails = [.. (_startedAt is null ? _liveDetails : _sessionDetails).Values]
+            };
         }
     }
 
@@ -327,7 +349,10 @@ public sealed partial class PerformanceRecorder(TimeProvider? timeProvider = nul
             }
 
             var frame = ReadFrame(null, new Dictionary<string, int>(), includeDisabled: true);
-            return frame with { Series = [.. frame.Series.Where(series => series.Count > 0)] };
+            var captured = frame.Series.Where(series => series.Count > 0).ToArray();
+            var devices = captured.Where(series => series.Trace.Identity.PluginId is AsusIdentity.Id or NvidiaIdentity.Id)
+                .Select(series => series.Trace.DeviceId).ToHashSet(StringComparer.Ordinal);
+            return frame with { Series = captured, GpuDetails = [.. frame.GpuDetails.Where(detail => devices.Contains(detail.DeviceId))] };
         }
     }
 
@@ -386,6 +411,7 @@ public sealed partial class PerformanceRecorder(TimeProvider? timeProvider = nul
             }
 
             _sessionId = Guid.NewGuid().ToString("N");
+            _sessionDetails = session.GpuDetails.ToDictionary(detail => (detail.DeviceId, detail.Metric));
             _startedAt = session.StartedAt;
             _duration = session.DurationSeconds;
             _sampleCount = session.SampleCount;
@@ -407,6 +433,7 @@ public sealed partial class PerformanceRecorder(TimeProvider? timeProvider = nul
 
     private void MarkUnavailable()
     {
+        _liveDetails.Clear();
         _activeMsiConnectors.Clear();
         foreach (var state in _traces.Values)
         {
@@ -444,7 +471,7 @@ public sealed partial class PerformanceRecorder(TimeProvider? timeProvider = nul
 
     private sealed class TraceState(PerformanceTrace trace)
     {
-        public PerformanceTrace Trace { get; } = trace;
+        public PerformanceTrace Trace { get; set; } = trace;
         public bool Selected { get; set; }
         public bool Imported { get; set; }
         public bool Available { get; set; }

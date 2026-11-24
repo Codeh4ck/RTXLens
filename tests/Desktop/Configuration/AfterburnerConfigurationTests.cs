@@ -60,6 +60,7 @@ internal static class AfterburnerConfigurationTests
         CheckCandidate(Path.Combine(directory, "removed"));
         File.Copy(typeof(AfterburnerConfigurationTests).Assembly.Location, Path.Combine(directory, "MSIAfterburner.exe"));
         CheckCandidate(directory);
+        return;
 
         void CheckCandidate(string candidate)
         {

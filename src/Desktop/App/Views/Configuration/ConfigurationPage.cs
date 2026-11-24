@@ -33,10 +33,14 @@ internal sealed class ConfigurationPage : UserControl
         ItemsPanel = new FuncTemplate<Panel?>(() => new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 })
     };
 
-    public ConfigurationPage(ShellViewModel shell)
+    private bool _openCurrentWarnings;
+
+    public ConfigurationPage(ShellViewModel shell, bool currentWarnings = false)
     {
-        // Keep the scrollbar in the shell's right margin so the content stays aligned with the navigation.
+        // Keep the scrollbar in the shell's right margin so the content stays aligned with the navigation
         Margin = new Thickness(0, 0, -PageScrollbarGutter, 0);
+
+        _openCurrentWarnings = currentWarnings;
         _shell = shell;
         _editor = shell.Configuration;
 
@@ -67,11 +71,14 @@ internal sealed class ConfigurationPage : UserControl
         var apply = CommitButton("Apply", async () =>
         {
             var previous = _editor.CurrentConfiguration;
+
             await _editor.ApplyAsync(shell.StopToken);
+
             if (!shell.IsSimulation)
             {
                 await shell.LocalEvents.RecordAsync("Service configuration", previous, _editor.CurrentConfiguration);
             }
+
             shell.RefreshPresentation(force: true);
         });
 
@@ -113,6 +120,7 @@ internal sealed class ConfigurationPage : UserControl
 
                 actions.IsVisible = !IsMobileAccessSelected;
                 _mobileActions.IsVisible = IsMobileAccessSelected;
+
                 UpdateMessage();
             }
         };
@@ -206,6 +214,7 @@ internal sealed class ConfigurationPage : UserControl
         }
 
         _refreshQueued = true;
+
         Dispatcher.UIThread.Post(() =>
         {
             _refreshQueued = false;
@@ -218,7 +227,10 @@ internal sealed class ConfigurationPage : UserControl
 
     private void PopulateTabs()
     {
-        var previous = (_tabs.SelectedItem as TabItem)?.Header as string;
+        var openWarnings = _openCurrentWarnings;
+        _openCurrentWarnings = false;
+
+        var previous = openWarnings ? "Warnings" : (_tabs.SelectedItem as TabItem)?.Header as string;
 
         var tabs = (from plugin in _editor.Plugins.OrderBy(plugin => plugin.IsNvidia ? 0 : plugin.IsWireView ? 1 : plugin.IsAsus ? 2 : 3)
             let label = plugin.IsNvidia ? "Nvidia"
@@ -233,7 +245,7 @@ internal sealed class ConfigurationPage : UserControl
         tabs.Add(widget ?? Tab("iCUE Widget", () => new IcueWidgetSettingsView(_shell)));
 
         var warnings = _tabs.Items.OfType<TabItem>().FirstOrDefault(tab => Equals(tab.Header, "Warnings"));
-        tabs.Add(warnings ?? Tab("Warnings", () => new WarningsConfigurationView(_shell)));
+        tabs.Add(warnings ?? Tab("Warnings", () => new WarningsConfigurationView(_shell, openWarnings)));
 
         tabs.Add(Tab("GPU chart profiles", () => new GpuChartProfilesView(_shell)));
         tabs.Add(Tab("Source selections", CreateSources));
@@ -245,6 +257,7 @@ internal sealed class ConfigurationPage : UserControl
             _mobileActions.Content = view.EditActions;
             return view;
         }));
+
         tabs.Add(Tab("Maintenance", CreateMaintenance));
 
         _tabs.ItemsSource = tabs;
@@ -274,7 +287,10 @@ internal sealed class ConfigurationPage : UserControl
         var fields = new StackPanel { Spacing = 14 };
         BindTo(fields, IsEnabledProperty, _editor, nameof(_editor.CanEdit));
 
-        fields.Children.Add(Caption("Updates affect the service and every connected consumer."));
+        fields.Children.Add(Caption(plugin.IsNvidia
+            ? "Controls how often GPU status, clocks, temperatures, and driver diagnostics are read."
+            : plugin.IsAsus ? "Controls how often connector pins are read for current, voltage, power, and pin warnings."
+            : "Updates affect the service and every connected consumer."));
 
         fields.Children.Add(Columns(
             NumberField("Polling interval (ms)", plugin, nameof(plugin.PollIntervalMs), plugin.MinimumPollMs, 30000, 100),
@@ -307,7 +323,9 @@ internal sealed class ConfigurationPage : UserControl
 
             var internalClocks = Switch("Show internal clocks on GPU Status panels");
             internalClocks.IsChecked = _shell.Preferences.ShowInternalClocksOnGpuStatusPanels;
+
             ToolTip.SetTip(internalClocks, "Show Crossbar and System clock readings on the WireView Pro II and ROG Astral tabs.");
+
             internalClocks.IsCheckedChanged += async (_, _) =>
             {
                 var show = internalClocks.IsChecked == true;
@@ -316,6 +334,7 @@ internal sealed class ConfigurationPage : UserControl
                     internalClocks.IsChecked = _shell.Preferences.ShowInternalClocksOnGpuStatusPanels;
                 }
             };
+
             fields.Children.Add(internalClocks);
         }
         else if (plugin.IsAsus)
@@ -388,8 +407,7 @@ internal sealed class ConfigurationPage : UserControl
 
     private StackPanel DeviceActions(PluginSettingsEditorViewModel plugin, ToggleSwitch enabled, ComboBox device, string kind)
     {
-        var refreshButton = IconButton($"Refresh {kind} list", "refresh",
-            () => _shell.RunAsync(() => _shell.RefreshDeviceListAsync(plugin)));
+        var refreshButton = IconButton($"Refresh {kind} list", "refresh", () => _shell.RunAsync(() => _shell.RefreshDeviceListAsync(plugin)));
 
         Watch(refreshButton, plugin, UpdateRefreshAvailability, nameof(plugin.Enabled));
         Watch(refreshButton, _editor, UpdateRefreshAvailability, nameof(_editor.CanEdit));
@@ -750,6 +768,7 @@ internal sealed class ConfigurationPage : UserControl
             OpacityMask = new VisualBrush(new Image { Source = Icon("diagnostic-report"), Width = 16, Height = 16 }),
             [!Border.BackgroundProperty] = new DynamicResourceExtension("IconBrush")
         };
+
         var collect = ActionButton("Collect diagnostic information", diagnosticIcon, async () =>
         {
             if (TopLevel.GetTopLevel(this) is Window owner)
@@ -757,17 +776,19 @@ internal sealed class ConfigurationPage : UserControl
                 await new DiagnosticReportWindow(_shell.Preferences.ServiceAddress, _shell.StopToken).ShowDialog(owner);
             }
         });
+
         return new StackPanel
         {
             Spacing = 12,
             Children =
             {
                 maintenance,
-                Section("Diagnostics", new StackPanel
-                {
-                    Spacing = 10,
-                    Children = { Caption("Save logs, crash reports, events and a current device snapshot to a ZIP file."), collect }
-                })
+                Section("Diagnostics",
+                    new StackPanel
+                    {
+                        Spacing = 10,
+                        Children = { Caption("Save logs, crash reports, events and a current device snapshot to a ZIP file."), collect }
+                    })
             }
         };
     }
@@ -788,6 +809,7 @@ internal sealed class ConfigurationPage : UserControl
     {
         var input = new NumericUpDown { Minimum = minimum, Maximum = maximum, Increment = increment, FormatString = "0" };
         BindTo(input, NumericUpDown.ValueProperty, source, property, BindingMode.TwoWay);
+
         return input;
     }
 
@@ -795,6 +817,7 @@ internal sealed class ConfigurationPage : UserControl
     {
         input.HorizontalAlignment = HorizontalAlignment.Stretch;
         AutomationProperties.SetName(input, label);
+
         return new StackPanel { Spacing = 6, Children = { new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap }, input } };
     }
 
@@ -802,6 +825,7 @@ internal sealed class ConfigurationPage : UserControl
     {
         var input = new ToggleSwitch { OnContent = label, OffContent = label, HorizontalAlignment = HorizontalAlignment.Left };
         AutomationProperties.SetName(input, label);
+
         return input;
     }
 
@@ -809,6 +833,7 @@ internal sealed class ConfigurationPage : UserControl
     {
         var input = Switch(label);
         BindTo(input, ToggleButton.IsCheckedProperty, source, property, BindingMode.TwoWay);
+
         return input;
     }
 
@@ -819,7 +844,7 @@ internal sealed class ConfigurationPage : UserControl
             ItemsSource = values,
             ItemTemplate = new FuncDataTemplate<T>((value, _) => new TextBlock
             {
-                Text = value is null ? null : label(value),
+                Text = value is null ? string.Empty : label(value),
                 TextTrimming = TextTrimming.CharacterEllipsis
             })
         };

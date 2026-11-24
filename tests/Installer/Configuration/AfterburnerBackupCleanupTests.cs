@@ -38,6 +38,34 @@ internal static class AfterburnerBackupCleanupTests
             Check.That(InstallationPreflight.ContainsOnlyPreservedData(installation),
                 "A reinstall accepts the backup tree left by an older uninstaller.");
 
+            var notifier = Directory.CreateDirectory(Path.Combine(installation, "Notifier")).FullName;
+            var knownHashes = new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [Path.Combine("Sounds", "Warning1.mp3")] = "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+            };
+            Check.That(InstallationPreflight.ContainsOnlyPreservedData(installation), "Reinstall accepts an empty Notifier directory.");
+            var sounds = Directory.CreateDirectory(Path.Combine(notifier, "Sounds")).FullName;
+            var sound = Path.Combine(sounds, "Warning1.mp3");
+            File.WriteAllBytes(sound, []);
+            Check.That(InstallationPreflight.ContainsOnlyPreservedData(installation, knownHashes), "Reinstall accepts matching notifier files alongside preserved desktop data.");
+            File.WriteAllText(sound, "modified");
+            Check.That(!InstallationPreflight.ContainsOnlyPreservedData(installation, knownHashes), "Reinstall rejects changed notifier files.");
+            File.Delete(sound);
+            File.WriteAllText(Path.Combine(sounds, "other.txt"), "unrelated");
+            Check.That(!InstallationPreflight.ContainsOnlyPreservedData(installation, knownHashes), "Reinstall rejects extra notifier files.");
+            File.Delete(Path.Combine(sounds, "other.txt"));
+            Directory.Delete(sounds);
+            CreateJunction(sounds, store);
+            try
+            {
+                Check.That(!InstallationPreflight.ContainsOnlyPreservedData(installation, knownHashes), "Reinstall rejects a junction at a packaged notifier path.");
+            }
+            finally
+            {
+                Directory.Delete(sounds, recursive: false);
+            }
+            Directory.Delete(notifier);
+
             Directory.CreateDirectory(profiles);
             File.WriteAllText(activeProfile, "auto");
             File.WriteAllText(chartProfile, "{}");

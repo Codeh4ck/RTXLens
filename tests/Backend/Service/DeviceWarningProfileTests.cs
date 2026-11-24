@@ -124,7 +124,7 @@ internal static class DeviceWarningProfileTests
         DeviceWarningEvaluation EvaluateAt(int seconds)
         {
             var frame = Frame(seconds, 0, 10, 0);
-            var pins = frame.Sensors.Where(reading => reading.Identity.PluginId == "msi-psu" && reading.Identity.ConnectorId == "2");
+            var pins = frame.Sensors.Where(reading => reading.Identity is { PluginId: "msi-psu", ConnectorId: "2" });
             return evaluator.Evaluate(frame with
             {
                 Sensors = [.. pins.Select(reading => reading with { Identity = reading.Identity with { PluginId = id, ConnectorId = "aux" } })],

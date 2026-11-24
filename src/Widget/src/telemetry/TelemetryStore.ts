@@ -84,9 +84,7 @@ export class TelemetryStore {
         }
 
         const state = this.health(reading.identity.pluginId)?.state;
-        const enabled =
-            this.configuration?.configuration.plugins[reading.identity.pluginId]?.enabled ??
-            this.catalog.find((plugin) => plugin.id === reading.identity.pluginId)?.enabled;
+        const enabled = this.enabled(reading.identity.pluginId);
 
         const observed = this.observed.get(reading.identity.key);
         if (enabled === false || state !== 'Ready' || observed === undefined || !Number.isFinite(observed)) {
@@ -158,9 +156,13 @@ export class TelemetryStore {
         return this.readingsFor(pluginId).some(reading => this.valid(reading, now));
     }
 
+    private enabled(pluginId: string): boolean | undefined {
+        return this.configuration?.configuration.plugins[pluginId]?.enabled ?? this.catalog.find(plugin => plugin.id === pluginId)?.enabled;
+    }
+
     state(pluginId: string, now: number): string {
         const info = this.catalog.find((plugin) => plugin.id === pluginId);
-        const enabled = this.configuration?.configuration.plugins[pluginId]?.enabled ?? info?.enabled;
+        const enabled = this.enabled(pluginId);
 
         if (enabled === false) {
             return 'Disabled';

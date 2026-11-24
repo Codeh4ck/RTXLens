@@ -1,3 +1,4 @@
+using RTXLens.Plugins.Asus.Contracts;
 using RTXLens.Presentation.Telemetry;
 using RTXLens.Presentation.Settings;
 using RTXLens.Contracts.Discovery;
@@ -40,6 +41,7 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
     private readonly ToggleSwitch _enabled = Switch("Enabled");
     private readonly ComboBox _source = new();
     private readonly ComboBox _device = new();
+    private readonly ContentControl _legacyDeviceNotice = Alert();
     private readonly ComboBox _connector = new();
     private readonly ToggleSwitch _useDefaults = Switch("Use detected GPU defaults");
     private readonly NumericUpDown _overcurrent = Number(6, 10.5m, 0.1m);
@@ -155,7 +157,7 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
             _save.Margin = compact ? new Thickness(0, 10, 0, 0) : new Thickness(12, 0, 0, 0);
         };
 
-        var deviceBody = Stack(_deviceFields, Status);
+        var deviceBody = Stack(_legacyDeviceNotice, _deviceFields, Status);
         var panel = Section("Device warning profiles", deviceBody);
 
         var profileActions = new WrapPanel
@@ -311,6 +313,12 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
         var selected = options.FirstOrDefault(option => option.Profile.Id == selectedId) ?? options.FirstOrDefault();
 
         _catalog = catalog;
+        var affected = catalog.Profiles.Where(profile => NeedsGpuReselection(profile, catalog.Targets)).Select(profile => profile.Name).ToArray();
+        var notice = affected.Length == 0 ? null
+            : $"Select a GPU again for {string.Join(", ", affected)}. These profiles use an older GPU number and cannot match pin readings reported under the new GPU ID. "
+            + "Open each listed profile, choose the intended GPU under Device, then click Save profile configuration. "
+            + "If only one Astral reports readings, you can choose Automatic.";
+        SetAlert(_legacyDeviceNotice, notice, "warning");
         _loading = true;
         _sources = [.. (catalog.Sources ?? LegacyHardwareCatalog.Sources).Where(source => source.Value.PinProfiles is not null)
             .OrderByDescending(source => source.Value.PinProfiles?.DefaultProfile is not null)
@@ -322,6 +330,15 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
         
         ShowDraft(selected?.Profile);
         Report(null);
+    }
+
+    private static bool NeedsGpuReselection(DeviceWarningProfile profile, WarningProfileTarget[] targets)
+    {
+        const string prefix = "/gpu-nvidia/";
+        return profile.PluginId == AsusIdentity.Id && profile.DeviceId is { } id
+            && id.StartsWith(prefix, StringComparison.Ordinal) && id.Length > prefix.Length
+            && !id.AsSpan(prefix.Length).ContainsAnyExceptInRange('0', '9')
+            && !targets.Any(target => target.PluginId == profile.PluginId && target.DeviceId == id);
     }
 
     private void ShowDraft(DeviceWarningProfile? profile)

@@ -33,6 +33,7 @@ internal static class DesktopControls
             source.PropertyChanged += OnPropertyChanged;
         };
         control.DetachedFromVisualTree += (_, _) => source.PropertyChanged -= OnPropertyChanged;
+        return;
 
         void OnPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
         {

@@ -10,7 +10,7 @@ using RTXLens.Hardware.Nvidia;
 using RTXLens.Plugins.GenericNvidia.Analysis.Warnings;
 using RTXLens.Plugins.GenericNvidia.Configuration;
 using RTXLens.Plugins.GenericNvidia.Contracts.Configuration;
-using RTXLens.Plugins.GenericNvidia.Diagnostics;
+using RTXLens.Hardware.Nvidia.Diagnostics;
 using RTXLens.Plugins.GenericNvidia.Serialization;
 using RTXLens.Warnings;
 

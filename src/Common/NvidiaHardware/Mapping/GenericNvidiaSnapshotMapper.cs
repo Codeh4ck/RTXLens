@@ -1,9 +1,8 @@
-using LibreHardwareMonitor.Hardware;
 using RTXLens.Contracts.Enums;
 using RTXLens.Contracts.Sensors;
 using RTXLens.Hardware.Nvidia;
 
-namespace RTXLens.Plugins.GenericNvidia.Mapping;
+namespace RTXLens.Hardware.Nvidia.Mapping;
 
 public static class GenericNvidiaSnapshotMapper
 {
@@ -79,7 +78,7 @@ public static class GenericNvidiaSnapshotMapper
                 }
 
                 readings.Add(new SensorReading(
-                    new SensorIdentity(GenericNvidiaPlugin.PluginId, sample.Device.Id, SensorComponent.GpuConnector, SensorMetric.Voltage, 1),
+                    new SensorIdentity(Plugins.GenericNvidia.Contracts.NvidiaIdentity.Id, sample.Device.Id, SensorComponent.GpuConnector, SensorMetric.Voltage, 1),
                     SensorUnit.Volts, power.Value / current.Value, sample.ObservedAt) { Derived = true });
             }
         }
@@ -134,7 +133,7 @@ public static class GenericNvidiaSnapshotMapper
                 number = null;
             }
 
-            readings.Add(new SensorReading(new SensorIdentity(GenericNvidiaPlugin.PluginId, sample.Device.Id, component, metric, channel),
+            readings.Add(new SensorReading(new SensorIdentity(RTXLens.Plugins.GenericNvidia.Contracts.NvidiaIdentity.Id, sample.Device.Id, component, metric, channel),
                 SensorUnits.For(metric), number, observedAt ?? sample.ObservedAt, number is null ? ReadingQuality.Unavailable : ReadingQuality.Valid));
         }
     }

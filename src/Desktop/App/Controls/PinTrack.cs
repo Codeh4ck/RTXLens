@@ -9,15 +9,13 @@ public sealed class PinTrack : Control
     private const double CornerRadius = 4;
 
     public static readonly StyledProperty<double> FillFractionProperty = AvaloniaProperty.Register<PinTrack, double>(nameof(FillFraction));
-    public static readonly StyledProperty<double?> PeakFractionProperty =
-        AvaloniaProperty.Register<PinTrack, double?>(nameof(PeakFraction));
-    public static readonly StyledProperty<double?> BaselineFractionProperty =
-        AvaloniaProperty.Register<PinTrack, double?>(nameof(BaselineFraction));
+    public static readonly StyledProperty<double?> PeakFractionProperty = AvaloniaProperty.Register<PinTrack, double?>(nameof(PeakFraction));
+    public static readonly StyledProperty<double?> BaselineFractionProperty = AvaloniaProperty.Register<PinTrack, double?>(nameof(BaselineFraction));
+
     public static readonly StyledProperty<IBrush?> TrackBrushProperty = AvaloniaProperty.Register<PinTrack, IBrush?>(nameof(TrackBrush));
     public static readonly StyledProperty<IBrush?> FillBrushProperty = AvaloniaProperty.Register<PinTrack, IBrush?>(nameof(FillBrush));
     public static readonly StyledProperty<IBrush?> PeakBrushProperty = AvaloniaProperty.Register<PinTrack, IBrush?>(nameof(PeakBrush));
-    public static readonly StyledProperty<IBrush?> BaselineBrushProperty =
-        AvaloniaProperty.Register<PinTrack, IBrush?>(nameof(BaselineBrush));
+    public static readonly StyledProperty<IBrush?> BaselineBrushProperty = AvaloniaProperty.Register<PinTrack, IBrush?>(nameof(BaselineBrush));
 
     static PinTrack()
     {
@@ -102,6 +100,7 @@ public sealed class PinTrack : Control
 
         var height = Math.Min(thickness, bounds.Height);
         var top = Math.Clamp(bounds.Height * (1 - value) - height / 2, 0, bounds.Height - height);
+
         context.FillRectangle(brush, new Rect(0, top, bounds.Width, height));
     }
 }

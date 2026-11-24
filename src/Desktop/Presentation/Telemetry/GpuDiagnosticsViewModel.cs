@@ -127,6 +127,7 @@ public sealed class GpuDiagnosticsViewModel : ObservableObject
 
         HasPowerScale = minimum.HasValue && maximum > minimum;
         PowerLimitPositions = (Position(enforced), Position(defaultLimit));
+        return;
 
         double? Position(double? limit) => HasPowerScale && limit >= minimum && limit <= maximum
             ? (limit - minimum) / (maximum - minimum)
@@ -196,7 +197,7 @@ public sealed class GpuDiagnosticsViewModel : ObservableObject
         return string.Join(", ", names);
     }
 
-    private static string ReasonLabel(NvidiaClockReason reason) => reason switch
+    internal static string ReasonLabel(NvidiaClockReason reason) => reason switch
     {
         NvidiaClockReason.Idle => "GPU idle",
         NvidiaClockReason.ApplicationClocks => "Application clocks",
@@ -212,7 +213,7 @@ public sealed class GpuDiagnosticsViewModel : ObservableObject
         _ => reason.ToString()
     };
 
-    private static string FormatLink(double? generation, double? width)
+    internal static string FormatLink(double? generation, double? width)
     {
         var parts = new List<string>(2);
         if (generation is > 0)

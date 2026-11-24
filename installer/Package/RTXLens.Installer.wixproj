@@ -10,11 +10,23 @@
         <ProjectReference Include="../Actions/RTXLens.Installer.Actions.csproj" />
     </ItemGroup>
     <Target Name="RequirePublishedPayload" BeforeTargets="BeforeBuild">
+        <Error Condition="!Exists('$(PayloadDirectory)/Notifier/RTXLens.Notifier.exe')" Text="Publish the RTX Lens warning notifier before building the MSI." />
         <Error Condition="!Exists('$(PayloadDirectory)/Service/RTXLens.Service.exe')" Text="Publish the installer payload with scripts/Build-Release.ps1 before building the MSI." />
         <ItemGroup>
+            <NotifierPayload Include="$(PayloadDirectory)/Notifier/**/*" Exclude="$(PayloadDirectory)/Notifier/**/*.pdb" />
             <RequiredDesktopFile Include="RTXLens.App.exe;RTXLens.App.dll;RTXLens.App.deps.json;RTXLens.App.runtimeconfig.json" />
             <RequiredDesktopFile Include="Avalonia.Desktop.dll;Avalonia.Win32.dll;coreclr.dll" />
         </ItemGroup>
+        <GetFileHash Files="@(NotifierPayload)" Algorithm="SHA256">
+            <Output TaskParameter="Items" ItemName="HashedNotifierFile" />
+        </GetFileHash>
+        <ItemGroup>
+            <HashedNotifierFile Update="@(HashedNotifierFile)">
+                <NotifierRelativePath>$([MSBuild]::MakeRelative('$(PayloadDirectory)/Notifier', '%(HashedNotifierFile.FullPath)'))</NotifierRelativePath>
+            </HashedNotifierFile>
+        </ItemGroup>
+        <WriteLinesToFile File="$(PayloadDirectory)/../notifier-files.sha256" Overwrite="true" Encoding="UTF-8"
+                          Lines="@(HashedNotifierFile->'%(FileHash)  %(NotifierRelativePath)')" />
         <Error Condition="!Exists('$(PayloadDirectory)/Desktop/%(RequiredDesktopFile.Identity)')"
                Text="The Avalonia desktop publish payload is missing %(RequiredDesktopFile.Identity). Publish the desktop app using the Portable profile." />
     </Target>

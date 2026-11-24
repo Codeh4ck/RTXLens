@@ -1,3 +1,4 @@
+using RTXLens.Hardware.Nvidia;
 using RTXLens.Plugins.Asus.Contracts.Common;
 using RTXLens.Plugins.Asus.Device;
 
@@ -8,7 +9,7 @@ internal sealed class TestAsusReader(AsusTestState state) : IAsusGpuReader
     public IReadOnlyList<AsusDeviceInfo> Devices => state.Connected
         ? state.Data.Select(data => new AsusDeviceInfo(data.DeviceId, data.HardwareName)).ToArray() : [];
 
-    public AsusGpuData? Read(string? deviceId, CancellationToken cancellationToken)
+    public AsusGpuData? Read(string? deviceId, CancellationToken cancellationToken, NvidiaPollTimings? timings = null)
     {
         if (Interlocked.Increment(ref state.ActiveOperations) != 1)
         {

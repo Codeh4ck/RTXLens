@@ -29,13 +29,15 @@ internal sealed partial class ShellWindow : LensWindow
     private Size _normalSize;
     private PixelPoint _normalPosition;
 
-    public ShellWindow(ShellViewModel model, bool startMinimized = false)
+    public ShellWindow(ShellViewModel model, bool startMinimized = false, bool currentWarnings = false)
     {
         _model = model;
         _preferredPanelId = model.Preferences.StartupTabId;
+
         InitializeComponent();
 
         DataContext = model;
+
 #if TELEMETRY_DEBUG
         AddHandler(KeyDownEvent, OnDebugShortcut, RoutingStrategies.Tunnel);
 #endif
@@ -75,12 +77,6 @@ internal sealed partial class ShellWindow : LensWindow
         };
 
         Opened += OnFirstOpened;
-        void OnFirstOpened(object? sender, EventArgs args)
-        {
-            Opened -= OnFirstOpened;
-            InitializeWindowsIntegration(startMinimized || model.Preferences.StartMinimized);
-        }
-
         Closing += OnClosing;
         Closed += OnClosed;
 
@@ -116,6 +112,18 @@ internal sealed partial class ShellWindow : LensWindow
             default:
                 RefreshHardwarePage();
                 break;
+        }
+
+        return;
+
+        void OnFirstOpened(object? sender, EventArgs args)
+        {
+            Opened -= OnFirstOpened;
+            InitializeWindowsIntegration(!currentWarnings && (startMinimized || model.Preferences.StartMinimized));
+            if (currentWarnings)
+            {
+                ShowCurrentWarnings();
+            }
         }
     }
 
@@ -210,8 +218,15 @@ internal sealed partial class ShellWindow : LensWindow
         PageHost.Content = null;
 
         _model.WarningRaised -= OnWarningRaised;
+        _model.Dashboard.PropertyChanged -= OnLocalWarningStateChanged;
+        if (_simulationSoundLooping)
+        {
+            StopLocalWarningSound();
+        }
+
         _model.WarningShutdownAvailable -= ShowWarningShutdown;
 
+        _localPopup?.Close();
         _tray?.Dispose();
         _model.Dispose();
     }
@@ -249,6 +264,10 @@ internal sealed partial class ShellWindow : LensWindow
     private void OpenEvents(object? sender, RoutedEventArgs args) => Navigate(Page.EventLog);
 
     private void OpenConfiguration(object? sender, RoutedEventArgs args) => Navigate(Page.Configuration);
+
+    private void OpenCurrentWarnings(object? sender, RoutedEventArgs args) => ShowCurrentWarnings();
+
+    internal void ShowCurrentWarnings() => Navigate(Page.Configuration, currentWarnings: true);
 
     private void OpenSettings(object? sender, RoutedEventArgs args) => Navigate(Page.Settings);
 
@@ -298,7 +317,7 @@ internal sealed partial class ShellWindow : LensWindow
         }
     }
 
-    private void Navigate(Page page, HardwarePanelViewModel? panel = null)
+    private void Navigate(Page page, HardwarePanelViewModel? panel = null, bool currentWarnings = false)
     {
         _page = page;
         _model.ShowHardware = page == Page.Hardware;
@@ -311,7 +330,7 @@ internal sealed partial class ShellWindow : LensWindow
 
         PageHost.Content = page switch
         {
-            Page.Configuration => new ConfigurationPage(_model),
+            Page.Configuration => new ConfigurationPage(_model, currentWarnings),
             Page.Settings => new SettingsPage(_model),
             Page.Performance => new PerformancePage(_model.Recorder),
             Page.EventLog => new EventLogPage(_model.Logs, _model.StopToken, _model.LocalEvents),

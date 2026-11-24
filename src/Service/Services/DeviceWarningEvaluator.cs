@@ -102,6 +102,8 @@ internal sealed class DeviceWarningEvaluator(HardwareCatalog hardware)
                     [.. voltage.Where(reading => reading.Value >= limits.HighPinVoltage)], "V");
             }
 
+            continue;
+
             void Emit(string kind, string title, string icon, bool complete, IReadOnlyList<SensorReading> offending,
                 string unit, double? percentage = null, DateTimeOffset? evidenceAt = null)
             {

@@ -1,4 +1,5 @@
 using RTXLens.Core.Plugins;
+using RTXLens.Contracts.Monitoring;
 using System.Diagnostics;
 using System.Text.Json;
 using RTXLens.Contracts.Diagnostics;
@@ -14,10 +15,21 @@ using RTXLens.Service.Mobile;
 
 namespace RTXLens.Service.Services;
 
-internal sealed class SnapshotBroadcastService(IRuntimeConfiguration configuration, TimeProvider clock,
-    SensorStateStore store, SensorStreamHub hub, RTXLens.Core.Plugins.PluginRuntimeManager runtime,
-    HardwareCatalog hardware, ProfileGpuDiscovery gpuDiscovery, SettingsProfileResolver profiles, DeviceWarningProfileStore warningProfiles, WarningShutdownCoordinator shutdown,
-    SafeguardJournalService safeguard, MonitoringActivity activity, MobileAccessService? mobileAccess = null) : BackgroundService
+internal sealed class SnapshotBroadcastService(
+    IRuntimeConfiguration configuration,
+    TimeProvider clock,
+    SensorStateStore store,
+    SensorStreamHub hub,
+    [FromKeyedServices(ServiceRoutes.WarningStream)] SensorStreamHub warningHub,
+    PluginRuntimeManager runtime,
+    HardwareCatalog hardware,
+    ProfileGpuDiscovery gpuDiscovery,
+    SettingsProfileResolver profiles,
+    DeviceWarningProfileStore warningProfiles,
+    WarningShutdownCoordinator shutdown,
+    SafeguardJournalService safeguard,
+    MonitoringActivity activity,
+    MobileAccessService? mobileAccess = null) : BackgroundService
 {
     private readonly DeviceWarningEvaluator _profileWarnings = new(hardware);
     private readonly AsyncSignal _wake = new();
@@ -62,6 +74,11 @@ internal sealed class SnapshotBroadcastService(IRuntimeConfiguration configurati
 
                 activity.Observe(snapshot, settings.ConnectorProfiles);
                 mobileAccess?.ObserveWarnings(snapshot);
+
+                if (publishedWarnings != _warnings.Revision && snapshot.Warnings is { } feed)
+                {
+                    warningHub.Publish(JsonSerializer.SerializeToUtf8Bytes(feed, AppJsonContext.Default.WarningSnapshot));
+                }
 
                 if (
                     lastPublication is null

@@ -41,6 +41,7 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
     public ServiceLogClient Logs { get; private set; } = null!;
     public AppearanceViewModel Appearance { get; }
     public CancellationToken StopToken => _stop.Token;
+    internal string PreferencesDirectory => _store.DirectoryPath;
     public AppPreferences Preferences { get; private set; }
     public bool ShowHardware { get; set; } = true;
     public bool ShowConfiguration { get; set; }
@@ -172,7 +173,7 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
                     }
                 }
 
-                QueueWarningNotifications(session, snapshot);
+                QueueSafeguardNotifications(session, snapshot);
             }
         };
 

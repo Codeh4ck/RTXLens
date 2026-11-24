@@ -32,7 +32,9 @@ public sealed partial class App : Application
             {
                 var preferences = new PreferencesStore(Path.Combine(directory, "preferences.json"));
                 var model = new ShellViewModel(preferences, appearance);
-                var window = new ShellWindow(model, desktop.Args?.Contains("--minimized", StringComparer.Ordinal) == true);
+                var currentWarnings = desktop.Args?.Contains("--warnings", StringComparer.Ordinal) == true;
+                var window = new ShellWindow(model, desktop.Args?.Contains("--minimized", StringComparer.Ordinal) == true, currentWarnings);
+
                 window.Opened += async (_, _) => await model.StartAsync();
                 desktop.MainWindow = window;
             }

@@ -6,14 +6,10 @@ namespace RTXLens.App.Controls;
 
 public sealed class SectionPanel : HeaderedContentControl
 {
-    public static readonly StyledProperty<double> ContentMaxWidthProperty =
-        AvaloniaProperty.Register<SectionPanel, double>(nameof(ContentMaxWidth), double.PositiveInfinity);
+    public static readonly StyledProperty<double> ContentMaxWidthProperty = AvaloniaProperty.Register<SectionPanel, double>(nameof(ContentMaxWidth), double.PositiveInfinity);
+    public static readonly StyledProperty<object?> HeaderActionsProperty = AvaloniaProperty.Register<SectionPanel, object?>(nameof(HeaderActions));
 
-    public static readonly StyledProperty<IImage?> HeaderIconProperty =
-        AvaloniaProperty.Register<SectionPanel, IImage?>(nameof(HeaderIcon));
-
-    public static readonly StyledProperty<object?> HeaderActionsProperty =
-        AvaloniaProperty.Register<SectionPanel, object?>(nameof(HeaderActions));
+    public static readonly StyledProperty<IImage?> HeaderIconProperty = AvaloniaProperty.Register<SectionPanel, IImage?>(nameof(HeaderIcon));
 
     public double ContentMaxWidth
     {

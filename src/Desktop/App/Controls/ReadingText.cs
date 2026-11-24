@@ -8,11 +8,8 @@ namespace RTXLens.App.Controls;
 
 public sealed partial class ReadingText : TextBlock
 {
-    public static readonly StyledProperty<string?> ReadingProperty =
-        AvaloniaProperty.Register<ReadingText, string?>(nameof(Reading));
-
-    public static readonly StyledProperty<IBrush?> UnitBrushProperty =
-        AvaloniaProperty.Register<ReadingText, IBrush?>(nameof(UnitBrush));
+    public static readonly StyledProperty<string?> ReadingProperty = AvaloniaProperty.Register<ReadingText, string?>(nameof(Reading));
+    public static readonly StyledProperty<IBrush?> UnitBrushProperty = AvaloniaProperty.Register<ReadingText, IBrush?>(nameof(UnitBrush));
 
     protected override Type StyleKeyOverride => typeof(TextBlock);
 
@@ -43,6 +40,7 @@ public sealed partial class ReadingText : TextBlock
         var text = Reading ?? string.Empty;
         var inlines = Inlines!;
         var brush = UnitBrush;
+
         inlines.Clear();
 
         var offset = 0;

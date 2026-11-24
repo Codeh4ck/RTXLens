@@ -332,7 +332,7 @@ public sealed class XyLineChart : XyPlot
             var paths = new StreamGeometry[Series.Count];
             for (var index = 0; index < Series.Count; index++)
             {
-                paths[index] = XySeriesPath.Build(Series[index].Samples.Span, layout, scale);
+                paths[index] = XySeriesPath.Build(Series[index].Samples.Span, layout, scale, Series[index].Stepped);
             }
 
             _geometries = paths;

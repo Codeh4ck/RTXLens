@@ -26,6 +26,12 @@ public sealed record AppPreferences
     public bool AutomaticallyCheckForUpdates { get; init; } = true;
     public Updates.UpdateFrequency UpdateFrequency { get; init; } = Updates.UpdateFrequency.Daily;
     public bool WarningNotifications { get; init; } = true;
+    public bool? WarningSoundEnabled { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool PlayWarningSound => WarningSoundEnabled ?? WarningNotifications;
+    public bool LoopWarningSound { get; init; } = true;
+    public int WarningSoundVolume { get; init; } = 70;
+    public string WarningSound { get; init; } = "Warning1";
     public double CoreTemperatureWarningC { get; init; } = 84;
     public double MemoryTemperatureWarningC { get; init; } = 95;
     public PinMetric PinMetric { get; init; }
@@ -46,7 +52,8 @@ public sealed record AppPreferences
 
     public void Validate()
     {
-        if (StartupTabId is null || StartupTabId.Length > 128 || !Enum.IsDefined(UpdateFrequency) || !Enum.IsDefined(Theme) || !Enum.IsDefined(PinMetric) || TextScale is < 0.85 or > 1.5 || !double.IsFinite(TextScale)
+        if (WarningSoundVolume is < 0 or > 100 || WarningSound is not ("Warning1" or "Warning2" or "Warning3" or "Warning4" or "Custom")
+            || StartupTabId is null || StartupTabId.Length > 128 || !Enum.IsDefined(UpdateFrequency) || !Enum.IsDefined(Theme) || !Enum.IsDefined(PinMetric) || TextScale is < 0.85 or > 1.5 || !double.IsFinite(TextScale)
             || WireViewPsuConnector is < 1 or > 2 || AsusPsuConnector is < 1 or > 2
             || !double.IsFinite(CoreTemperatureWarningC) || CoreTemperatureWarningC is < 30 or > 120
             || !double.IsFinite(MemoryTemperatureWarningC) || MemoryTemperatureWarningC is < 30 or > 120

@@ -34,7 +34,7 @@ internal static class AsusSensorEndpoints
             catch (PluginUnavailableException) when (services.GetService<NvidiaTelemetryReader>() is not null)
             {
                 var reader = services.GetRequiredService<NvidiaTelemetryReader>();
-                devices = await Task.Run(() => AsusGpuReader.DiscoverAstral(reader, 1000, token)
+                devices = await Task.Run(() => AsusGpuReader.DiscoverAstral(reader)
                     .Select(device => new AsusDeviceInfo(device.Id, device.Name)).ToArray(), token);
             }
 

@@ -79,20 +79,24 @@ internal sealed class IcueWidgetSettingsView : UserControl
         var group = (string)tab.Header!;
         var settings = WidgetSettingDefinition.Managed.Where(setting => setting.Group == group);
 
-        if (group == "Panels and layout")
+        switch (group)
         {
-            body.Children.Add(ProfileManagement());
-        }
+            case "Panels and layout":
+                body.Children.Add(ProfileManagement());
+                break;
+            case "Readings and alerts":
+                {
+                    var copy = ActionButton("Copy desktop preferences", "chart-import", CopyDesktopPreferences);
+                    copy.HorizontalAlignment = HorizontalAlignment.Right;
 
-        if (group == "Readings and alerts")
-        {
-            var copy = ActionButton("Copy desktop preferences", "chart-import", CopyDesktopPreferences);
-            copy.HorizontalAlignment = HorizontalAlignment.Right;
-            body.Children.Add(copy);
+                    body.Children.Add(copy);
+                    break;
+                }
         }
 
         var inputs = new Dictionary<string, Control>();
         var panelCards = new List<Control>();
+
         foreach (var section in settings.GroupBy(setting => setting.Section).OrderBy(section => section.Key == "GPU status" ? 0 : 1))
         {
             var panelEditor = group == "Panels and layout" && section.Key.StartsWith("Panel ", StringComparison.Ordinal);
@@ -113,6 +117,7 @@ internal sealed class IcueWidgetSettingsView : UserControl
 
                 var input = setting.Id == "warningPreview" ? PreviewControl(setting) : Input(setting, title);
                 inputs.Add(setting.Id, input);
+
                 if (panelEditor)
                 {
                     rows.Children.Add(ConfigurationPage.Field(title, input));
@@ -121,10 +126,16 @@ internal sealed class IcueWidgetSettingsView : UserControl
                 {
                     var editorColumn = new Grid
                     {
-                        ColumnDefinitions = { new ColumnDefinition(1, GridUnitType.Star)
-                            { MaxWidth = setting.Id == "precision" ? double.PositiveInfinity : 300 } },
+                        ColumnDefinitions =
+                        {
+                            new ColumnDefinition(1, GridUnitType.Star)
+                            {
+                                MaxWidth = setting.Id == "precision" ? double.PositiveInfinity : 300
+                            }
+                        },
                         Children = { input }
                     };
+
                     rows.Children.Add(Setting(title, editorColumn));
                 }
             }
@@ -170,10 +181,12 @@ internal sealed class IcueWidgetSettingsView : UserControl
         }
 
         LinkToggle("hideGpuFans", "showFanDuty", false);
+
         if (inputs.TryGetValue("alwaysShowInternalClocks", out var clockMode))
         {
             var always = (ToggleSwitch)clockMode;
             var hideFans = (ToggleSwitch)inputs["hideGpuFans"];
+
             void UpdateClockOptions()
             {
                 always.IsEnabled = hideFans.IsChecked != true;
@@ -181,10 +194,13 @@ internal sealed class IcueWidgetSettingsView : UserControl
                 inputs["showCrossbarClock"].IsEnabled = individual;
                 inputs["showSystemClock"].IsEnabled = individual;
             }
+
             always.IsCheckedChanged += (_, _) => UpdateClockOptions();
             hideFans.IsCheckedChanged += (_, _) => UpdateClockOptions();
+
             UpdateClockOptions();
         }
+
         LinkToggle("overrideCurrentMax", "currentMax", true);
         LinkToggle("overridePowerFallback", "powerCableFallback", true);
         LinkToggle("reduceMotion", "alertPulse", false);
@@ -199,13 +215,17 @@ internal sealed class IcueWidgetSettingsView : UserControl
 
             var source = (ComboBox)content;
             var summary = inputs[key + "Hero"];
-            void UpdateSummary() => summary.IsEnabled = source.SelectedItem is WidgetSettingOption option &&
-                option.Key is not ("asusPins" or "wireviewPins" or "off");
+
             source.SelectionChanged += (_, _) => UpdateSummary();
+
             UpdateSummary();
+            continue;
+
+            void UpdateSummary() => summary.IsEnabled = source.SelectedItem is WidgetSettingOption { Key: not ("asusPins" or "wireviewPins" or "off") };
         }
 
         tab.Content = body;
+        return;
 
         void LinkToggle(string sourceId, string targetId, bool enabledWhenChecked)
         {
@@ -216,9 +236,13 @@ internal sealed class IcueWidgetSettingsView : UserControl
 
             var source = (ToggleSwitch)input;
             var target = inputs[targetId];
-            void Update() => target.IsEnabled = source.IsChecked == enabledWhenChecked;
+
             source.IsCheckedChanged += (_, _) => Update();
             Update();
+
+            return;
+
+            void Update() => target.IsEnabled = source.IsChecked == enabledWhenChecked;
         }
     }
 
@@ -229,8 +253,11 @@ internal sealed class IcueWidgetSettingsView : UserControl
             _profile = name;
             Refresh();
         });
+
         profiles.Width = 220;
+
         var instructions = Caption("Enter this profile name in iCUE to use its settings.");
+
         var add = IconButton("Add widget profile", "add-action", async () =>
         {
             if (TopLevel.GetTopLevel(this) is not Window owner ||
@@ -247,26 +274,28 @@ internal sealed class IcueWidgetSettingsView : UserControl
             _profile = name;
             Refresh();
         });
+
         var delete = IconButton("Delete widget profile", DesktopIcons.ChartClear, async () =>
         {
             var name = _profile;
-            if (TopLevel.GetTopLevel(this) is Window owner &&
-                await ConfirmAsync(owner, "Delete widget profile", $"Delete {name}? Widgets using it will follow Default.", "Delete"))
+            if (TopLevel.GetTopLevel(this) is Window owner && await ConfirmAsync(owner, "Delete widget profile", $"Delete {name}? Widgets using it will follow Default.", "Delete"))
             {
                 _editor.DeleteWidgetProfile(name);
                 _profile = "Default";
+
                 Refresh();
             }
         });
+
         delete.IsEnabled = _profile != "Default";
+
         var info = Help("Widget profiles", "Custom profiles inherit from Default until you change a setting. Apply saves your edits.",
             "In iCUE, enter the profile name for each widget. Enter Instance to use its existing iCUE settings.",
             "Slot size, Custom Style and background media are configured in iCUE.");
+
         var panel = Section("Widget profile", instructions);
-        panel.HeaderActions = new StackPanel
-        {
-            Orientation = Orientation.Horizontal, Spacing = 8, Children = { profiles, add, delete, info }
-        };
+        panel.HeaderActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { profiles, add, delete, info } };
+
         return panel;
     }
 
@@ -402,6 +431,7 @@ internal sealed class IcueWidgetSettingsView : UserControl
         scenarios.HorizontalAlignment = HorizontalAlignment.Stretch;
         preview.HorizontalAlignment = HorizontalAlignment.Stretch;
         status.TextWrapping = TextWrapping.Wrap;
+
         return new StackPanel { Spacing = 6, Children = { scenarios, preview, status } };
     }
 

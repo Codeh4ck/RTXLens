@@ -126,7 +126,7 @@ internal sealed class PaletteResources(Application application)
     }
 
     private static double Luminance(Color color) =>
-        0.2126 * Linearize(color.R) + 0.7152 * Linearize(color.G) + 0.0722 * Linearize(color.B);
+        (0.2126 * Linearize(color.R)) + (0.7152 * Linearize(color.G)) + (0.0722 * Linearize(color.B));
 
     private static double Linearize(byte channel)
     {

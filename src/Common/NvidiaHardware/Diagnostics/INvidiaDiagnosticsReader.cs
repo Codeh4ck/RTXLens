@@ -1,6 +1,6 @@
 using RTXLens.Plugins.GenericNvidia.Contracts.Devices;
 
-namespace RTXLens.Plugins.GenericNvidia.Diagnostics;
+namespace RTXLens.Hardware.Nvidia.Diagnostics;
 
 public interface INvidiaDiagnosticsReader
 {

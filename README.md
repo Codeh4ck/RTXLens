@@ -35,7 +35,7 @@ The monitoring PC requires 64-bit Windows 11 or Windows 10 build 17763 or later.
 2. Open the device’s dashboard tab once it starts reporting. To capture a gaming or benchmark session, open **Performance Chart** and choose **New recording**.
 3. To pair a phone, connect it to the same network as the PC. On the PC, open **Configuration → Mobile Access**, enable mobile access, select **Apply mobile access**, then **Create pairing code**. On the phone, open **Settings → Scan pairing code**. Scan the QR code and approve the device on the PC.
 
-You can exit the desktop app and keep monitoring on the widget or phone. The Windows service continues collecting readings and running configured protection. Keep the desktop app running during a performance recording or when you want desktop notifications.
+You can exit the desktop app and keep monitoring on the widget or phone. The Windows service continues collecting readings and running configured protection. Keep the desktop app running during a performance recording. The installed warning notifier starts at sign-in and can show themed popups and play sounds while the dashboard is closed. Under **Configuration → Warnings → Notifications**, use **Notification delivery** for the shared service policy and **Alerts on this PC** for local popups, sound, and previews. Warning sounds loop by default while a warning is active. Turn off **Loop sound while a warning is active** for one playback per notification.
 
 ## Supported hardware
 

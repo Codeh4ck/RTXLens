@@ -45,6 +45,50 @@ namespace RTXLens.UI.Tests.Controls;
 
 internal static class AvaloniaDashboardTests
 {
+    public static void WarningBannerKeepsDangerColors()
+    {
+        using var shell = CreateShell();
+        var window = new ShellWindow(shell);
+        window.Show();
+        try
+        {
+            var button = window.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, "View warnings"));
+            var banner = button.GetVisualAncestors().OfType<Border>().First();
+            banner.IsVisible = true;
+            foreach (var theme in new[] { ThemeVariant.Dark, ThemeVariant.Light })
+            {
+                window.RequestedThemeVariant = theme;
+                window.MouseMove(default, RawInputModifiers.None);
+                Dispatcher.UIThread.RunJobs();
+                Application.Current!.TryGetResource("ErrorBrush", theme, out var errorInk);
+                var ink = ((ISolidColorBrush)errorInk!).Color;
+                Application.Current!.TryGetResource("ErrorSurfaceBrush", theme, out var errorSurface);
+                var surface = ((ISolidColorBrush)errorSurface!).Color;
+                TestAssert.Equal(surface, ((ISolidColorBrush)banner.Background!).Color);
+                TestAssert.Equal(ink, ((ISolidColorBrush)banner.BorderBrush!).Color);
+                CheckButton(surface, ink);
+                var point = button.TranslatePoint(new Point(button.Bounds.Width / 2, button.Bounds.Height / 2), window)!.Value;
+                window.MouseMove(point, RawInputModifiers.None);
+                CheckButton(ink, surface);
+                window.MouseDown(point, MouseButton.Left, RawInputModifiers.None);
+                CheckButton(surface, ink);
+                window.MouseUp(default, MouseButton.Left, RawInputModifiers.None);
+
+                void CheckButton(Color background, Color foreground)
+                {
+                    Dispatcher.UIThread.RunJobs();
+                    TestAssert.Equal(background, ((ISolidColorBrush)button.Background!).Color);
+                    TestAssert.Equal(foreground, ((ISolidColorBrush)button.Foreground!).Color);
+                    TestAssert.Equal(ink, ((ISolidColorBrush)button.BorderBrush!).Color);
+                }
+            }
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
     public static void EditsExistingPluginConfigurationModel(string? screenshotDirectory)
     {
         using var shell = CreateShell();
@@ -95,7 +139,20 @@ internal static class AvaloniaDashboardTests
                 var refresh = header.Children.OfType<Button>()
                     .Single(button => AutomationProperties.GetName(button) == $"Refresh {kind} list");
                 TestAssert.True(refresh is { Content: Image, IsEnabled: true }, "The plugin header should contain an icon-only refresh button.");
-                TestAssert.Equal($"Selected {kind}", AutomationProperties.GetName(header.Children.OfType<ComboBox>().Single()));
+                var picker = header.Children.OfType<ComboBox>().Single();
+                TestAssert.Equal($"Selected {kind}", AutomationProperties.GetName(picker));
+                if (tab == "Nvidia")
+                {
+                    shell.Configuration.SetNvidiaDevices([new("test-gpu", "GeForce RTX 5090", "/gpu-nvidia/0")]);
+                    Dispatcher.UIThread.RunJobs();
+                    TestAssert.Equal(0, picker.SelectedIndex);
+                    picker.SelectedIndex = 1;
+                    shell.Configuration.SetNvidiaDevices([]);
+                    Dispatcher.UIThread.RunJobs();
+                    TestAssert.Equal("test-gpu", shell.Configuration.Plugins.Single(p => p.IsNvidia).Nvidia.SelectedDevice.Id);
+                    TestAssert.Equal(1, picker.SelectedIndex);
+                    picker.SelectedIndex = 0;
+                }
                 var strip = tabs.GetVisualDescendants().OfType<Border>().Single(border => border.Name == "TabStripFrame");
                 AssertAlignedHorizontally(navigation, strip, window);
                 AssertAlignedHorizontally(navigation, section, window);
@@ -468,6 +525,7 @@ internal static class AvaloniaDashboardTests
             Changelog = "1. **NVIDIA diagnostics.** Report active GPU boost limits and PCIe link status.\n"
                 + "2. **Desktop GPU Status.** Show power and PCIe details alongside clocks, memory usage, temperatures, and fans."
         }), "release-notes.png");
+        return;
 
         void CheckDialog(Window dialog, string fileName)
         {
@@ -584,7 +642,7 @@ internal static class AvaloniaDashboardTests
             TestAssert.True(charts.All(chart => chart.ShowLegendValues), "Every performance chart should show legend values.");
             TestAssert.False(window.GetVisualDescendants().OfType<ToggleSwitch>()
                 .Any(toggle => Equals(toggle.OffContent, "Include values in legend")), "Legend values should not require a toggle.");
-            var expander = window.GetVisualDescendants().OfType<Expander>().First();
+            var expander = window.GetVisualDescendants().OfType<Expander>().First(panel => panel.Tag is string && panel.IsEffectivelyVisible);
             var header = expander.GetVisualDescendants().OfType<ToggleButton>().Single(button => button.Name == "ExpanderHeader");
             var target = header.TranslatePoint(new Point(20, 15), window)!.Value;
             window.MouseMove(target, RawInputModifiers.None);
@@ -605,6 +663,8 @@ internal static class AvaloniaDashboardTests
         {
             window.Close();
         }
+
+        return;
 
         SectionPanel[] Sections() => [.. window.GetVisualDescendants().OfType<SectionPanel>()];
 

@@ -319,6 +319,8 @@ internal sealed class PerformancePage : UserControl
                 table.Children.Add(separator);
             }
 
+            return;
+
             void AddCell(string text, int column, FontWeight weight)
             {
                 var cell = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, FontSize = 16, FontWeight = weight };
@@ -399,8 +401,8 @@ internal sealed class PerformancePage : UserControl
     {
         _emptySources.IsVisible = series.Length == 0;
 
-        var keys = series.Select(item => item.Trace.Key).ToArray();
-        if (_selectors.Count != keys.Length || keys.Any(key => !_selectors.ContainsKey(key)))
+        if (_selectors.Count != series.Length || series.Any(item => !_selectors.TryGetValue(item.Trace.Key, out var selector)
+            || AutomationProperties.GetName(selector) != item.Trace.Label))
         {
             var expanded = _sources.Children.OfType<Expander>().Where(expander => expander.IsExpanded).Select(expander => expander.Tag).ToHashSet();
 
@@ -417,7 +419,7 @@ internal sealed class PerformancePage : UserControl
 
             if (series.Length > 0)
             {
-                var quickSelection = DashboardSection("Select by plugin", null, quick);
+                var quickSelection = DashboardSection("Select by source", null, quick);
                 quickSelection.Padding = new Thickness(10);
                 _sources.Children.Add(quickSelection);
             }
@@ -535,7 +537,7 @@ internal sealed class PerformancePage : UserControl
 
     private void UpdatePlots(PerformanceChartFrame frame)
     {
-        var groups = frame.Series.Where(series => series is { Selected: true, Count: > 0 }).GroupBy(series => series.Trace.Group).ToArray();
+        var groups = frame.Series.Where(series => series is { Selected: true, Count: > 0 }).GroupBy(series => series.Trace.PlotGroup).ToArray();
         var names = groups.Select(group => group.Key).ToArray();
 
         if (!_charts.Keys.SequenceEqual(names, StringComparer.Ordinal))
@@ -566,7 +568,7 @@ internal sealed class PerformancePage : UserControl
         foreach (var group in groups)
         {
             var chart = _charts[group.Key];
-            var unit = group.First().Trace.Unit;
+            var trace = group.First().Trace;
             var minimum = double.PositiveInfinity;
             var maximum = double.NegativeInfinity;
 
@@ -593,7 +595,8 @@ internal sealed class PerformancePage : UserControl
             var duration = Math.Max(10, frame.DurationSeconds);
 
             chart.XAxis = new XyAxis(new XyRange(0, duration), Formatter: FormatTime, ReadoutFormatter: FormatHoverTime, TickGranularity: 1);
-            chart.YAxis = new XyAxis(new XyRange(minimum - padding, maximum + padding), Formatter: value => $"{value:0.##} {unit}");
+            chart.YAxis = new XyAxis(new XyRange(minimum - padding, maximum + padding), Formatter: value => trace.Identity.Metric == RTXLens.Contracts.Enums.SensorMetric.LinkGeneration ? $"Gen {value:0}" : trace.FormatValue(value),
+                TickGranularity: trace.Stepped ? 1 : null);
 
             chart.HoverLookup = CreateHoverLookup(frame.SessionId, [.. group.Select(series => series.Trace.Key)]);
             chart.Series = [.. group.Select(GetChartSeries)];
@@ -656,13 +659,13 @@ internal sealed class PerformancePage : UserControl
     private XySeries GetChartSeries(PerformanceSeries series)
     {
         var trace = series.Trace;
-        if (_traceSamples.TryGetValue(trace.Key, out var cached) && ReferenceEquals(series.Samples, cached.Samples))
+        if (_traceSamples.TryGetValue(trace.Key, out var cached) && cached.Series.Label == trace.Label && ReferenceEquals(series.Samples, cached.Samples))
         {
             return cached.Series;
         }
 
         var output = new XySeries(trace.Label, series.Samples.Select(sample => new XySample(sample.Seconds, sample.Value)).ToArray(),
-            TraceColor(trace), value => $"{value:0.##} {trace.Unit}");
+            TraceColor(trace), trace.FormatValue) { Stepped = trace.Stepped };
 
         _traceSamples[trace.Key] = (series.Samples, output);
         return output;

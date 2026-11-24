@@ -5,6 +5,8 @@
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="../../src/Desktop/App/RTXLens.App.csproj" />
+        <ProjectReference Include="../../src/Desktop/Notifier/RTXLens.Notifier.csproj" Aliases="Notifier" />
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
         <PackageReference Include="Avalonia.Headless" />
         <ProjectReference Include="../../src/Desktop/Presentation/RTXLens.Presentation.csproj" />
         <ProjectReference Include="../../src/Plugins/Asus/Contracts/RTXLens.Plugins.Asus.Contracts.csproj" />

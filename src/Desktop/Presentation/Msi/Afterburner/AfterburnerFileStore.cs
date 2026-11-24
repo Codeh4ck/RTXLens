@@ -1,3 +1,4 @@
+using System.Globalization;
 using RTXLens.Plugins.Msi.Contracts;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -14,8 +15,8 @@ public sealed partial class AfterburnerFileStore(string installation, string bac
 
     public static string DefaultBackupRoot => Path.Combine(AppContext.BaseDirectory, "AfterburnerBackups");
 
-    public static string LegacyBackupDirectoryFor(string installation) => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "RTXLens.AfterburnerBackups", InstallationKey(installation));
+    public static string LegacyBackupDirectoryFor(string installation) =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "RTXLens.AfterburnerBackups", InstallationKey(installation));
 
     public bool HasInterruptedChange => File.Exists(Path.Combine(BackupDirectory, "pending.json")) || LegacyStore?.HasInterruptedChange == true;
 
@@ -28,6 +29,7 @@ public sealed partial class AfterburnerFileStore(string installation, string bac
             var bytes = !validate && !exists ? [] : ReadLimited(path);
             return new AfterburnerFileChange(name, bytes, bytes) { BeforeExists = exists };
         }).ToArray();
+
         if (validate)
         {
             _ = AfterburnerConfiguration.Inspect(files[0].Before, files[1].Before);
@@ -90,6 +92,7 @@ public sealed partial class AfterburnerFileStore(string installation, string bac
         // Inspect the entire selection before deleting anything, including recovery-journal and file-integrity checks.
         var directories = selections.Select(item => ValidateBackupDeletion(item.Id, item.ExpectedFingerprint)).ToArray();
         var deleted = 0;
+
         try
         {
             foreach (var directory in directories)
@@ -119,6 +122,7 @@ public sealed partial class AfterburnerFileStore(string installation, string bac
 
         var journal = Path.Combine(BackupDirectory, "pending.json");
         EnsureNoLinks(journal);
+
         if (File.Exists(journal) && File.ReadAllText(journal).Trim() == id)
         {
             throw new InvalidOperationException("This backup is needed to recover an interrupted update. Complete recovery before deleting it.");
@@ -145,6 +149,7 @@ public sealed partial class AfterburnerFileStore(string installation, string bac
         {
             var path = Path.Combine(directory, name);
             EnsureNoLinks(path);
+
             File.Delete(path);
         }
 
@@ -155,6 +160,7 @@ public sealed partial class AfterburnerFileStore(string installation, string bac
     {
         ValidateCurrent(expected);
         EnsureNoLinks(BackupDirectory);
+
         var restorable = expected.Files.All(file => file.BeforeExists);
         try
         {
@@ -165,8 +171,9 @@ public sealed partial class AfterburnerFileStore(string installation, string bac
             restorable = false;
         }
 
-        var backup = new AfterburnerBackup(DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss-fff") + "-" + Guid.NewGuid().ToString("N"),
+        var backup = new AfterburnerBackup(DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N"),
             DateTimeOffset.UtcNow, kind, Installation, expected.Files.ToDictionary(file => file.RelativePath, file => file.BeforeHash), restorable);
+
         var directory = BackupPath(backup.Id);
         Directory.CreateDirectory(directory);
 
@@ -177,6 +184,7 @@ public sealed partial class AfterburnerFileStore(string installation, string bac
 
         WriteNew(Path.Combine(directory, AfterburnerFiles.BackupManifest), JsonSerializer.SerializeToUtf8Bytes(backup, AfterburnerJsonContext.Default.AfterburnerBackup));
         _ = ReadBackup(backup.Id);
+
         return backup;
     }
 
@@ -191,6 +199,7 @@ public sealed partial class AfterburnerFileStore(string installation, string bac
         var current = Read(false);
         var directory = BackupPath(backup.Id);
         var files = current.Files.Select(file => file with { After = ReadLimited(Path.Combine(directory, Path.GetFileName(file.RelativePath))) }).ToArray();
+
         _ = AfterburnerConfiguration.Inspect(files[0].After, files[1].After);
         return new(Installation, files);
     }
@@ -205,16 +214,19 @@ public sealed partial class AfterburnerFileStore(string installation, string bac
 
         var backup = Save(plan, restoring ? "Before restore" : "Before apply");
         var journal = Path.Combine(BackupDirectory, "pending.json");
-        File.WriteAllText(journal, backup.Id);
-        var replaced = new List<AfterburnerFileChange>();
 
+        File.WriteAllText(journal, backup.Id);
+
+        var replaced = new List<AfterburnerFileChange>();
         try
         {
             foreach (var file in plan.Files.Where(file => file.Changed))
             {
                 beforeReplace?.Invoke(file.RelativePath);
+
                 RequireBefore(file);
                 Replace(Target(file.RelativePath), file.After);
+
                 replaced.Add(file);
             }
 
@@ -225,6 +237,7 @@ public sealed partial class AfterburnerFileStore(string installation, string bac
 
             _ = Read();
             File.Delete(journal);
+
             return backup;
         }
         catch (Exception failure)
@@ -288,6 +301,7 @@ public sealed partial class AfterburnerFileStore(string installation, string bac
 
         directory ??= BackupPath(id);
         EnsureNoLinks(directory);
+
         var manifest = JsonSerializer.Deserialize(ReadLimited(Path.Combine(directory, AfterburnerFiles.BackupManifest)),
             AfterburnerJsonContext.Default.AfterburnerBackup) ?? throw new InvalidDataException("Backup manifest is empty.");
 

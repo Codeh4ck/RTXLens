@@ -260,10 +260,7 @@ internal sealed class SettingsPage : UserControl
             startWithWindows,
             Caption(startWithWindows.IsEnabled ? "Keep the installation in the same location when using startup registration."
                 : "Startup registration is available in the administrator-run release app."),
-            Toggle("Start minimized", current => current.StartMinimized, (current, value) => current with { StartMinimized = value }),
-            Toggle("Windows warning notifications on this PC", current => current.WarningNotifications,
-                (current, value) => current with { WarningNotifications = value }),
-            Caption("Configure shared warning thresholds and reminders under Configuration > Warnings. This switch controls this PC."));
+            Toggle("Start minimized", current => current.StartMinimized, (current, value) => current with { StartMinimized = value }));
         return Section("Desktop behavior", items);
     }
 
