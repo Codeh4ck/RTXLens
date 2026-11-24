@@ -1,5 +1,4 @@
 using RTXLens.Hardware.Nvidia;
-using System.Globalization;
 using RTXLens.Plugins.GenericNvidia.Contracts.Devices;
 
 namespace RTXLens.Hardware.Nvidia.Diagnostics;
@@ -23,7 +22,7 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
 
     public NvidiaDiagnostics? Read(string deviceId)
     {
-        if (!TryGetPciIdentity(deviceId, out var identity))
+        if (!NvidiaPciIdentity.TryParse(deviceId, out var identity))
         {
             return null;
         }
@@ -54,7 +53,7 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
 
     internal NvidiaSensor[] ReadBoard(string deviceId)
     {
-        if (!TryGetPciIdentity(deviceId, out var identity))
+        if (!NvidiaPciIdentity.TryParse(deviceId, out var identity))
         {
             return [];
         }
@@ -135,7 +134,13 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
             Query("nvmlDeviceGetCurrPcieLinkWidth"),
             Query("nvmlDeviceGetMaxPcieLinkWidth"),
             Query("nvmlDeviceGetPcieSpeed"),
-            Query("nvmlDeviceGetPcieLinkMaxSpeed"),
+            Query("nvmlDeviceGetPcieLinkMaxSpeed") switch
+            {
+                // Recognize the NVML link-speed constants and rates already expressed in Mbps.
+                1 => 2500, 2 => 5000, 3 => 8000, 4 => 16000, 5 => 32000, 6 => 64000,
+                >= 2500 and var rate => rate,
+                _ => null
+            },
             Throughput(0),
             Throughput(1),
             Query("nvmlDeviceGetPcieReplayCounter"),
@@ -195,19 +200,6 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
         return getStates is not null && getStates(handle, states, PStateCount * sizeof(int)) == 0
             ? [.. states.Where(state => state is >= 0 and < PStateCount).Distinct().Order()]
             : null;
-    }
-
-    internal static bool TryGetPciIdentity(string id, out (uint Bus, uint Slot, uint DeviceId, uint SubsystemId) identity)
-    {
-        identity = default;
-
-        var parts = id.Split('/');
-
-        return parts is ["nvidia-pci", _, _, _, _]
-               && Hex(parts[1], out identity.Bus) && Hex(parts[2], out identity.Slot)
-               && Hex(parts[3], out identity.DeviceId) && Hex(parts[4], out identity.SubsystemId);
-
-        static bool Hex(string text, out uint value) => uint.TryParse(text, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out value);
     }
 
     internal static nint? FindDevice(NvmlApi api, (uint Bus, uint Slot, uint DeviceId, uint SubsystemId) identity)

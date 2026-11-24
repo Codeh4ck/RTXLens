@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 
 $packages = @{}
 
-foreach ($project in @('src/Service', 'src/Desktop/App', 'installer/Actions'))
+foreach ($project in @('src/Service', 'src/Desktop/App', 'src/Desktop/Notifier', 'installer/Actions'))
 {
     $assets = Get-Content -LiteralPath (Join-Path $SolutionDirectory "$project/obj/project.assets.json") -Raw | ConvertFrom-Json -AsHashtable
 

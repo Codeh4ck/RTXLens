@@ -65,11 +65,16 @@ try
 
         Invoke-ReleaseCommand dotnet @('run', '--project', 'tests/Desktop', '-c', 'Release', '-p:EnableTelemetryDebug=true')
 
+        Invoke-ReleaseCommand dotnet @('run', '--project', 'tests/Desktop', '-c', 'Release', '-p:EnableTelemetryDebug=true', '--no-build', '--', '--verify-warning-notifier')
+
         Invoke-ReleaseCommand dotnet @('run', '--project', 'tests/Installer', '-c', 'Release')
     }
 
     Invoke-ReleaseCommand dotnet @('publish', 'src/Service', '-c', 'Release', '-r', 'win-x64', '--self-contained', 'true',
         '-p:PublishSingleFile=false', '-p:PublishTrimmed=false', '-o', (Join-Path $payload 'Service'))
+
+    Invoke-ReleaseCommand dotnet @('publish', 'src/Desktop/Notifier', '-c', 'Release', '-r', 'win-x64', '--self-contained', 'true',
+        '-o', (Join-Path $payload 'Notifier'))
 
     Invoke-ReleaseCommand dotnet @('publish', 'src/Desktop/App', '-c', 'Release', '-p:PublishProfile=Portable',
         '-p:EnableTelemetryDebug=true', '-o', (Join-Path $payload 'Desktop'), '-m:1')

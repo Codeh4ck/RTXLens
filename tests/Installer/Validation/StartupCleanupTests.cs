@@ -1,5 +1,4 @@
 using System;
-using System.Reflection;
 using Microsoft.Win32;
 using RTXLens.Installer.Actions.Startup;
 
@@ -45,5 +44,5 @@ internal static class StartupCleanupTests
         }
     }
 
-    private static void Clean(RegistryKey hive, string directory) => typeof(StartupCleanup).GetMethod("RemoveFromHive", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, [hive, directory]);
+    private static void Clean(RegistryKey hive, string directory) => StartupCleanup.UpdateHive(hive, directory, "", migrate: false);
 }

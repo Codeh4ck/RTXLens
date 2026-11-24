@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <ItemGroup>
+        <PackageReference Include="Avalonia.Desktop" />
+        <ProjectReference Include="../Presentation/RTXLens.Presentation.csproj" />
+        <Content Include="../Notifier/Sounds/*.mp3" Link="Sounds/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+</Project>

@@ -43,6 +43,7 @@ public sealed class NativeNvidiaHardwareSource(TimeProvider clock, INvidiaFallba
         }
 
         _astral ??= new AstralDriverReader(_devices);
+
         var sensors = _astral.Read(handle);
         return [.. _management.ReadBoard(device.Id), .. sensors];
     }
@@ -50,7 +51,11 @@ public sealed class NativeNvidiaHardwareSource(TimeProvider clock, INvidiaFallba
     public NvidiaSensor[] ReadPins(NvidiaDevice device)
     {
         var handle = _devices.Handle(device.Id);
-        if (!device.IsAstral || handle == 0) return [];
+        if (!device.IsAstral || handle == 0)
+        {
+            return [];
+        }
+
         _astral ??= new AstralDriverReader(_devices);
         return _astral.ReadPins(handle);
     }
@@ -61,6 +66,7 @@ public sealed class NativeNvidiaHardwareSource(TimeProvider clock, INvidiaFallba
     {
         _astral = null;
         _knownDevices = [];
+
         _devices.Dispose();
         _management.Reset();
         fallback?.Reset();

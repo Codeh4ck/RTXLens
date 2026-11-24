@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using Microsoft.Win32;
 using RTXLens.Installer.Actions.Configuration;
 using RTXLens.Installer.Actions.Startup;
@@ -12,76 +11,19 @@ namespace RTXLens.Installer.Actions;
 public static class CustomActions
 {
     [CustomAction]
-    public static ActionResult SelectLegacyInstallFolder(Session session) => Run(session, () =>
-    {
-        var legacy = session["LEGACYINSTALLFOLDER"];
-        if (!LegacyInstallationMigration.SamePath(legacy, LegacyInstallationMigration.DefaultInstallFolder))
-        {
-            session["INSTALLFOLDER"] = legacy;
-        }
-    });
-
-    [CustomAction]
-    public static ActionResult PrepareLegacyMigration(Session session) => Run(session, () =>
-    {
-        var data = new CustomActionData
-        {
-            { "Previous", session["LEGACYINSTALLFOLDER"] },
-            { "Destination", session["INSTALLFOLDER"] },
-            { "Id", Guid.NewGuid().ToString("N") }
-        };
-        foreach (var action in new[] { "CaptureLegacyMigration", "ApplyLegacyMigration", "RestoreLegacyMigration", "CleanLegacyMigration" })
-        {
-            session[action] = data.ToString();
-        }
-    });
-
-    [CustomAction]
-    public static ActionResult CaptureLegacyMigration(Session session) => Run(session, () => LegacyMigration(session).Capture());
-
-    [CustomAction]
-    public static ActionResult ApplyLegacyMigration(Session session) => Run(session, () => LegacyMigration(session).Apply());
-
-    [CustomAction]
-    public static ActionResult RestoreLegacyMigration(Session session) => Run(session, () => LegacyMigration(session).Restore());
-
-    [CustomAction]
-    public static ActionResult CleanLegacyMigration(Session session) => Run(session, () => LegacyMigration(session).Commit(message => session.Log(message)));
-
-    private static LegacyInstallationMigration LegacyMigration(Session session)
-    {
-        var data = session.CustomActionData;
-        return new LegacyInstallationMigration(data["Previous"], data["Destination"], data["Id"]);
-    }
-
-    [CustomAction]
     public static ActionResult Preflight(Session session) => Run(session, () =>
     {
         InstallationPreflight.CheckDesktopClosed(session["INSTALLFOLDER"]);
-        var previous = session["LEGACYINSTALLFOLDER"];
-        if (!string.IsNullOrEmpty(previous) && !string.IsNullOrEmpty(session["WIX_UPGRADE_DETECTED"]))
-        {
-            using var hive = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
-            using var registration = hive.OpenSubKey(@"SOFTWARE\Rtx5090Monitoring");
-            if (registration?.GetValue("InstallDirectory") is not string registered || !LegacyInstallationMigration.SamePath(previous, registered))
-            {
-                throw new IOException("Setup could not validate the registered RTX Monitor installation location.");
-            }
-
-            InstallationPreflight.CheckDesktopClosed(previous, legacy: true);
-            InstallationPreflight.CheckLegacyServiceOwnership(previous);
-        }
         var installed = !string.IsNullOrEmpty(session["Installed"]);
-        var upgrading = !string.IsNullOrEmpty(session["WIX_UPGRADE_DETECTED"]);
         var destination = session["INSTALLFOLDER"];
-        InstallationPreflight.CheckServiceOwnership(destination, installed, upgrading ? previous : null);
 
-        if (upgrading && !installed && !string.IsNullOrEmpty(previous))
-        {
-            var programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
-            new LegacySafeguardMigration(previous, destination, programData)
-                .CloseAfterburnerBeforeMigration(message => session.Log(message));
-        }
+        using var hashes = session.Database.OpenView("SELECT `Data` FROM `Binary` WHERE `Name`='NotifierFileHashes'");
+        hashes.Execute();
+
+        using var record = hashes.Fetch();
+        using var stream = record.GetStream(1);
+
+        InstallationPreflight.CheckServiceOwnership(destination, installed, InstallationPreflight.ReadNotifierHashes(stream));
     });
 
     [CustomAction]
@@ -98,16 +40,13 @@ public static class CustomActions
     });
 
     [CustomAction]
-    public static ActionResult BackupConfiguration(Session session) => Run(session, () =>
-        new ConfigurationBackup(session.CustomActionData["BackupId"]).Capture());
+    public static ActionResult BackupConfiguration(Session session) => Run(session, () => new ConfigurationBackup(session.CustomActionData["BackupId"]).Capture());
 
     [CustomAction]
-    public static ActionResult RestoreConfiguration(Session session) => Run(session, () =>
-        new ConfigurationBackup(session.CustomActionData["BackupId"]).Restore());
+    public static ActionResult RestoreConfiguration(Session session) => Run(session, () => new ConfigurationBackup(session.CustomActionData["BackupId"]).Restore());
 
     [CustomAction]
-    public static ActionResult CleanConfigurationBackup(Session session) => Run(session, () =>
-        new ConfigurationBackup(session.CustomActionData["BackupId"]).Clean());
+    public static ActionResult CleanConfigurationBackup(Session session) => Run(session, () => new ConfigurationBackup(session.CustomActionData["BackupId"]).Clean());
 
     [CustomAction]
     public static ActionResult PrepareServiceHealth(Session session) => Run(session, () =>
@@ -116,8 +55,7 @@ public static class CustomActions
     });
 
     [CustomAction]
-    public static ActionResult VerifyServiceHealth(Session session) =>
-        Run(session, () => ServiceHealth.Wait(session.CustomActionData["Version"]));
+    public static ActionResult VerifyServiceHealth(Session session) => Run(session, () => ServiceHealth.Wait(session.CustomActionData["Version"]));
 
     [CustomAction]
     public static ActionResult ConfigureServiceStartup(Session session) => Run(session, ServiceStartupConfiguration.Apply);
@@ -129,29 +67,27 @@ public static class CustomActions
     });
 
     [CustomAction]
-    public static ActionResult RemoveStartupRegistration(Session session) => Run(session, () =>
-        StartupCleanup.Remove(session.CustomActionData["InstallDirectory"], message => session.Log(message)));
+    public static ActionResult RemoveStartupRegistration(Session session) => Run(session, () => StartupCleanup.Remove(session.CustomActionData["InstallDirectory"], session.Log));
 
     [CustomAction]
     public static ActionResult PrepareStartupMigration(Session session) => Run(session, () =>
     {
         session["MigrateStartupRegistration"] = new CustomActionData
         {
-            { "InstallDirectory", session["INSTALLFOLDER"] },
-            { "PreviousDirectory", session["LEGACYINSTALLFOLDER"] }
+            { "InstallDirectory", session["INSTALLFOLDER"] }
         }.ToString();
     });
 
     [CustomAction]
     public static ActionResult MigrateStartupRegistration(Session session) => Run(session, () =>
-        StartupCleanup.Migrate(session.CustomActionData["InstallDirectory"], message => session.Log(message),
-            string.IsNullOrEmpty(session.CustomActionData["PreviousDirectory"]) ? null : session.CustomActionData["PreviousDirectory"]));
+        StartupCleanup.Migrate(session.CustomActionData["InstallDirectory"], session.Log));
 
     [CustomAction]
     public static ActionResult PrepareAfterburnerBackupCleanup(Session session) => Run(session, () =>
     {
         using var hive = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
         using var registration = hive.OpenSubKey(@"SOFTWARE\RTXLens");
+
         var installation = registration?.GetValue("InstallDirectory") as string;
         session["RemoveAfterburnerBackups"] = new CustomActionData { { "InstallDirectory", installation ?? "" } }.ToString();
     });
@@ -159,7 +95,7 @@ public static class CustomActions
     [CustomAction]
     public static ActionResult RemoveAfterburnerBackups(Session session) => Run(session, () =>
         AfterburnerBackupCleanup.Remove(session.CustomActionData["InstallDirectory"],
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), message => session.Log(message)));
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), session.Log));
 
     private static ActionResult Run(Session session, Action action)
     {
@@ -171,9 +107,11 @@ public static class CustomActions
         catch (Exception error)
         {
             session.Log(error.ToString());
+
             using var record = new Record(1);
             record[0] = "RTX Lens setup: [1]";
             record[1] = error.Message;
+
             session.Message(InstallMessage.Error, record);
             return ActionResult.Failure;
         }

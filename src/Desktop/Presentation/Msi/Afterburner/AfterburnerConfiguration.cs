@@ -47,6 +47,7 @@ public static class AfterburnerConfiguration
             Number(plugin, AfterburnerKeys.Settings, AfterburnerKeys.CurrentDif, 5),
             connector,
             IsLowPowerAction(profile, section));
+
         var action = (profile.Get(section, AfterburnerKeys.AlarmApp) ?? "") + " " + (profile.Get(section, AfterburnerKeys.AlarmAppCmdLine) ?? "");
 
         return new(settings, IsConfigured(profile, 1), IsConfigured(profile, 2), action.Trim(),
@@ -57,16 +58,16 @@ public static class AfterburnerConfiguration
     {
         settings.Validate();
         _ = Inspect(pluginBytes, profileBytes);
+
         var plugin = new IniDocument(pluginBytes);
         var profile = new IniDocument(profileBytes);
-
         var alarms = settings.GetConnectorAlarms();
         var original = alarms.ToDictionary(alarm => alarm.Connector, alarm => InspectConnector(profileBytes, alarm.Connector));
         var enabledChanged = alarms.Any(alarm => alarm.Enabled != original[alarm.Connector].AlarmConfigured);
+
         if (enabledChanged)
         {
-            var anyEnabled = new[] { 1, 2 }.Any(connector =>
-                alarms.FirstOrDefault(alarm => alarm.Connector == connector)?.Enabled ?? IsConfigured(profile, connector));
+            var anyEnabled = new[] { 1, 2 }.Any(connector => alarms.FirstOrDefault(alarm => alarm.Connector == connector)?.Enabled ?? IsConfigured(profile, connector));
             plugin.Set(AfterburnerKeys.Settings, AfterburnerKeys.GPUSafeguard, anyEnabled ? "1" : "0");
         }
 
@@ -79,6 +80,7 @@ public static class AfterburnerConfiguration
         {
             var saved = original[alarm.Connector];
             var section = AlarmSection(alarm.Connector);
+
             if (alarm.AlarmTimeoutMs is { } timeout && timeout != saved.AlarmTimeoutMs)
             {
                 profile.Set(section, AfterburnerKeys.AlarmTimeout, timeout.ToString(CultureInfo.InvariantCulture));
@@ -88,6 +90,7 @@ public static class AfterburnerConfiguration
                 || (alarm.Script is { } binding && (binding.Id != saved.ScriptBindingId
                     || (OperatingSystem.IsWindows()
                         && !saved.Arguments.StartsWith(AfterburnerSafeguard.HiddenWindowOption, StringComparison.OrdinalIgnoreCase))));
+
             if (alarm.Enabled == saved.AlarmConfigured && !actionChanged)
             {
                 continue;
@@ -165,6 +168,7 @@ public static class AfterburnerConfiguration
         var application = profile.Get(section, AfterburnerKeys.AlarmApp) ?? "";
         var arguments = profile.Get(section, AfterburnerKeys.AlarmAppCmdLine) ?? "";
         var script = OperatingSystem.IsWindows() ? AfterburnerSafeguard.Inspect(application, arguments) : null;
+
         return new(connector, enabled, IsConfigured(profile, connector), IsLowPowerAction(profile, section),
             profile.Get(section, AfterburnerKeys.AlarmThresholdMin) ?? "", profile.Get(section, AfterburnerKeys.AlarmThresholdMax) ?? "",
             profile.Get(section, AfterburnerKeys.AlarmFlags) ?? "0", profile.Get(section, AfterburnerKeys.AlarmTimeout) ?? "Default",
@@ -202,23 +206,24 @@ public static class AfterburnerConfiguration
         var matches = sources.Select((source, index) => (Name: source.Trim().TrimStart('+', '-'), Index: index))
             .Where(source => source.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).ToArray();
 
-        if (matches.Length > 1)
+        switch (matches.Length)
         {
-            throw new InvalidDataException("The selected alarm appears more than once in the monitoring source list.");
-        }
+            case > 1:
+                throw new InvalidDataException("The selected alarm appears more than once in the monitoring source list.");
+            case 1:
+                {
+                    var index = matches[0].Index;
+                    var source = sources[index];
+                    var start = source.Length - source.TrimStart().Length;
+                    var length = source.Trim().Length;
 
-        if (matches.Length == 1)
-        {
-            var index = matches[0].Index;
-            var source = sources[index];
-            var start = source.Length - source.TrimStart().Length;
-            var length = source.Trim().Length;
-            sources[index] = source[..start] + "+" + name + source[(start + length)..];
-            profile.Set(AfterburnerKeys.Settings, AfterburnerKeys.Sources, string.Join(',', sources));
-        }
-        else
-        {
-            profile.Set(AfterburnerKeys.Settings, AfterburnerKeys.Sources, current + ",+" + name);
+                    sources[index] = source[..start] + "+" + name + source[(start + length)..];
+                    profile.Set(AfterburnerKeys.Settings, AfterburnerKeys.Sources, string.Join(',', sources));
+                    break;
+                }
+            default:
+                profile.Set(AfterburnerKeys.Settings, AfterburnerKeys.Sources, current + ",+" + name);
+                break;
         }
 
         if (!string.IsNullOrWhiteSpace(profile.Get(AlarmSection(name.Contains('1') ? 1 : 2), AfterburnerKeys.Formula)))

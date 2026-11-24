@@ -196,7 +196,7 @@ internal sealed partial class ShellViewModel
             Recorder.Accept(frame.Snapshot);
             RefreshPresentation(force: true);
 
-            foreach (var warning in _simulationWarnings.Evaluate(frame.Snapshot, now, Preferences))
+            foreach (var warning in _simulationWarnings.Evaluate(frame.Snapshot.Warnings, Preferences.WarningNotifications || Preferences.PlayWarningSound))
             {
                 Simulation.ReportNotification(warning.Title, warning.Message);
                 WarningRaised?.Invoke(warning with { Title = "DEBUG · " + warning.Title });

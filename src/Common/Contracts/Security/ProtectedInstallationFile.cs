@@ -25,6 +25,7 @@ public static class ProtectedInstallationFile
 
         const FileSystemRights writeAccess = FileSystemRights.Write | FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles
                                              | FileSystemRights.ChangePermissions | FileSystemRights.TakeOwnership;
+
         var drive = Path.GetPathRoot(path)!;
         if (drive.StartsWith(@"\\", StringComparison.Ordinal) || new DriveInfo(drive).DriveType != DriveType.Fixed)
         {
@@ -38,9 +39,8 @@ public static class ProtectedInstallationFile
                 throw new IOException("The installed executable or script is behind a linked path.");
             }
 
-            var security = File.Exists(current)
-                ? (FileSystemSecurity)new FileInfo(current).GetAccessControl()
-                : new DirectoryInfo(current).GetAccessControl();
+            FileSystemSecurity security = File.Exists(current) ? new FileInfo(current).GetAccessControl() : new DirectoryInfo(current).GetAccessControl();
+
             if (!Trusted(security.GetOwner(typeof(SecurityIdentifier)))
                 || security.GetAccessRules(true, true, typeof(SecurityIdentifier)).OfType<FileSystemAccessRule>()
                     .Any(rule => rule.AccessControlType == AccessControlType.Allow

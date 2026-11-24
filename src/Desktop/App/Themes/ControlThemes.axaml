@@ -77,6 +77,18 @@
             <Setter Property="Background" Value="{DynamicResource HudPressedSurfaceBrush}" />
         </Style>
 
+        <Style Selector="^.error-action:pointerover, ^.error-action:focus-visible">
+            <Setter Property="Background" Value="{DynamicResource ErrorBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ErrorBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource ErrorSurfaceBrush}" />
+        </Style>
+
+        <Style Selector="^.error-action:pressed">
+            <Setter Property="Background" Value="{DynamicResource ErrorSurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ErrorBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}" />
+        </Style>
+
         <Style Selector="^.unsaved-profile:not(:disabled) /template/ Border#UnsavedHighlight">
             <Setter Property="IsVisible" Value="True" />
             <Style.Animations>

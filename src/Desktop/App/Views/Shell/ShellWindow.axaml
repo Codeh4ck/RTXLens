@@ -44,7 +44,16 @@
                 </StackPanel>
             </Grid>
 
-            <Border x:Name="MainNavigation" Grid.Row="1" Background="{DynamicResource InsetBrush}" BorderBrush="{DynamicResource PanelBorderBrush}"
+            <StackPanel Grid.Row="1">
+                <Border IsVisible="{Binding Dashboard.HasWarningBanner}" Background="{DynamicResource ErrorSurfaceBrush}"
+                        BorderBrush="{DynamicResource ErrorBrush}" BorderThickness="3,0,0,0" CornerRadius="6" Padding="12,8" Margin="0,0,0,8">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                        <PathIcon Width="18" Height="18" Foreground="{DynamicResource ErrorBrush}" Data="M12 2L24 22H0ZM11 8V15H13V8ZM11 17V19H13V17Z"/>
+                        <TextBlock Grid.Column="1" VerticalAlignment="Center" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}" Text="{Binding Dashboard.WarningBanner}"/>
+                        <Button Grid.Column="2" Content="View warnings" Click="OpenCurrentWarnings" Classes="desktop-action error-action"/>
+                    </Grid>
+                </Border>
+            <Border x:Name="MainNavigation" Background="{DynamicResource InsetBrush}" BorderBrush="{DynamicResource PanelBorderBrush}"
                     BorderThickness="1" CornerRadius="8" Padding="6">
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                     <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
@@ -86,6 +95,8 @@
                     </StackPanel>
                 </Grid>
             </Border>
+
+            </StackPanel>
 
             <ContentControl x:Name="PageHost" Grid.Row="2" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
 

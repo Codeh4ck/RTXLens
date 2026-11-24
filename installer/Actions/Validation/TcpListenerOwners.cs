@@ -14,6 +14,7 @@ public static class TcpListenerOwners
         {
             var size = 0;
             var result = GetExtendedTcpTable(IntPtr.Zero, ref size, false, family, 3, 0);
+
             if (result != 0 && result != 122)
             {
                 throw new Win32Exception(result);
@@ -23,6 +24,7 @@ public static class TcpListenerOwners
             {
                 var allocated = size;
                 var buffer = Marshal.AllocHGlobal(allocated);
+
                 try
                 {
                     result = GetExtendedTcpTable(buffer, ref size, false, family, 3, 0);
@@ -38,6 +40,7 @@ public static class TcpListenerOwners
 
                     var rowSize = family == 2 ? 24 : 56;
                     var count = Marshal.ReadInt32(buffer);
+
                     if (count < 0 || count > (allocated - 4) / rowSize)
                     {
                         throw new InvalidOperationException("Invalid Windows TCP listener table.");
@@ -47,14 +50,19 @@ public static class TcpListenerOwners
                     {
                         var offset = 4 + (row * rowSize);
                         var value = (ushort)IPAddress.NetworkToHostOrder(Marshal.ReadInt16(buffer, offset + (family == 2 ? 8 : 20)));
+
                         if (value == port)
                         {
                             yield return Marshal.ReadInt32(buffer, offset + (family == 2 ? 20 : 52));
                         }
                     }
+
                     break;
                 }
-                finally { Marshal.FreeHGlobal(buffer); }
+                finally
+                {
+                    Marshal.FreeHGlobal(buffer);
+                }
             }
             if (result != 0)
             {

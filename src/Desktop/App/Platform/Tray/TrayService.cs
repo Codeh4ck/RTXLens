@@ -63,20 +63,6 @@ internal sealed class TrayService : IDisposable
         AddIcon();
     }
 
-    public void Notify(string title, string message)
-    {
-        _data.InfoTitle = title[..Math.Min(title.Length, 63)];
-        _data.Info = message[..Math.Min(message.Length, 255)];
-        _data.InfoFlags = NativeConstants.BalloonWarning | NativeConstants.RespectQuietTime;
-        _data.Flags |= NativeConstants.NotifyInfoFlag;
-
-        NativeMethods.Shell_NotifyIconW(NativeConstants.NotifyModify, ref _data);
-
-        _data.Flags &= ~NativeConstants.NotifyInfoFlag;
-        _data.Info = string.Empty;
-        _data.InfoTitle = string.Empty;
-    }
-
     private void AddIcon()
     {
         IsAvailable = NativeMethods.Shell_NotifyIconW(NativeConstants.NotifyAdd, ref _data);
@@ -105,7 +91,7 @@ internal sealed class TrayService : IDisposable
                     var action = (uint)(lParam.ToInt64() & 0xFFFF);
                     switch (action)
                     {
-                        case NativeConstants.LeftDoubleClick or NativeConstants.TraySelect or NativeConstants.TrayKeyboardSelect or NativeConstants.BalloonClick:
+                        case NativeConstants.LeftDoubleClick or NativeConstants.TraySelect or NativeConstants.TrayKeyboardSelect:
                             _dispatch(() => _show());
                             break;
                         case NativeConstants.ContextMenu or NativeConstants.RightButtonUp:

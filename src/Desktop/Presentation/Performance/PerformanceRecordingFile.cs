@@ -82,6 +82,14 @@ public static class PerformanceRecordingFile
             throw new InvalidDataException("Select a completed RTX Lens recording containing captured readings.");
         }
 
+        if (session.GpuDetails is not { Length: <= 256 } details
+            || details.Any(detail => detail is null || string.IsNullOrWhiteSpace(detail.DeviceId) || detail.DeviceId.Length > 512
+                || !PerformanceGpuDetail.Supports(detail.Metric) || !double.IsFinite(detail.Value) || detail.Value < 0)
+            || details.DistinctBy(detail => (detail.DeviceId, detail.Metric)).Count() != details.Length)
+        {
+            throw new InvalidDataException("The recording contains invalid GPU capabilities.");
+        }
+
         var keys = new HashSet<string>(StringComparer.Ordinal);
         long count = 0;
         long points = 0;

@@ -5,14 +5,14 @@ namespace RTXLens.App.Controls.Charts;
 
 internal static class XySeriesPath
 {
-    public static StreamGeometry Build(ReadOnlySpan<XySample> samples, XyPlotLayout layout, double renderScale)
+    public static StreamGeometry Build(ReadOnlySpan<XySample> samples, XyPlotLayout layout, double renderScale, bool stepped = false)
     {
         var geometry = new StreamGeometry();
         using var path = geometry.Open();
 
         var start = Math.Max(0, LowerBound(samples, layout.X.Minimum) - 1);
         var end = Math.Min(samples.Length, UpperBound(samples, layout.X.Maximum) + 1);
-        var writer = new PathWriter(path);
+        var writer = new PathWriter(path, stepped);
         var bucket = new SampleBucket();
 
         for (var index = start; index < end; index++)
@@ -164,7 +164,7 @@ internal static class XySeriesPath
 
     private readonly record struct IndexedPoint(int Index, Point Point);
 
-    private struct PathWriter(StreamGeometryContext path)
+    private struct PathWriter(StreamGeometryContext path, bool stepped)
     {
         private bool _hasSegment;
         private int _pointCount;
@@ -180,6 +180,10 @@ internal static class XySeriesPath
             }
             else if (point.Index > _last.Index)
             {
+                if (stepped && point.Point.Y != _last.Point.Y)
+                {
+                    path.LineTo(new Point(point.Point.X, _last.Point.Y));
+                }
                 path.LineTo(point.Point);
                 _pointCount++;
             }

@@ -16,7 +16,7 @@ namespace RTXLens.App.Views.Configuration;
 
 internal sealed class WarningsConfigurationView : UserControl
 {
-    public WarningsConfigurationView(ShellViewModel shell)
+    public WarningsConfigurationView(ShellViewModel shell, bool currentWarnings = false)
     {
         var sections = new TabControl
         {
@@ -24,7 +24,9 @@ internal sealed class WarningsConfigurationView : UserControl
             ItemsPanel = new FuncTemplate<Panel?>(() => new StackPanel { Spacing = 4 }),
             Theme = (ControlTheme)Application.Current!.FindResource("VerticalConfigurationTabStripTheme")!
         };
+
         AutomationProperties.SetName(sections, "Warning settings");
+
         sections.SelectionChanged += (_, args) =>
         {
             if (ReferenceEquals(args.Source, sections) && sections.SelectedItem is TabItem { Tag: Func<Control> create } selected)
@@ -33,16 +35,17 @@ internal sealed class WarningsConfigurationView : UserControl
                 selected.Content = create();
             }
         };
+
         sections.ItemsSource = new[]
         {
             WarningTab("Device warning profiles", () => new DeviceWarningProfilesView(shell)),
             WarningTab("GPU temperatures", () => CreateTemperatureWarnings(shell.Configuration)),
-            WarningTab("Notifications", () => CreateNotifications(shell.Configuration)),
+            WarningTab("Notifications", () => Stack(CreateNotifications(shell.Configuration), LocalWarningSettings.Create(shell))),
             WarningTab("Per-warning overrides", () => CreateOverrides(shell.Configuration)),
             WarningTab("Current warnings", () => CreateCurrentWarnings(shell))
         };
-        sections.SelectedIndex = 0;
 
+        sections.SelectedIndex = currentWarnings ? sections.ItemCount - 1 : 0;
         Content = sections;
     }
 
@@ -60,42 +63,51 @@ internal sealed class WarningsConfigurationView : UserControl
         {
             HorizontalContentAlignment = HorizontalAlignment.Stretch
         });
+
         var temperatureFields = (ContentControl)temperature.Content!;
+
         Watch(temperature, editor, () =>
         {
             var model = editor.NvidiaWarnings;
-            temperatureFields.Content = model is null ? Alert("The NVIDIA plugin is unavailable.", "warning") : Columns(
-                Temperature("Core", model, nameof(model.CoreWarningEnabled), nameof(model.CoreTemperatureWarningC)),
-                Temperature("VRAM", model, nameof(model.MemoryWarningEnabled), nameof(model.MemoryTemperatureWarningC)));
+            temperatureFields.Content = model is null
+                ? Alert("The NVIDIA plugin is unavailable.", "warning")
+                : Columns(
+                    Temperature("Core", model, nameof(model.CoreWarningEnabled), nameof(model.CoreTemperatureWarningC)),
+                    Temperature("VRAM", model, nameof(model.MemoryWarningEnabled), nameof(model.MemoryTemperatureWarningC)));
+
             if (model is not null)
             {
                 BindTo((Control)temperatureFields.Content!, IsEnabledProperty, editor, nameof(editor.CanEdit));
             }
         }, nameof(editor.NvidiaWarnings));
+
         return temperature;
     }
 
     private static Control CreateNotifications(ConfigurationEditorViewModel editor)
     {
         var policies = editor.Warnings;
+
         var notificationFields = Stack(
-            Alert("Pick when RTX Lens should give you a heads-up. Hit Apply to use these settings in the app and widget."),
-            Switch("Enable warning notifications", policies, nameof(policies.NotificationsEnabled)),
+            Alert("Choose when the service sends warning notifications to this PC and connected devices. Select Apply to save."),
+            Switch("Send warning notifications to connected devices", policies, nameof(policies.NotificationsEnabled)),
             PolicyFields(policies.Defaults));
+
         BindTo(notificationFields, IsEnabledProperty, editor, nameof(editor.CanEdit));
-        var notifications = Section("Warning notifications", notificationFields);
+
+        var notifications = Section("Notification delivery", notificationFields);
         notifications.HeaderActions = IconButton("How warning notifications work", DesktopIcons.Info, async () =>
         {
             if (TopLevel.GetTopLevel(notifications) is Window owner)
             {
-                await ShowInformationAsync(owner, "Warning notifications", Stack(
+                await ShowInformationAsync(owner, "Notification delivery", Stack(
                     Caption("Notify when a warning starts sends one notification. Repeat while active sends reminders at the selected interval."),
                     Caption("For example, crossing 80 °C can send an initial warning. A subsequent rise to 82 °C updates the details. "
                         + "The next reminder follows the configured interval."),
                     Caption("Reminders pause while recovery is being confirmed or readings are unavailable. "
                         + "After confirmed recovery, another occurrence can send a new notification."),
                     Caption("Use global defaults applies the shared policy. An override can change the initial notification, reminder interval, "
-                        + "and clear duration. Windows notifications also require the local switch under Settings.")));
+                        + "and clear duration. Popup and sound preferences below apply to this Windows account.")));
             }
         });
 
@@ -111,6 +123,7 @@ internal sealed class WarningsConfigurationView : UserControl
             ItemTemplate = new FuncDataTemplate<WarningOverrideEditorViewModel>((item, _) =>
                 new TextBlock { Text = item?.Name })
         };
+
         var overrideFields = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch };
         picker.SelectionChanged += (_, _) =>
         {
@@ -125,6 +138,7 @@ internal sealed class WarningsConfigurationView : UserControl
                 overrideFields.Content = null;
             }
         };
+
         Watch(picker, policies, () =>
         {
             if (picker.SelectedIndex < 0 && policies.HasDefinitions)
@@ -132,9 +146,11 @@ internal sealed class WarningsConfigurationView : UserControl
                 picker.SelectedIndex = 0;
             }
         }, nameof(policies.HasDefinitions));
+
         var overrideBody = Stack(
             Alert("Pick a warning from the Warning type dropdown to change how often it shows up. It lists warnings from every installed plugin."),
             Field("Warning type", picker), overrideFields);
+
         BindTo(overrideBody, IsEnabledProperty, editor, nameof(editor.CanEdit));
 
         return Section("Per-warning overrides", overrideBody);
@@ -144,11 +160,13 @@ internal sealed class WarningsConfigurationView : UserControl
     {
         var summary = Alert();
         var dashboard = shell.Dashboard;
+
         Watch(summary, dashboard, () =>
         {
             var message = dashboard.WarningSummary;
             SetAlert(summary, message, message.StartsWith("Service unavailable", StringComparison.Ordinal) ? "warning" : "info");
         }, nameof(dashboard.WarningSummary));
+
         var current = new ItemsControl
         {
             ItemsSource = shell.Dashboard.CurrentWarnings,
@@ -169,6 +187,7 @@ internal sealed class WarningsConfigurationView : UserControl
     {
         var value = NumberField($"{label} warning threshold (°C)", model, threshold, 30, 120);
         BindTo(value, IsEnabledProperty, model, enable);
+
         return Stack(Switch($"{label} temperature warning", model, enable), value);
     }
 
@@ -176,6 +195,7 @@ internal sealed class WarningsConfigurationView : UserControl
     {
         var reminder = NumberField("Repeat every (seconds)", model, nameof(model.RepeatIntervalSeconds), 5, 3600);
         BindTo(reminder, IsEnabledProperty, model, nameof(model.RepeatWhileActive));
+
         return Stack(Switch("Notify when a warning starts", model, nameof(model.NotifyOnStart)),
             Switch("Repeat while warning remains active", model, nameof(model.RepeatWhileActive)),
             Columns(reminder, NumberField("Condition must remain clear for (seconds)", model, nameof(model.ClearAfterSeconds), 0, 60)));
@@ -185,6 +205,7 @@ internal sealed class WarningsConfigurationView : UserControl
     {
         var stack = new StackPanel { Spacing = 12 };
         stack.Children.AddRange(controls);
+        
         return stack;
     }
 

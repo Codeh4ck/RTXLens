@@ -27,6 +27,8 @@ internal sealed class PerformancePage : UserControl
     private readonly Dictionary<string, (PerformanceSample[] Samples, XySeries Series)> _traceSamples = new(StringComparer.Ordinal);
     private readonly Dictionary<string, IBrush> _traceColors = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _cursors = new(StringComparer.Ordinal);
+    private readonly TextBlock _gpuDetails = Caption();
+    private readonly Expander _detailsPanel = new() { Header = "GPU capabilities" };
     private readonly TextBlock _status = Caption();
     private readonly ContentControl _importAlert;
     private readonly TextBlock _emptySources = Caption("Waiting for supported sensor readings.");
@@ -68,10 +70,13 @@ internal sealed class PerformancePage : UserControl
             button.Classes.Add("desktop-action");
         }
 
+        _gpuDetails.TextWrapping = TextWrapping.Wrap;
+        _detailsPanel.Content = _gpuDetails;
+        _detailsPanel.IsVisible = false;
         var title = new StackPanel
         {
             Spacing = 4,
-            Children = { new TextBlock { Text = "Performance Chart", Classes = { "heading" } }, _status }
+            Children = { new TextBlock { Text = "Performance Chart", Classes = { "heading" } }, _status, _detailsPanel }
         };
 
         var heading = new Grid
@@ -375,6 +380,9 @@ internal sealed class PerformancePage : UserControl
             SetAlert(_importAlert, imported ? $"Imported recording · {samples}" : null, "success");
         }
 
+        _detailsPanel.IsVisible = frame.GpuDetails.Length > 0;
+        _gpuDetails.Text = string.Join(Environment.NewLine, frame.GpuDetails.GroupBy(detail => detail.DeviceId)
+            .Select(device => $"{device.Key} · {string.Join(" · ", device.Select(detail => detail.Description))}"));
         _status.Text = imported ? samples : $"{frame.Status} · {samples}";
         _status.IsVisible = !(_importAlert.IsVisible && _importAlert.Classes.Contains("success"));
         _start.IsEnabled = !frame.Recording && frame.Series.Any(series => series is { Available: true, Selected: true });
@@ -401,8 +409,8 @@ internal sealed class PerformancePage : UserControl
     {
         _emptySources.IsVisible = series.Length == 0;
 
-        var keys = series.Select(item => item.Trace.Key).ToArray();
-        if (_selectors.Count != keys.Length || keys.Any(key => !_selectors.ContainsKey(key)))
+        if (_selectors.Count != series.Length || series.Any(item => !_selectors.TryGetValue(item.Trace.Key, out var selector)
+            || AutomationProperties.GetName(selector) != item.Trace.Label))
         {
             var expanded = _sources.Children.OfType<Expander>().Where(expander => expander.IsExpanded).Select(expander => expander.Tag).ToHashSet();
 
@@ -419,7 +427,7 @@ internal sealed class PerformancePage : UserControl
 
             if (series.Length > 0)
             {
-                var quickSelection = DashboardSection("Select by plugin", null, quick);
+                var quickSelection = DashboardSection("Select by source", null, quick);
                 quickSelection.Padding = new Thickness(10);
                 _sources.Children.Add(quickSelection);
             }
@@ -537,7 +545,7 @@ internal sealed class PerformancePage : UserControl
 
     private void UpdatePlots(PerformanceChartFrame frame)
     {
-        var groups = frame.Series.Where(series => series is { Selected: true, Count: > 0 }).GroupBy(series => series.Trace.Group).ToArray();
+        var groups = frame.Series.Where(series => series is { Selected: true, Count: > 0 }).GroupBy(series => series.Trace.PlotGroup).ToArray();
         var names = groups.Select(group => group.Key).ToArray();
 
         if (!_charts.Keys.SequenceEqual(names, StringComparer.Ordinal))
@@ -568,7 +576,7 @@ internal sealed class PerformancePage : UserControl
         foreach (var group in groups)
         {
             var chart = _charts[group.Key];
-            var unit = group.First().Trace.Unit;
+            var trace = group.First().Trace;
             var minimum = double.PositiveInfinity;
             var maximum = double.NegativeInfinity;
 
@@ -595,7 +603,8 @@ internal sealed class PerformancePage : UserControl
             var duration = Math.Max(10, frame.DurationSeconds);
 
             chart.XAxis = new XyAxis(new XyRange(0, duration), Formatter: FormatTime, ReadoutFormatter: FormatHoverTime, TickGranularity: 1);
-            chart.YAxis = new XyAxis(new XyRange(minimum - padding, maximum + padding), Formatter: value => $"{value:0.##} {unit}");
+            chart.YAxis = new XyAxis(new XyRange(minimum - padding, maximum + padding), Formatter: value => trace.Identity.Metric == RTXLens.Contracts.Enums.SensorMetric.LinkGeneration ? $"Gen {value:0}" : trace.FormatValue(value),
+                TickGranularity: trace.Stepped ? 1 : null);
 
             chart.HoverLookup = CreateHoverLookup(frame.SessionId, [.. group.Select(series => series.Trace.Key)]);
             chart.Series = [.. group.Select(GetChartSeries)];
@@ -658,13 +667,13 @@ internal sealed class PerformancePage : UserControl
     private XySeries GetChartSeries(PerformanceSeries series)
     {
         var trace = series.Trace;
-        if (_traceSamples.TryGetValue(trace.Key, out var cached) && ReferenceEquals(series.Samples, cached.Samples))
+        if (_traceSamples.TryGetValue(trace.Key, out var cached) && cached.Series.Label == trace.Label && ReferenceEquals(series.Samples, cached.Samples))
         {
             return cached.Series;
         }
 
         var output = new XySeries(trace.Label, series.Samples.Select(sample => new XySample(sample.Seconds, sample.Value)).ToArray(),
-            TraceColor(trace), value => $"{value:0.##} {trace.Unit}");
+            TraceColor(trace), trace.FormatValue) { Stepped = trace.Stepped };
 
         _traceSamples[trace.Key] = (series.Samples, output);
         return output;

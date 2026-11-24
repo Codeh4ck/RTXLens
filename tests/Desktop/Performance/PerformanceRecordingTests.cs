@@ -11,9 +11,10 @@ internal static class PerformanceRecordingTests
 {
     public static void Run(TestRunner runner)
     {
-        runner.Run(TemperaturesIncludeReportedWireViewSensorsAndGpuFans);
+        runner.Run(TemperaturesIncludeReportedWireViewSensors);
         runner.Run(ClearRemovesSessionDataAndRetainsLiveSelections);
         runner.Run(GpuMetricsRetainSourcesUnitsAndReportedFans);
+        runner.Run(RecordsGpuDiagnosticsPerPhysicalCard);
         runner.Run(BulkSelectionIsScopedAndNotifiesOnce);
         runner.Run(MsiSelectorsHideUnusedConnectorsAndKeepRecordedHistory);
         runner.Run(DisplayFramesBoundMemoryAndKeepExactHoverAndExport);
@@ -30,7 +31,7 @@ internal static class PerformanceRecordingTests
         runner.Run(DisabledPluginsDisappearAndReturnWithoutLosingRecordedSamples);
     }
 
-    private static void TemperaturesIncludeReportedWireViewSensorsAndGpuFans()
+    private static void TemperaturesIncludeReportedWireViewSensors()
     {
         var clock = new RecordingClock();
         var recorder = Create(clock);
@@ -55,7 +56,7 @@ internal static class PerformanceRecordingTests
         recorder.Accept(frame);
         var temperatures = recorder.ReadFrame(null, new Dictionary<string, int>()).Series
             .Where(series => series.Trace.Category == "Temperatures").ToArray();
-        TestAssert.Equal(6, temperatures.Length);
+        TestAssert.Equal(5, temperatures.Length);
         TestAssert.Equal(4, temperatures.Count(series => series.Trace.Identity.PluginId == "wireview-pro2"));
         TestAssert.True(temperatures.Any(series => series.Trace.Label.EndsWith("Board temp in", StringComparison.Ordinal)), "WireView board sensors need readable labels.");
         TestAssert.True(temperatures.Any(series => series.Trace.Label.EndsWith("External temp 2", StringComparison.Ordinal)), "External probe numbers must be retained.");
@@ -125,14 +126,15 @@ internal static class PerformanceRecordingTests
         frame = frame with { Sensors = [.. sensors] };
         recorder.Accept(frame);
         var options = recorder.ReadFrame(null, new Dictionary<string, int>()).Series;
-        var gpu = options.Where(series => series.Trace.Category is "GPU metrics" or "Temperatures").ToArray();
-        TestAssert.True(gpu.Where(series => series.Trace.Identity.Metric is SensorMetric.Temperature or SensorMetric.FanSpeed)
-            .All(series => series.Trace.Category == "Temperatures"), "GPU temperatures and fans must leave GPU metrics.");
-        TestAssert.Equal(2, gpu.Count(series => series.Trace.Group == "GPU core clock"));
-        TestAssert.Equal(2, gpu.Count(series => series.Trace.Group == "GPU memory clock"));
+        var gpu = options.Where(series => series.Trace.Category is "GPU metrics" or "Temperatures" or "Fans").ToArray();
+        TestAssert.True(gpu.All(series => series.Trace.Source == "ROG Astral"), "One physical Astral must have one source label.");
+        TestAssert.True(gpu.Where(series => series.Trace.Identity.Metric == SensorMetric.FanSpeed)
+            .All(series => series.Trace.Category == "Fans"), "Each reported fan belongs in Fans.");
+        TestAssert.Equal(1, gpu.Count(series => series.Trace.Group == "GPU core clock"));
+        TestAssert.Equal(1, gpu.Count(series => series.Trace.Group == "GPU memory clock"));
         TestAssert.True(gpu.All(series => series.Trace.Identity.Metric != SensorMetric.MemoryTotal),
             "VRAM usage should record used GB only.");
-        TestAssert.Equal(3, gpu.Count(series => series.Trace.Group == "GPU fan speed"));
+        TestAssert.Equal(2, gpu.Count(series => series.Trace.Group == "GPU fan speed"));
         TestAssert.True(gpu.Any(series => series.Trace.Label.EndsWith("Fan 2", StringComparison.Ordinal)),
             "Each reported fan must be independently selectable.");
 
@@ -150,6 +152,60 @@ internal static class PerformanceRecordingTests
         TestAssert.Equal<double?>(850, session.Series.Single(series => series.Trace.Group == "GPU core voltage").Samples[0].Value);
         AssertSameSamples(session, PerformanceRecordingFile.Deserialize(PerformanceRecordingFile.Serialize(session)));
         AssertSameSamples(session, PerformanceRecordingFile.Deserialize(PerformanceHtmlExporter.Export(session)));
+    }
+
+    private static void RecordsGpuDiagnosticsPerPhysicalCard()
+    {
+        var clock = new RecordingClock();
+        var recorder = Create(clock);
+        const string astralPci = "nvidia-pci/01/00/2b8510de/89e31043";
+        SensorReading Sensor(SensorComponent component, SensorMetric metric, double value, string device = "gpu0", int? channel = null) =>
+            new(new("generic-nvidia", device, component, metric, channel), SensorUnits.For(metric), value, clock.GetUtcNow());
+        SensorSnapshot Snapshot(int mask) => Frame(clock, 1) with
+        {
+            Sensors =
+            [
+                .. Frame(clock, 1).Sensors,
+                Sensor(SensorComponent.GpuCrossbar, SensorMetric.Clock, 2509),
+                Sensor(SensorComponent.GpuSystem, SensorMetric.Clock, 2869),
+                Sensor(SensorComponent.GpuCrossbar, SensorMetric.Clock, 1100, "gpu1"),
+                Sensor(SensorComponent.GpuPcie, SensorMetric.ReceiveThroughput, 2 * 1048576),
+                Sensor(SensorComponent.GpuPcie, SensorMetric.MaximumLinkWidth, 16),
+                Sensor(SensorComponent.GpuPerformance, SensorMetric.ActiveClockReasons, mask),
+                Sensor(SensorComponent.GpuPerformance, SensorMetric.SupportedClockReasons, 5),
+                Sensor(SensorComponent.GpuPerformance, SensorMetric.ClockLimitDuration, 21, channel: 4),
+                Sensor(SensorComponent.GpuPerformance, SensorMetric.SupportedPerformanceStates, 33),
+                Sensor(SensorComponent.GpuPerformance, SensorMetric.PerformanceState, 5),
+                Sensor(SensorComponent.GpuPowerLimits, SensorMetric.EnforcedPowerLimit, 600)
+            ]
+        };
+
+        var nvidiaOnly = Create(clock);
+        nvidiaOnly.Accept(Frame(clock, 1) with { Sensors = [Sensor(SensorComponent.GpuCore, SensorMetric.Clock, 2200, astralPci)] });
+        TestAssert.Equal("ROG Astral", nvidiaOnly.ReadFrame(null, new Dictionary<string, int>()).Series.Single().Trace.Source);
+        recorder.Accept(Snapshot(1));
+        var live = recorder.ReadFrame(null, new Dictionary<string, int>());
+        TestAssert.Equal("ROG Astral (gpu0)", live.Series.First(series => series.Trace.DeviceId == "gpu0").Trace.Source);
+        TestAssert.Equal("NVIDIA (gpu1)", live.Series.Single(series => series.Trace.DeviceId == "gpu1").Trace.Source);
+        recorder.SelectMany(live.Series.Select(series => series.Trace.Key), true);
+        recorder.Start();
+        recorder.Accept(Snapshot(1));
+        clock.Advance(2);
+        recorder.Accept(Snapshot(4));
+        var powerCap = live.Series.Single(series => series.Trace.Identity is { Metric: SensorMetric.ActiveClockReasons, Channel: 4 }).Trace;
+        TestAssert.Equal<double?>(0, recorder.ReadHover(recorder.ReadFrame(null, new Dictionary<string, int>()).SessionId, 0, 1.9).Values[powerCap.Key]);
+        clock.Advance(1);
+        recorder.Accept(Frame(clock, 3));
+        recorder.Stop();
+
+        var recorded = recorder.CompletedSession();
+        var active = recorded.Series.Single(series => series.Trace.Key == powerCap.Key);
+        TestAssert.True(active.Samples.Select(sample => sample.Value).SequenceEqual(new double?[] { 0, 1, null }),
+            "Unavailable boost flags must create a gap.");
+        TestAssert.Equal<double?>(2, recorded.Series.Single(series => series.Trace.Group == "PCIe traffic").Samples[0].Value);
+        var loaded = PerformanceRecordingFile.Deserialize(PerformanceHtmlExporter.Export(recorded));
+        TestAssert.True(loaded.GpuDetails.Any(detail => detail.Description.Contains("P0, P5")), "GPU capabilities must survive export.");
+        AssertSameSamples(recorded, loaded);
     }
 
     private static void BulkSelectionIsScopedAndNotifiesOnce()

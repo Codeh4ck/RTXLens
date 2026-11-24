@@ -23,6 +23,7 @@
         <InternalsVisibleTo Include="RTXLens.UI.Tests" />
         <AvaloniaResource Include="Assets/monitor.ico;Assets/Icons/*.svg" />
         <Content Include="Assets/monitor.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+        <ProjectReference Include="../WarningUI/RTXLens.WarningUI.csproj" />
         <ProjectReference Include="../Client/RTXLens.Client.csproj" />
         <ProjectReference Include="../Presentation/RTXLens.Presentation.csproj" />
         <PackageReference Include="Avalonia.Desktop" />

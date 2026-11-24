@@ -101,7 +101,6 @@ internal static class AvaloniaSettingsParityTests
 
             OpenTab("Desktop behavior", settingsTabs);
             SetToggle("Close to system tray", true);
-            SetToggle("Windows warning notifications on this PC", false);
 
             OpenTab("Service connection", settingsTabs);
             var address = window.GetVisualDescendants().OfType<TextBox>()
@@ -120,12 +119,12 @@ internal static class AvaloniaSettingsParityTests
             address.Text = "http://localhost:5000";
             var previousApi = shell.Api;
             Click("Apply");
-            PumpUntil(() => appearance.Primary == newColor && shell.Preferences is { TextScale: 1.2, CloseToTray: true, WarningNotifications: false });
+            PumpUntil(() => appearance.Primary == newColor && shell.Preferences is { TextScale: 1.2, CloseToTray: true });
             TestAssert.Equal("http://localhost:5000/", store.Load().ServiceAddress);
             TestAssert.False(ReferenceEquals(previousApi, shell.Api), "Applying a new service address should reconnect.");
             TestAssert.Equal(1.2, store.Load().TextScale);
             TestAssert.Equal(14 * 1.2, (double)Application.Current!.Resources["DesktopFontSize"]!);
-            TestAssert.True(store.Load().CloseToTray && !store.Load().WarningNotifications, "Desktop behavior should persist after Apply.");
+            TestAssert.True(store.Load().CloseToTray, "Desktop behavior should persist after Apply.");
 
             OpenTab("Appearance", settingsTabs);
             scale.SetCurrentValue(NumericUpDown.ValueProperty, 1m);
@@ -135,7 +134,6 @@ internal static class AvaloniaSettingsParityTests
 
             OpenTab("Desktop behavior", settingsTabs);
             SetToggle("Close to system tray", false);
-            SetToggle("Windows warning notifications on this PC", true);
             Click("Apply");
             PumpUntil(() => appearance.Primary == initialColor && shell.Preferences is { TextScale: 1, CloseToTray: false, WarningNotifications: true });
 
@@ -346,13 +344,29 @@ internal static class AvaloniaSettingsParityTests
             warningTabs.SelectedIndex = 2;
             Dispatcher.UIThread.RunJobs();
             TestAssert.True(window.GetVisualDescendants().OfType<RTXLens.App.Controls.SectionPanel>()
-                .Any(panel => Equals(panel.Header, "Warning notifications")), "The notification panel should open in the side tabs.");
+                .Any(panel => Equals(panel.Header, "Notification delivery")), "The notification panel should open in the side tabs.");
             TestAssert.True(!window.GetVisualDescendants().OfType<Button>()
                 .Any(button => AutomationProperties.GetName(button) == "Save profile configuration" && button.IsEffectivelyVisible),
                 "Shared notification settings use the global Apply button.");
             TestAssert.True(!window.GetVisualDescendants().OfType<TextBlock>()
                 .Any(text => text.Text == "Changes are applied live to the service and all consumers."), "Remove the default configuration banner.");
 
+            var sounds = window.GetVisualDescendants().OfType<ComboBox>().Single(input => AutomationProperties.GetName(input) == "Warning sound");
+            TestAssert.Equal("Warning1", sounds.SelectedItem as string);
+            TestAssert.True(new[] { "Warning1", "Warning2", "Warning3", "Warning4" }.SequenceEqual(sounds.Items.Cast<string>()), "All bundled sounds should be selectable.");
+            var volume = window.GetVisualDescendants().OfType<Slider>().Single(input => AutomationProperties.GetName(input) == "Warning sound volume");
+            TestAssert.True(sounds.Bounds.Width is > 0 and <= 300 && volume.Bounds.Width is > 0 and <= 300,
+                "The sound picker and volume slider should share a compact row.");
+            TestAssert.True(store.Load().LoopWarningSound, "Live warning sounds loop by default.");
+            SetToggle("Loop sound while a warning is active", false);
+            PumpUntil(() => !store.Load().LoopWarningSound);
+            sounds.SelectedItem = "Warning4";
+            PumpUntil(() => store.Load().WarningSound == "Warning4");
+            SetToggle("Show popups on this PC", false);
+            PumpUntil(() => !store.Load().WarningNotifications);
+            TestAssert.True(store.Load().PlayWarningSound, "The sound can remain enabled when popups are muted.");
+            SetToggle("Show popups on this PC", true);
+            PumpUntil(() => store.Load().WarningNotifications);
             ChangeSharedNotificationSettings();
             Click("Apply");
             PumpUntil(ApplyAlertVisible);
@@ -442,7 +456,7 @@ internal static class AvaloniaSettingsParityTests
             void ChangeSharedNotificationSettings()
             {
                 var notifications = window.GetVisualDescendants().OfType<ToggleSwitch>()
-                    .Single(input => AutomationProperties.GetName(input) == "Enable warning notifications");
+                    .Single(input => AutomationProperties.GetName(input) == "Send warning notifications to connected devices");
                 notifications.SetCurrentValue(ToggleSwitch.IsCheckedProperty, notifications.IsChecked != true);
                 Dispatcher.UIThread.RunJobs();
             }
@@ -530,7 +544,10 @@ internal static class AvaloniaSettingsParityTests
         finally
         {
             window.Close();
-            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, true);
+            }
         }
     }
 

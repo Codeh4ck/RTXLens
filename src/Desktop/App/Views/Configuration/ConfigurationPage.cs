@@ -33,10 +33,14 @@ internal sealed class ConfigurationPage : UserControl
         ItemsPanel = new FuncTemplate<Panel?>(() => new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 })
     };
 
-    public ConfigurationPage(ShellViewModel shell)
+    private bool _openCurrentWarnings;
+
+    public ConfigurationPage(ShellViewModel shell, bool currentWarnings = false)
     {
-        // Keep the scrollbar in the shell's right margin so the content stays aligned with the navigation.
+        // Keep the scrollbar in the shell's right margin so the content stays aligned with the navigation
         Margin = new Thickness(0, 0, -PageScrollbarGutter, 0);
+
+        _openCurrentWarnings = currentWarnings;
         _shell = shell;
         _editor = shell.Configuration;
 
@@ -223,7 +227,10 @@ internal sealed class ConfigurationPage : UserControl
 
     private void PopulateTabs()
     {
-        var previous = (_tabs.SelectedItem as TabItem)?.Header as string;
+        var openWarnings = _openCurrentWarnings;
+        _openCurrentWarnings = false;
+
+        var previous = openWarnings ? "Warnings" : (_tabs.SelectedItem as TabItem)?.Header as string;
 
         var tabs = (from plugin in _editor.Plugins.OrderBy(plugin => plugin.IsNvidia ? 0 : plugin.IsWireView ? 1 : plugin.IsAsus ? 2 : 3)
             let label = plugin.IsNvidia ? "Nvidia"
@@ -238,7 +245,7 @@ internal sealed class ConfigurationPage : UserControl
         tabs.Add(widget ?? Tab("iCUE Widget", () => new IcueWidgetSettingsView(_shell)));
 
         var warnings = _tabs.Items.OfType<TabItem>().FirstOrDefault(tab => Equals(tab.Header, "Warnings"));
-        tabs.Add(warnings ?? Tab("Warnings", () => new WarningsConfigurationView(_shell)));
+        tabs.Add(warnings ?? Tab("Warnings", () => new WarningsConfigurationView(_shell, openWarnings)));
 
         tabs.Add(Tab("GPU chart profiles", () => new GpuChartProfilesView(_shell)));
         tabs.Add(Tab("Source selections", CreateSources));
@@ -250,6 +257,7 @@ internal sealed class ConfigurationPage : UserControl
             _mobileActions.Content = view.EditActions;
             return view;
         }));
+
         tabs.Add(Tab("Maintenance", CreateMaintenance));
 
         _tabs.ItemsSource = tabs;
@@ -836,7 +844,7 @@ internal sealed class ConfigurationPage : UserControl
             ItemsSource = values,
             ItemTemplate = new FuncDataTemplate<T>((value, _) => new TextBlock
             {
-                Text = value is null ? null : label(value),
+                Text = value is null ? string.Empty : label(value),
                 TextTrimming = TextTrimming.CharacterEllipsis
             })
         };

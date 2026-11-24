@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using RTXLens.Installer.Actions.Validation;
 using WixToolset.Dtf.WindowsInstaller;
 
 namespace RTXLens.Installer.Tests.Packaging;
@@ -54,6 +56,26 @@ internal static class PackageTests
 
         Check.That(expected.Count == 0, "Every published payload file is included exactly once.");
 
+        using (var binary = database.OpenView("SELECT `Data` FROM `Binary` WHERE `Name`='NotifierFileHashes'"))
+        {
+            binary.Execute();
+            using var record = binary.Fetch();
+            using var stream = record.GetStream(1);
+            var hashes = InstallationPreflight.ReadNotifierHashes(stream);
+            var notifier = Path.Combine(payloadRoot, "Notifier") + Path.DirectorySeparatorChar;
+            using var sha = SHA256.Create();
+            foreach (var file in Directory.EnumerateFiles(notifier, "*", SearchOption.AllDirectories)
+                         .Where(file => !file.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase)))
+            {
+                var relative = file.Substring(notifier.Length);
+                using var content = File.OpenRead(file);
+                Check.That(hashes.TryGetValue(relative, out var digest) && BitConverter.ToString(sha.ComputeHash(content)).Replace("-", "") == digest,
+                    "The MSI can recognize its published notifier file: " + relative, false);
+                hashes.Remove(relative);
+            }
+            Check.That(hashes.Count == 0, "The notifier recovery manifest contains only packaged files.");
+        }
+
         var shortcut = Read(database, "SELECT `Component_`, `Target` FROM `Shortcut` WHERE `Shortcut`='StartMenuShortcut'").Single();
         Check.That(components[shortcut[0]][1] == "MonitorMenuFolder" && shortcut[1] == "[AppInstallFolder]RTXLens.App.exe",
             "The Start menu shortcut targets the desktop executable directly across MSI versions.");
@@ -66,7 +88,11 @@ internal static class PackageTests
         var control = Read(database, "SELECT `Name`, `Event` FROM `ServiceControl`").Single();
         Check.That((int.Parse(control[1]) & 0x80) != 0 && (int.Parse(control[1]) & 0x20) != 0, "Uninstall stops and deletes the registered service.");
         var sequence = Read(database, "SELECT `Action`, `Sequence`, `Condition` FROM `InstallExecuteSequence`").ToDictionary(row => row[0]);
-        Check.That(int.Parse(sequence["Preflight"][1]) < int.Parse(sequence["InstallValidate"][1]), "Ownership checks and Afterburner shutdown run before Windows Installer validates the installation.");
+        Check.That(Order("InstallInitialize") < Order("Wix4CloseApplications_X64") && Order("Wix4CloseApplications_X64") < Order("RemoveFiles"),
+            "The notifier shutdown is scheduled inside the MSI transaction before removing any files.");
+        Check.That(Read(database, "SELECT `DirProperty`, `InstallMode` FROM `RemoveFile` WHERE `FileKey`='RemoveEmptyNotifier'")
+            .Any(row => row[0] == "NotifierFolder" && row[1] == "2"), "Uninstall removes the empty notifier folder.");
+        Check.That(int.Parse(sequence["Preflight"][1]) < int.Parse(sequence["InstallValidate"][1]), "Ownership checks run before Windows Installer validates the installation.");
         Check.That(int.Parse(sequence["StopServices"][1]) < int.Parse(sequence["PortAvailable"][1]), "Port check runs after stopping this product's own service.");
         Check.That(int.Parse(sequence["RestoreConfiguration"][1]) < int.Parse(sequence["BackupConfiguration"][1])
             && int.Parse(sequence["BackupConfiguration"][1]) < int.Parse(sequence["InstallFiles"][1]), "Configuration rollback is scheduled before payload changes.");
@@ -75,16 +101,8 @@ internal static class PackageTests
         var actions = Read(database, "SELECT `Action`, `Type` FROM `CustomAction`").ToDictionary(row => row[0]);
         Check.That((int.Parse(actions["RestoreConfiguration"][1]) & 0x500) == 0x500, "Configuration restore is a rollback action.");
         Check.That((int.Parse(actions["RemoveStartupRegistration"][1]) & 0x600) == 0x600, "Startup cleanup occurs only when uninstall/feature removal commits.");
-        Check.That(Order("RemoveExistingProducts") < Order("InstallFiles")
-                   && Order("InstallFiles") < Order("PrepareLegacyMigration")
-                   && Order("PrepareLegacyMigration") < Order("RestoreLegacyMigration")
-                   && Order("RestoreLegacyMigration") < Order("CaptureLegacyMigration")
-                   && Order("CaptureLegacyMigration") < Order("ApplyLegacyMigration")
-                   && Order("ApplyLegacyMigration") < Order("StartServices"),
-            "Setup migrates preserved data before starting the new service and rolls it back before restoring the old product.");
-        Check.That(Order("VerifyServiceHealth") < Order("CleanLegacyMigration")
-            && (int.Parse(actions["CleanLegacyMigration"][1]) & 0xE00) == 0xE00,
-            "Legacy directory cleanup commits only after the replacement service is healthy.");
+        Check.That(Order("RemoveExistingProducts") < Order("InstallFiles") && Order("InstallFiles") < Order("StartServices"),
+            "Setup replaces the previous package before starting the new service.");
 
         var backupCleanup = sequence["RemoveAfterburnerBackups"];
         Check.That(backupCleanup[2] == "Installed AND REMOVE~=\"ALL\" AND NOT UPGRADINGPRODUCTCODE"

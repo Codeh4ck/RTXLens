@@ -92,7 +92,7 @@ footer { margin: 12px; color: var(--muted); font-size: 12px; }
 </style>
 </head>
 <body>
-<header><h1>RTX Lens - Performance Chart</h1><p id="session-info">No session</p><p id="status"></p></header>
+<header><h1>RTX Lens - Performance Chart</h1><p id="session-info">No session</p><p id="status"></p><details id="gpu-details" hidden><summary>GPU capabilities</summary><div></div></details></header>
 <div id="chart-controls">
 <nav aria-label="Chart navigation">
     <div class="nav-main">
@@ -255,6 +255,7 @@ footer { margin: 12px; color: var(--muted); font-size: 12px; }
                 traces.set(series.trace.key, trace);
             }
 
+            trace.trace = series.trace;
             trace.selected = series.selected;
             trace.available = series.available;
             trace.count = series.count;
@@ -271,6 +272,18 @@ footer { margin: 12px; color: var(--muted); font-size: 12px; }
         document.getElementById("session-info").textContent = update.startedAt
             ? new Date(update.startedAt).toLocaleString() + " - " + time(update.durationSeconds)
             : "No session";
+        const details = document.getElementById("gpu-details");
+        details.hidden = !update.gpuDetails?.length;
+        const rows = new Map();
+        for (const detail of update.gpuDetails ?? []) {
+            if (!rows.has(detail.deviceId)) rows.set(detail.deviceId, []);
+            rows.get(detail.deviceId).push(detail.description);
+        }
+        details.lastElementChild.replaceChildren(...Array.from(rows, ([device, values]) => {
+            const row = document.createElement("p");
+            row.textContent = device + " · " + values.join(" · ");
+            return row;
+        }));
         document.getElementById("status").textContent = update.status;
         document.getElementById("summary").textContent = update.sampleCount.toLocaleString()
             + " readings - " + time(update.durationSeconds) + (update.recording ? " - Recording" : "");
@@ -287,7 +300,7 @@ footer { margin: 12px; color: var(--muted); font-size: 12px; }
                 continue;
             }
 
-            const group = trace.trace.group;
+            const group = trace.trace.plotGroup ?? trace.trace.group;
             if (!groups.has(group)) {
                 groups.set(group, []);
             }
@@ -331,6 +344,7 @@ footer { margin: 12px; color: var(--muted); font-size: 12px; }
                     plot.legend.append(row.label);
                 }
 
+                setText(row.text, trace.trace.label);
                 row.input.checked = trace.selected;
                 row.label.hidden = embedded && !trace.selected;
             }
@@ -369,7 +383,7 @@ footer { margin: 12px; color: var(--muted); font-size: 12px; }
             requestDraw();
         });
 
-        return { label, input, value };
+        return { label, input, text, value };
     }
 
     function createPlot(name) {
@@ -524,8 +538,10 @@ footer { margin: 12px; color: var(--muted); font-size: 12px; }
         context.lineWidth = 1;
         for (let index = 0; index <= 4; index++) {
             const fraction = index / 4;
-            const axisY = area.top + fraction * area.height;
-            const value = maximum - fraction * (maximum - minimum);
+            const axisTrace = selected[0]?.trace;
+            const rawValue = maximum - fraction * (maximum - minimum);
+            const value = axisTrace?.stepped ? Math.round(rawValue) : rawValue;
+            const axisY = y(value);
             context.strokeStyle = colors.border;
             context.beginPath();
             context.moveTo(area.left, axisY);
@@ -533,7 +549,12 @@ footer { margin: 12px; color: var(--muted); font-size: 12px; }
             context.stroke();
             context.fillStyle = colors.muted;
             context.textAlign = "right";
-            context.fillText(format(value) + " " + (selected[0]?.trace.unit ?? ""), area.left - 8, axisY + 4);
+            if (value >= minimum && value <= maximum && (!axisTrace?.stepped || index === 0 ||
+                value !== Math.round(maximum - (index - 1) / 4 * (maximum - minimum)))) {
+                const label = axisTrace?.group === "PCIe link generation" ? "Gen " + format(value)
+                    : axisTrace ? formatValue(axisTrace, value) : format(value);
+                context.fillText(label, area.left - 8, axisY + 4);
+            }
             context.textAlign = "center";
             const seconds = viewStart + fraction * (viewEnd - viewStart);
             context.fillText(time(seconds), x(seconds), height - 9);
@@ -598,7 +619,7 @@ footer { margin: 12px; color: var(--muted); font-size: 12px; }
         if (embedded && frame?.displayOnly && cursor !== null) {
             return rawHover?.sessionId === sessionId ? rawHover.values[trace.trace.key] ?? null : null;
         }
-        return nearestSample(trace.samples, cursor ?? Infinity)?.value ?? null;
+        return nearestSample(trace.samples, cursor ?? Infinity, trace.trace.stepped)?.value ?? null;
     }
 
     function updateLegend(plot) {
@@ -607,7 +628,7 @@ footer { margin: 12px; color: var(--muted); font-size: 12px; }
         for (const trace of plot.series) {
             if (!trace.selected) continue;
             const value = hoverValue(trace);
-            setText(plot.rows.get(trace.trace.key).value, value === null ? "-" : format(value) + " " + trace.trace.unit);
+            setText(plot.rows.get(trace.trace.key).value, value === null ? "-" : formatValue(trace.trace, value));
         }
     }
 
@@ -643,6 +664,7 @@ footer { margin: 12px; color: var(--muted); font-size: 12px; }
         context.lineWidth = 1.7;
         context.beginPath();
         let connected = false;
+        let previousY;
         let bucketFirst = null;
         let bucketLast = null;
         let bucketMin = null;
@@ -660,12 +682,14 @@ footer { margin: 12px; color: var(--muted); font-size: 12px; }
                 if (sample === previous) continue;
                 previous = sample;
                 if (connected) {
+                    if (trace.trace.stepped) context.lineTo(x(sample.seconds), previousY);
                     context.lineTo(x(sample.seconds), y(sample.value));
                 } else {
                     context.moveTo(x(sample.seconds), y(sample.value));
                     context.lineTo(x(sample.seconds) + 0.3, y(sample.value));
                     connected = true;
                 }
+                previousY = y(sample.value);
             }
             bucketFirst = bucketLast = bucketMin = bucketMax = null;
         }
@@ -705,7 +729,7 @@ footer { margin: 12px; color: var(--muted); font-size: 12px; }
         }
     }
 
-    function nearestSample(samples, seconds) {
+    function nearestSample(samples, seconds, stepped) {
         if (samples.length === 0) {
             return null;
         }
@@ -727,7 +751,20 @@ footer { margin: 12px; color: var(--muted); font-size: 12px; }
             return samples[index - 1].seconds === seconds ? samples[index - 1] : null;
         }
 
-        return seconds - samples[index - 1].seconds <= samples[index].seconds - seconds ? samples[index - 1] : samples[index];
+        return stepped || seconds - samples[index - 1].seconds <= samples[index].seconds - seconds ? samples[index - 1] : samples[index];
+    }
+
+    function formatValue(trace, value) {
+        switch (trace.group) {
+            case "Current P-state": return "P" + format(value);
+            case "PCIe link width": return "×" + format(value);
+            case "PCIe link generation": {
+                const rate = [0, 2.5, 5, 8, 16, 32, 64, 128][value];
+                return "Gen " + format(value) + (rate ? " · " + format(rate) + " GT/s per lane" : "");
+            }
+            case "Active boost limits": return value === 1 ? "Active" : "Inactive";
+            default: return (format(value) + " " + trace.unit).trimEnd();
+        }
     }
 
     function format(value) {
@@ -827,7 +864,7 @@ footer { margin: 12px; color: var(--muted); font-size: 12px; }
 
         const selected = [...traces.values()].filter(trace => trace.selected);
         const displayedTime = embedded && frame.displayOnly ? rawHover.seconds : cursor;
-        const keys = selected.map(trace => trace.trace.key).join("\n");
+        const keys = JSON.stringify(selected.map(series => [series.trace.key, series.trace.label]));
         if (keys !== hoverKeys) {
             hoverKeys = keys;
             hoverRows.clear();
@@ -835,7 +872,7 @@ footer { margin: 12px; color: var(--muted); font-size: 12px; }
             container.replaceChildren();
             const groups = new Map();
             for (const trace of selected) {
-                const group = trace.trace.group;
+                const group = trace.trace.plotGroup ?? trace.trace.group;
                 if (!groups.has(group)) {
                     const heading = document.createElement("div");
                     heading.className = "hover-group";
@@ -864,7 +901,7 @@ footer { margin: 12px; color: var(--muted); font-size: 12px; }
         setText(document.getElementById("hover-date"), Number.isFinite(date.getTime()) ? dates.format(date) : "");
         for (const trace of selected) {
             const value = hoverValue(trace);
-            setText(hoverRows.get(trace.trace.key), value === null ? "-" : format(value) + " " + trace.trace.unit);
+            setText(hoverRows.get(trace.trace.key), value === null ? "-" : formatValue(trace.trace, value));
         }
 
         if (hover.hidden !== (selected.length === 0)) hover.hidden = selected.length === 0;

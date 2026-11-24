@@ -39,6 +39,7 @@ internal static class AvaloniaControlsTests
         runner.Run(EditableListVirtualizesRows);
         Application.Current!.RequestedThemeVariant = ThemeVariant.Dark;
         runner.Run(AvaloniaDashboardTests.UpdatesRealHardwareViewsFromFixtureFrames);
+        runner.Run(AvaloniaDashboardTests.WarningBannerKeepsDangerColors);
 #if TELEMETRY_DEBUG
         runner.Run(AvaloniaDashboardTests.SimulationCanEditWireViewAndReturnsToLiveOnClose);
         runner.Run(() => AvaloniaDashboardTests.DebugConsoleScrollsAndKeepsOverrides(screenshotDirectory));

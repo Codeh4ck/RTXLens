@@ -21,6 +21,17 @@ public sealed class DashboardViewModel : ObservableObject
     private AppPreferences _preferences = new();
 
     public ObservableCollection<Contracts.Warnings.WarningState> CurrentWarnings { get; } = [];
+    private string _warningBanner = string.Empty;
+    public string WarningBanner
+    {
+        get => _warningBanner;
+        private set { if (Set(ref _warningBanner, value))
+            {
+                Raise(nameof(HasWarningBanner));
+            }
+        }
+    }
+    public bool HasWarningBanner => WarningBanner.Length > 0;
     public string WarningSummary { get; private set; } = "Waiting for shared warning state";
     public ObservableCollection<HardwarePanelViewModel> Panels { get; } = [];
     public GpuStatusViewModel GpuStatus { get; } = new();
@@ -135,6 +146,22 @@ public sealed class DashboardViewModel : ObservableObject
                 CurrentWarnings[index] = states[index];
             }
         }
+        if (states.Length == 0)
+        {
+            WarningBanner = string.Empty;
+        }
+        else
+        {
+            var first = states.FirstOrDefault(s => s.Phase == Contracts.Warnings.WarningPhase.Active) ?? states[0];
+            var phase = first.Phase switch
+            {
+                Contracts.Warnings.WarningPhase.Active => "",
+                Contracts.Warnings.WarningPhase.Recovering => " · Recovering",
+                _ => " · Unable to verify"
+            };
+            var count = states.Length > 1 ? $" (+{states.Length - 1} more)" : "";
+            WarningBanner = $"{first.Title} · {first.Detail}{phase}{count}";
+        }
         WarningSummary = snapshot.Warnings is null ? "Update the backend service to enable shared warning policies."
             : states.Length == 0 ? "No active warnings" : $"{states.Length} warning conditions - shared service state";
         Raise(nameof(WarningSummary));
@@ -171,7 +198,18 @@ public sealed class DashboardViewModel : ObservableObject
     public void Disconnect(AppPreferences preferences)
     {
         GpuStatus.Clear();
-        CurrentWarnings.Clear();
+        if (CurrentWarnings.Count > 0)
+        {
+            WarningBanner = $"Unable to verify · {CurrentWarnings[0].Title} · Service disconnected";
+            for (var i = 0; i < CurrentWarnings.Count; i++)
+            {
+                var last = CurrentWarnings[i];
+                if (last.Phase != Contracts.Warnings.WarningPhase.Unavailable)
+                {
+                    CurrentWarnings[i] = last with { Phase = Contracts.Warnings.WarningPhase.Unavailable };
+                }
+            }
+        }
         WarningSummary = "Service unavailable - warning recovery cannot be evaluated.";
         Raise(nameof(WarningSummary));
         _lastSnapshot = null;

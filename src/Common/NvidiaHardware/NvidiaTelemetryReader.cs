@@ -21,26 +21,36 @@ public sealed class NvidiaTelemetryReader(INvidiaHardwareSource source, TimeProv
         }
     }
 
-    public NvidiaSample? ReadGpu(string? deviceId, TimeSpan staleAfter,
-        INvidiaDiagnosticsReader? diagnostics, CancellationToken token, out SensorReading[] status)
+    public NvidiaSample? ReadGpu(string? deviceId, TimeSpan staleAfter, INvidiaDiagnosticsReader? diagnostics, CancellationToken token, out SensorReading[] status)
     {
         lock (_lock)
         {
             _latestGpu = null;
             status = [];
+
             token.ThrowIfCancellationRequested();
-            if (Select(GetDevices(), deviceId) is not { } device) return null;
+
+            if (Select(GetDevices(), deviceId) is not { } device)
+            {
+                return null;
+            }
+
             var sensors = source.Read(device);
             var sample = new NvidiaSample(device, clock.GetUtcNow(), sensors);
             var clocks = source.ReadDomainClocks(device);
+
             status = GenericNvidiaSnapshotMapper.Create(sample, new NvidiaSample(device, clock.GetUtcNow(), clocks));
+
             if (diagnostics?.Read(sample.Device.Id) is { } diagnostic)
             {
                 status = [.. status, .. NvidiaDiagnosticsMapper.Create(diagnostic)];
             }
+
             token.ThrowIfCancellationRequested();
+
             _latestGpu = sample;
             _gpuFreshness = staleAfter;
+
             return sample;
         }
     }
@@ -50,15 +60,22 @@ public sealed class NvidiaTelemetryReader(INvidiaHardwareSource source, TimeProv
         lock (_lock)
         {
             token.ThrowIfCancellationRequested();
+
             cachedGpu = null;
-            if (Select(GetDevices(), deviceId) is not { IsAstral: true } device) return null;
+            if (Select(GetDevices(), deviceId) is not { IsAstral: true } device)
+            {
+                return null;
+            }
+
             var pins = source.ReadPins(device);
             token.ThrowIfCancellationRequested();
+
             var now = clock.GetUtcNow();
             if (_latestGpu is { } gpu && gpu.Device.Id == device.Id && now - gpu.ObservedAt <= _gpuFreshness)
             {
                 cachedGpu = gpu;
             }
+
             return NvidiaSample.Create(device, now, pins);
         }
     }

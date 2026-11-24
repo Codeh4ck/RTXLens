@@ -1,15 +1,11 @@
 using System.Buffers.Binary;
+using RTXLens.Plugins.GenericNvidia.Contracts.Devices;
 
 namespace RTXLens.Hardware.Nvidia;
 
 public static class AstralBoard
 {
-    // The low word is the ASUS subsystem vendor. Unknown boards must never receive I2C probes
-    public static bool IsSupported(uint subsystemId) => subsystemId is
-        0x89DF1043 or 0x89DE1043 or 0x8A2B1043 or 0x8A451043 or // 5080, OC, White OC, Miku
-        0x89E31043 or 0x8A2E1043 or 0x89EC1043 or 0x8A611043 or // 5090 OC, White, LC, Matrix
-        0x89EA1043 or 0x89FF1043 or // 5090D OC and ASUS-built OEM
-        0x8A5A1043 or 0x8A3C1043; // BTF revisions
+    public static bool IsSupported(uint subsystemId) => NvidiaPciIdentity.IsAstral(subsystemId);
 
     public static bool HasAlternativeInput(uint id) => id is 0x8A5A1043 or 0x8A3C1043 or 0x8A611043;
 

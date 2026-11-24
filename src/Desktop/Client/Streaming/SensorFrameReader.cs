@@ -9,9 +9,41 @@ namespace RTXLens.Client.Streaming;
 
 public static class SensorFrameReader
 {
-    public const int MaximumFrameBytes = 1024 * 1024;
+    private const int MaximumFrameBytes = 1024 * 1024;
 
     public static async IAsyncEnumerable<SensorSnapshot> ReadAsync(WebSocket socket, [EnumeratorCancellation] CancellationToken token)
+    {
+        await foreach (var frame in ReadMessagesAsync(socket, ClientJsonContext.Default.SensorSnapshot, TimeSpan.FromSeconds(100), token))
+        {
+            if (frame.SchemaVersion != 1 || frame.Sensors is null || frame.Plugins is null || frame.Selections is null || frame.Alerts is null)
+            {
+                throw new InvalidDataException("Unsupported sensor schema. Update the desktop app and service together.");
+            }
+
+            if (frame.Warnings is { } warnings && !ValidWarnings(warnings))
+            {
+                throw new InvalidDataException("Invalid shared warning state.");
+            }
+
+            yield return frame;
+        }
+    }
+
+    public static async IAsyncEnumerable<Contracts.Warnings.WarningSnapshot> ReadWarningsAsync(WebSocket socket, [EnumeratorCancellation] CancellationToken token)
+    {
+        await foreach (var feed in ReadMessagesAsync(socket, ClientJsonContext.Default.WarningSnapshot, Timeout.InfiniteTimeSpan, token))
+        {
+            if (!ValidWarnings(feed))
+            {
+                throw new InvalidDataException("Invalid shared warning state.");
+            }
+
+            yield return feed;
+        }
+    }
+
+    private static async IAsyncEnumerable<T> ReadMessagesAsync<T>(WebSocket socket, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> type,
+        TimeSpan timeout, [EnumeratorCancellation] CancellationToken token) where T : class
     {
         var buffer = ArrayPool<byte>.Shared.Rent(8192);
         try
@@ -21,11 +53,14 @@ public static class SensorFrameReader
             {
                 message.SetLength(0);
                 ValueWebSocketReceiveResult received;
+
                 using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
-                deadline.CancelAfter(TimeSpan.FromSeconds(100));
+                deadline.CancelAfter(timeout);
+
                 do
                 {
                     received = await socket.ReceiveAsync(buffer.AsMemory(), deadline.Token);
+
                     if (received.MessageType == WebSocketMessageType.Close)
                     {
                         await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Acknowledged", token);
@@ -40,18 +75,7 @@ public static class SensorFrameReader
                     message.Write(buffer, 0, received.Count);
                 } while (!received.EndOfMessage);
 
-                var frame = JsonSerializer.Deserialize(message.GetBuffer().AsSpan(0, (int)message.Length), ClientJsonContext.Default.SensorSnapshot)
-                    ?? throw new InvalidDataException("Empty sensor frame.");
-                if (frame.SchemaVersion != 1 || frame.Sensors is null || frame.Plugins is null || frame.Selections is null || frame.Alerts is null)
-                {
-                    throw new InvalidDataException("Unsupported sensor schema. Update the desktop app and service together.");
-                }
-
-                if (frame.Warnings is { } warnings && !ValidWarnings(warnings))
-                {
-                    throw new InvalidDataException("Invalid shared warning state.");
-                }
-                yield return frame;
+                yield return JsonSerializer.Deserialize(message.GetBuffer().AsSpan(0, (int)message.Length), type) ?? throw new InvalidDataException("Empty stream frame.");
             }
         }
         finally
@@ -65,13 +89,15 @@ public static class SensorFrameReader
         {
             return false;
         }
+
         if (warnings.States.Any(state => state is null || string.IsNullOrWhiteSpace(state.Id) || string.IsNullOrWhiteSpace(state.EpisodeId)
-            || string.IsNullOrWhiteSpace(state.PluginId) || string.IsNullOrWhiteSpace(state.DeviceId)
-            || string.IsNullOrWhiteSpace(state.TypeId) || !Enum.IsDefined(state.Phase) || state.Policy is null || !state.Policy.IsValid()
-            || state.NotificationSequence < 0 || state.NotificationSequence > warnings.Sequence))
+                                                                             || string.IsNullOrWhiteSpace(state.PluginId) || string.IsNullOrWhiteSpace(state.DeviceId)
+                                                                             || string.IsNullOrWhiteSpace(state.TypeId) || !Enum.IsDefined(state.Phase) || state.Policy?.IsValid() != true
+                                                                             || state.NotificationSequence < 0 || state.NotificationSequence > warnings.Sequence))
         {
             return false;
         }
+
         return warnings.States.Select(state => state.Id).Distinct(StringComparer.Ordinal).Count() == warnings.States.Length;
     }
 }

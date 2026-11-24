@@ -26,7 +26,10 @@ public sealed class AsusGpuReader(NvidiaTelemetryReader reader) : IAsusGpuReader
 
         var readings = new List<AsusSensorValue>();
         AddReadings(sample);
-        if (cachedGpu is not null) AddReadings(cachedGpu);
+        if (cachedGpu is not null)
+        {
+            AddReadings(cachedGpu);
+        }
 
         return new AsusGpuData(selected.Id, selected.Name, [.. readings], sample.ObservedAt)
         {
@@ -39,7 +42,9 @@ public sealed class AsusGpuReader(NvidiaTelemetryReader reader) : IAsusGpuReader
             foreach (var sensor in frame.Sensors)
             {
                 if (AsusSensorCatalog.Find(sensor.Name, sensor.Type) is { } definition)
+                {
                     readings.Add(new AsusSensorValue(definition, sensor.Value, frame.ObservedAt));
+                }
             }
         }
     }

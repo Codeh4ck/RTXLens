@@ -37,7 +37,15 @@ internal static class Program
 
         if (instance is { IsFirst: false })
         {
-            instance.RequestActivation();
+            if (args.Contains("--warnings", StringComparer.Ordinal))
+            {
+                instance.RequestWarnings();
+            }
+            else
+            {
+                instance.RequestActivation();
+            }
+
             return;
         }
 

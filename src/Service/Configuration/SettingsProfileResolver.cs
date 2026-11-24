@@ -78,10 +78,13 @@ internal sealed partial class SettingsProfileResolver(SettingsProfileStore profi
         {
             var pinGpus = connectorReadings.Where(identity => hardware.Find(identity.PluginId)?.Association == GpuAssociation.GpuDevice)
                 .Select(identity => identity.DeviceId).Distinct(StringComparer.Ordinal).Take(2).ToArray();
-            if (pinGpus.Length == 1) selectedId = pinGpus[0];
+            if (pinGpus.Length == 1)
+            {
+                selectedId = pinGpus[0];
+            }
         }
-        var gpu = selectedId is null ? devices.FirstOrDefault() : devices.FirstOrDefault(device => device.Id == selectedId || device.LegacyId == selectedId);
 
+        var gpu = selectedId is null ? devices.FirstOrDefault() : devices.FirstOrDefault(device => device.Id == selectedId || device.LegacyId == selectedId);
         if (gpu is null)
         {
             return null;
@@ -95,7 +98,8 @@ internal sealed partial class SettingsProfileResolver(SettingsProfileStore profi
 
         var sourceProfile = configuration.Monitoring.ConnectorProfiles.Profiles.FirstOrDefault(profile => profile.Id == configuration.Monitoring.ConnectorProfiles.ActiveProfileId);
 
-        var inlineMonitorAssigned = devices.Length == 1 || sourceProfile?.Metrics.Any(metric => metric.PreferredPlugins.FirstOrDefault() is { } id && hardware.Find(id)?.Association == GpuAssociation.InlineMonitor) == true;
+        var inlineMonitorAssigned = devices.Length == 1 || sourceProfile?.Metrics
+            .Any(metric => metric.PreferredPlugins.FirstOrDefault() is { } id && hardware.Find(id)?.Association == GpuAssociation.InlineMonitor) == true;
 
         var inlineDeviceIds = connectorReadings
             .Where(identity => hardware.Find(identity.PluginId)?.Association == GpuAssociation.InlineMonitor)
@@ -106,7 +110,8 @@ internal sealed partial class SettingsProfileResolver(SettingsProfileStore profi
 
         var inlineDevice = inlineMonitorAssigned && inlineDeviceIds.Length == 1 ? inlineDeviceIds[0] : null;
 
-        if (inlineDevice is null && !psuReporting && !selectedGpuReadings.Contains(gpu.Id) && !connectorReadings.Any(identity => hardware.Find(identity.PluginId)?.Association is GpuAssociation.GpuDevice or GpuAssociation.SelectedGpu && identity.DeviceId == gpu.Id))
+        if (inlineDevice is null && !psuReporting && !selectedGpuReadings.Contains(gpu.Id) && !connectorReadings
+                .Any(identity => hardware.Find(identity.PluginId)?.Association is GpuAssociation.GpuDevice or GpuAssociation.SelectedGpu && identity.DeviceId == gpu.Id))
         {
             return null;
         }
