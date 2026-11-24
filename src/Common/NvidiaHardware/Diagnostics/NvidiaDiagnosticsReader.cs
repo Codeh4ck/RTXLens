@@ -15,6 +15,7 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
     private const uint HardwarePowerBrakeCounter = 271;
 
     private readonly Lock _gate = new();
+    private NvidiaQuerySupport<(nint Device, string Query, int Argument)> _support = new();
     private NvmlApi? _api;
     private long? _lastInitializationAttempt;
     private bool _disposed;
@@ -51,7 +52,7 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
         return _api;
     }
 
-    internal NvidiaSensor[] ReadBoard(string deviceId)
+    internal List<NvidiaSensor> ReadBoard(string deviceId)
     {
         if (!NvidiaPciIdentity.TryParse(deviceId, out var identity))
         {
@@ -67,19 +68,24 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
 
             var sensors = new List<NvidiaSensor>();
             var power = api.Get<NvmlApi.GetUInt>("nvmlDeviceGetPowerUsage");
-            if (power is not null && power(handle, out var milliwatts) == 0)
+
+            if (power is not null && _support.CanQuery((handle, "nvmlDeviceGetPowerUsage", 0))
+                && _support.Nvml((handle, "nvmlDeviceGetPowerUsage", 0), power(handle, out var milliwatts)))
             {
                 sensors.Add(new("GPU Package", SensorType.Power, 0, milliwatts / 1000f));
             }
 
             var utilization = api.Get<NvmlApi.GetUtilization>("nvmlDeviceGetUtilizationRates");
-            if (utilization is not null && utilization(handle, out var rates) == 0 && rates.Gpu <= 100)
+            if (utilization is not null && _support.CanQuery((handle, "nvmlDeviceGetUtilizationRates", 0))
+                                        && _support.Nvml((handle, "nvmlDeviceGetUtilizationRates", 0), utilization(handle, out var rates)) && rates.Gpu <= 100)
             {
                 sensors.Add(new("GPU Core", SensorType.Load, 0, rates.Gpu));
             }
 
             var memory = api.Get<NvmlApi.GetMemory>("nvmlDeviceGetMemoryInfo");
-            if (memory is not null && memory(handle, out var vram) == 0 && vram.Total > 0)
+            if (memory is not null && _support.CanQuery((handle, "nvmlDeviceGetMemoryInfo", 0))
+                && _support.Nvml((handle, "nvmlDeviceGetMemoryInfo", 0), memory(handle, out var vram))
+                && vram.Total > 0)
             {
                 const float mib = 1024 * 1024;
 
@@ -89,7 +95,7 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
                 sensors.Add(new("GPU Memory", SensorType.Load, 0, 100f * vram.Used / vram.Total));
             }
 
-            return [.. sensors];
+            return sensors;
         }
     }
 
@@ -100,6 +106,7 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
             _api?.Dispose();
 
             _api = null;
+            _support = new();
             _lastInitializationAttempt = null;
             _clockCapabilities = null;
         }
@@ -112,21 +119,29 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
         var currentState = state < PStateCount ? (int?)state : null;
         var clockCapabilities = ReadClockCapabilities(api, handle, deviceId);
 
-        NvmlApi.FieldValue[] fields =
-        [
-            new() { Id = PowerCapCounter },
-            new() { Id = SoftwareThermalCounter },
-            new() { Id = HardwareThermalCounter },
-            new() { Id = HardwarePowerBrakeCounter },
-            new() { Id = SyncBoostCounter },
-            new() { Id = ReplayRolloverCounter }
-        ];
+        uint[] fieldIds = [PowerCapCounter, SoftwareThermalCounter, HardwareThermalCounter, HardwarePowerBrakeCounter, SyncBoostCounter, ReplayRolloverCounter];
+
+        var fields = fieldIds
+            .Where(id => _support.CanQuery((handle, "field", (int)id)))
+            .Select(id => new NvmlApi.FieldValue { Id = id })
+            .ToArray();
 
         var getFields = api.Get<NvmlApi.GetFields>("nvmlDeviceGetFieldValues");
-        var haveFields = getFields is not null && getFields(handle, fields.Length, fields) == 0;
+        var haveFields = fields.Length > 0 && getFields is not null && _support.CanQuery((handle, "fields", 0))
+            && _support.Nvml((handle, "fields", 0), getFields(handle, fields.Length, fields));
 
-        var limits = new NvidiaClockLimitDurations(Seconds(0), Seconds(1), Seconds(2), Seconds(3), Seconds(4));
-        var rollover = haveFields ? fields[5].UnsignedValue : null;
+        if (haveFields)
+        {
+            foreach (var field in fields)
+            {
+                _support.Nvml((handle, "field", (int)field.Id), field.Result);
+            }
+        }
+
+        var limits = new NvidiaClockLimitDurations(Seconds(PowerCapCounter), Seconds(SoftwareThermalCounter),
+            Seconds(HardwareThermalCounter), Seconds(HardwarePowerBrakeCounter), Seconds(SyncBoostCounter));
+
+        var rollover = Field(ReplayRolloverCounter);
         var pcie = new NvidiaPcieDiagnostics(
             Query("nvmlDeviceGetCurrPcieLinkGeneration"),
             Query("nvmlDeviceGetMaxPcieLinkGeneration"),
@@ -136,7 +151,6 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
             Query("nvmlDeviceGetPcieSpeed"),
             Query("nvmlDeviceGetPcieLinkMaxSpeed") switch
             {
-                // Recognize the NVML link-speed constants and rates already expressed in Mbps.
                 1 => 2500, 2 => 5000, 3 => 8000, 4 => 16000, 5 => 32000, 6 => 64000,
                 >= 2500 and var rate => rate,
                 _ => null
@@ -149,7 +163,8 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
         var getRange = api.Get<NvmlApi.GetPowerRange>("nvmlDeviceGetPowerManagementLimitConstraints");
         uint minimum = 0;
         uint maximum = 0;
-        var haveRange = getRange is not null && getRange(handle, out minimum, out maximum) == 0;
+        var haveRange = getRange is not null && _support.CanQuery((handle, "nvmlDeviceGetPowerManagementLimitConstraints", 0))
+                && _support.Nvml((handle, "nvmlDeviceGetPowerManagementLimitConstraints", 0), getRange(handle, out minimum, out maximum));
 
         var powerLimits = new NvidiaPowerLimits(Query("nvmlDeviceGetPowerManagementDefaultLimit") / 1000d,
             Query("nvmlDeviceGetEnforcedPowerLimit") / 1000d, haveRange ? minimum / 1000d : null,
@@ -158,14 +173,20 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
         return new NvidiaDiagnostics(deviceId, clock.GetUtcNow(), Reasons(activeReasons), clockCapabilities.SupportedReasons, limits,
             currentState, clockCapabilities.SupportedStates, pcie, powerLimits);
 
-        uint? Query(string symbol) => api.Get<NvmlApi.GetUInt>(symbol) is { } query && query(handle, out var value) == 0 ? value : null;
+        uint? Query(string symbol) => _support.CanQuery((handle, symbol, 0)) && api.Get<NvmlApi.GetUInt>(symbol) is { } query
+            && _support.Nvml((handle, symbol, 0), query(handle, out var value)) ? value : null;
 
-        ulong? Reasons(NvmlApi.GetULong? query) => query is not null && query(handle, out var value) == 0 ? value : null;
+        ulong? Reasons(NvmlApi.GetULong? query) => query is not null && _support.CanQuery((handle, "activeReasons", 0))
+            && _support.Nvml((handle, "activeReasons", 0), query(handle, out var value)) ? value : null;
 
-        double? Seconds(int index) => haveFields ? fields[index].UnsignedValue / 1_000_000_000d : null;
+        ulong? Field(uint id) => haveFields && Array.FindIndex(fields, item => item.Id == id) is >= 0 and var index
+            ? fields[index].UnsignedValue : null;
+
+        double? Seconds(uint id) => Field(id) / 1_000_000_000d;
 
         uint? Throughput(int direction) => api.Get<NvmlApi.GetThroughput>("nvmlDeviceGetPcieThroughput") is { } query
-            && query(handle, direction, out var value) == 0 ? value : null;
+            && _support.CanQuery((handle, "throughput", direction))
+            && _support.Nvml((handle, "throughput", direction), query(handle, direction, out var value)) ? value : null;
     }
 
     private ClockCapabilities ReadClockCapabilities(NvmlApi api, nint handle, string deviceId)
@@ -173,6 +194,8 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
         var timestamp = clock.GetTimestamp();
 
         if (_clockCapabilities is { } cached && cached.Handle == handle && cached.DeviceId == deviceId
+            && (cached.SupportedReasons.HasValue || !_support.CanQuery((handle, "supportedReasons", 0)))
+            && (cached.SupportedStates is not null || !_support.CanQuery((handle, "nvmlDeviceGetSupportedPerformanceStates", 0)))
             && clock.GetElapsedTime(cached.Timestamp, timestamp) < TimeSpan.FromSeconds(5))
         {
             return cached;
@@ -181,7 +204,8 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
         var getSupportedReasons = api.Get<NvmlApi.GetULong>("nvmlDeviceGetSupportedClocksEventReasons")
             ?? api.Get<NvmlApi.GetULong>("nvmlDeviceGetSupportedClocksThrottleReasons");
 
-        ulong? supportedReasons = getSupportedReasons is not null && getSupportedReasons(handle, out var reasons) == 0
+        ulong? supportedReasons = getSupportedReasons is not null && _support.CanQuery((handle, "supportedReasons", 0))
+            && _support.Nvml((handle, "supportedReasons", 0), getSupportedReasons(handle, out var reasons))
             ? reasons : null;
 
         _clockCapabilities = new ClockCapabilities(handle, deviceId, timestamp, supportedReasons, ReadSupportedStates(api, handle));
@@ -190,14 +214,15 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
 
     private sealed record ClockCapabilities(nint Handle, string DeviceId, long Timestamp, ulong? SupportedReasons, int[]? SupportedStates);
 
-    private static int[]? ReadSupportedStates(NvmlApi api, nint handle)
+    private int[]? ReadSupportedStates(NvmlApi api, nint handle)
     {
         var getStates = api.Get<NvmlApi.GetSupportedStates>("nvmlDeviceGetSupportedPerformanceStates");
         var states = new int[PStateCount];
 
         Array.Fill(states, UnknownPState);
 
-        return getStates is not null && getStates(handle, states, PStateCount * sizeof(int)) == 0
+        return getStates is not null && _support.CanQuery((handle, "nvmlDeviceGetSupportedPerformanceStates", 0))
+                && _support.Nvml((handle, "nvmlDeviceGetSupportedPerformanceStates", 0), getStates(handle, states, PStateCount * sizeof(int)))
             ? [.. states.Where(state => state is >= 0 and < PStateCount).Distinct().Order()]
             : null;
     }
@@ -208,17 +233,30 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
         var getHandle = api.Get<NvmlApi.GetHandle>("nvmlDeviceGetHandleByIndex_v2");
         var getPci = api.Get<NvmlApi.GetPciInfo>("nvmlDeviceGetPciInfo_v3");
 
-        if (getCount is null || getHandle is null || getPci is null || getCount(out var count) != 0)
+        if (getCount is null || getHandle is null || getPci is null || NvidiaDriverStatus.Nvml(getCount(out var count)) != 0)
         {
             return null;
         }
 
         nint? match = null;
+        var lostStatus = 0;
 
         for (uint index = 0; index < count; index++)
         {
-            if (getHandle(index, out var device) != 0 || getPci(device, out var pci) != 0 || pci.Bus != identity.Bus
-                || pci.Device != identity.Slot || pci.DeviceId != identity.DeviceId || pci.SubsystemId != identity.SubsystemId)
+            var status = getHandle(index, out var device);
+            NvmlApi.PciInfo pci = default;
+
+            if (status == 0)
+            {
+                status = getPci(device, out pci);
+            }
+
+            if (NvidiaDriverStatus.NvmlSessionLost(status))
+            {
+                lostStatus = status;
+            }
+
+            if (status != 0 || pci.Bus != identity.Bus || pci.Device != identity.Slot || pci.DeviceId != identity.DeviceId || pci.SubsystemId != identity.SubsystemId)
             {
                 continue;
             }
@@ -231,6 +269,12 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
             match = device;
         }
 
+        // Another GPU can be offline while the selected GPU still answers.
+        if (!match.HasValue)
+        {
+            NvidiaDriverStatus.Nvml(lostStatus);
+        }
+
         return match;
     }
 
@@ -239,7 +283,7 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
         lock (_gate)
         {
             _api?.Dispose();
-            
+
             _api = null;
             _disposed = true;
         }

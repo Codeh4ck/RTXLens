@@ -9,9 +9,12 @@ using RTXLens.Hardware.Nvidia.Diagnostics;
 
 namespace RTXLens.Plugins.GenericNvidia;
 
-public sealed class GenericNvidiaPlugin(PluginSettings settings, NvidiaTelemetryReader reader, INvidiaDiagnosticsReader? diagnostics = null) : ISensorPlugin
+public sealed class GenericNvidiaPlugin(PluginSettings settings, NvidiaTelemetryReader reader, INvidiaDiagnosticsReader? diagnostics = null) : ISensorPlugin, IPollTimingSource
 {
     public const string PluginId = NvidiaIdentity.Id;
+
+    private readonly NvidiaPollTimings _timings = new();
+    public string DescribeLastPoll() => _timings.ToString();
 
     private GenericNvidiaOptions _options = GenericNvidiaSettings.GetOptions(settings);
 
@@ -20,22 +23,24 @@ public sealed class GenericNvidiaPlugin(PluginSettings settings, NvidiaTelemetry
     public void ApplySettings(PluginSettings settings)
     {
         reader.ClearGpu();
+
         _options = GenericNvidiaSettings.GetOptions(settings);
         Descriptor = Describe(settings);
     }
 
     public ValueTask<PluginSample> PollAsync(CancellationToken cancellationToken)
     {
-        var sample = reader.ReadGpu(_options.DeviceId, Descriptor.StaleAfter, diagnostics, cancellationToken, out var readings);
+        _timings.Clear();
+        var sample = reader.ReadGpu(_options.DeviceId, Descriptor.StaleAfter, diagnostics, cancellationToken, out var readings, _timings);
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        return ValueTask.FromResult(readings.Length == 0
+        return ValueTask.FromResult(readings.All(reading => reading.Quality != ReadingQuality.Valid)
             ? new PluginSample(PluginState.NoDevice, [], "Selected desktop GeForce RTX GPU or supported telemetry is unavailable.")
             : new PluginSample(PluginState.Ready, readings, sample!.Device.Name));
     }
 
-    public void Dispose() => reader.ClearGpu();
+    public void Dispose() => reader.ClearGpu(forgetSelection: true);
 
     private static PluginDescriptor Describe(PluginSettings settings) => new(PluginId, "Generic NVIDIA GPU",
         TimeSpan.FromMilliseconds(settings.PollIntervalMs), TimeSpan.FromMilliseconds(settings.StaleAfterMs));

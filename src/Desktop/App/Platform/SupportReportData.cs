@@ -37,7 +37,7 @@ internal static partial class SupportReportData
         "msi.fan-automatic", "msi.fan-fallback", "msi.fan-restore-failed",
         "msi.fan-settings-changed", "plugin.auto-detection", "plugin.configuration-failed",
         "plugin.device-lost", "plugin.device-ready", "plugin.no-device",
-        "plugin.poll-failed", "plugin.poll-persistent-failure", "plugin.readings-fresh",
+        "plugin.poll-failed", "plugin.poll-overrun", "plugin.poll-persistent-failure", "plugin.readings-fresh",
         "plugin.readings-stale", "plugin.recovered", "plugin.restart-failed",
         "plugin.restarted", "protection.profile-deleted", "protection.profile-saved",
         "protection.profiles-invalid", "protection.profiles-read-failed", "protection.shutdown-cancelled",

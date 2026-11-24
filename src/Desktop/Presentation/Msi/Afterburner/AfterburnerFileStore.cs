@@ -301,7 +301,7 @@ public sealed partial class AfterburnerFileStore(string installation, string bac
 
         directory ??= BackupPath(id);
         EnsureNoLinks(directory);
-        
+
         var manifest = JsonSerializer.Deserialize(ReadLimited(Path.Combine(directory, AfterburnerFiles.BackupManifest)),
             AfterburnerJsonContext.Default.AfterburnerBackup) ?? throw new InvalidDataException("Backup manifest is empty.");
 

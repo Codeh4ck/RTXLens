@@ -28,6 +28,8 @@ internal sealed class PluginWorker
     private PluginState? _lastPollState;
     private DateTimeOffset _firstPollFailure;
     private int _pollFailures;
+    private int _consecutiveOverruns;
+    private long? _lastOverrunLog;
     private bool _reportedPersistentFailure;
 
     public PluginWorker(ISensorPluginFactory factory, SensorStateStore store, TimeProvider clock, ILogger logger)
@@ -36,6 +38,7 @@ internal sealed class PluginWorker
         _store = store;
         _clock = clock;
         _logger = logger;
+
         _store.Register(Describe(_settings));
     }
 
@@ -43,9 +46,12 @@ internal sealed class PluginWorker
     {
         _settings = settings;
         _settingsApplied = true;
+
         _store.Register(Describe(settings));
         _store.SetLifecycle(_factory.Id, settings.Enabled ? PluginState.Starting : PluginState.Disabled);
+
         LogEnabled(settings.Enabled);
+
         _loop = Task.Run(RunAsync);
     }
 
@@ -120,7 +126,9 @@ internal sealed class PluginWorker
             {
                 _store.SetLifecycle(_factory.Id, PluginState.Stopping);
                 _plugin?.Dispose();
+
                 _plugin = null;
+
                 _store.SetLifecycle(_factory.Id, PluginState.Disabled);
                 ResetPollState();
             }
@@ -161,12 +169,9 @@ internal sealed class PluginWorker
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            if (!_settings.Enabled)
-            {
-                throw new PluginUnavailableException($"Plugin '{_factory.Id}' is disabled.");
-            }
-
-            return action(_plugin ??= CreateConfiguredPlugin(_settings));
+            return !_settings.Enabled
+                ? throw new PluginUnavailableException($"Plugin '{_factory.Id}' is disabled.")
+                : action(_plugin ??= CreateConfiguredPlugin(_settings));
         }
         finally
         {
@@ -244,7 +249,6 @@ internal sealed class PluginWorker
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested)
         {
-            // Normal host shutdown.
         }
         finally
         {
@@ -282,8 +286,8 @@ internal sealed class PluginWorker
             var started = Stopwatch.GetTimestamp();
             try
             {
-                // First activation may enter a device driver. Keep it on this worker.
                 _plugin ??= CreateConfiguredPlugin(_settings);
+
                 var sample = await _plugin.PollAsync(poll.Token);
                 poll.Token.ThrowIfCancellationRequested();
 
@@ -303,10 +307,26 @@ internal sealed class PluginWorker
             {
                 var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
                 var tag = new KeyValuePair<string, object?>("plugin", _factory.Id);
+
                 TelemetryMetrics.PollDuration.Record(elapsed, tag);
+
                 if (elapsed > _settings.PollIntervalMs)
                 {
                     TelemetryMetrics.PollOverruns.Add(1, tag);
+
+                    if (_plugin is IPollTimingSource timing && ++_consecutiveOverruns >= 2
+                                                            && (_lastOverrunLog is not { } last || Stopwatch.GetElapsedTime(last) >= TimeSpan.FromMinutes(1)))
+                    {
+                        _logger.LogActivity(LogLevel.Warning, "plugin.poll-overrun", _factory.Name,
+                            $"Repeated slow polls. Last poll took {elapsed:F1} ms (configured interval {_settings.PollIntervalMs} ms).",
+                            timing.DescribeLastPoll());
+
+                        _lastOverrunLog = Stopwatch.GetTimestamp();
+                    }
+                }
+                else
+                {
+                    _consecutiveOverruns = 0;
                 }
                 lock (_cancellationLock)
                 {
@@ -382,6 +402,8 @@ internal sealed class PluginWorker
 
     private void ResetPollState()
     {
+        _consecutiveOverruns = 0;
+        _lastOverrunLog = null;
         _lastPollState = null;
         _pollFailures = 0;
         _reportedPersistentFailure = false;

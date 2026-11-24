@@ -2,50 +2,48 @@ using RTXLens.Hardware.Nvidia.Diagnostics;
 
 namespace RTXLens.Hardware.Nvidia;
 
-public interface INvidiaFallback : IDisposable
-{
-    NvidiaSensor[] Read(NvidiaDevice device);
-    void Reset();
-}
-
-public sealed class NativeNvidiaHardwareSource(TimeProvider clock, INvidiaFallback? fallback = null) : INvidiaHardwareSource, INvidiaDiagnosticsReader
+public sealed class NativeNvidiaHardwareSource(TimeProvider clock) : INvidiaHardwareSource, INvidiaDiagnosticsReader
 {
     private readonly NvidiaIdentityReader _devices = new();
     private readonly NvidiaDiagnosticsReader _management = new(clock);
+    private NvidiaGpuDriverReader? _gpu;
     private AstralDriverReader? _astral;
 
     public Plugins.GenericNvidia.Contracts.Devices.NvidiaDiagnostics? Read(string deviceId) => _management.Read(deviceId);
 
-    private NvidiaDevice[] _knownDevices = [];
+    private (string Id, nint Handle)[] _topology = [];
 
     public NvidiaDevice[] Discover()
     {
         var devices = _devices.Discover();
-        if (!_knownDevices.SequenceEqual(devices))
+        var topology = devices.Select(device => (device.Id, _devices.Handle(device.Id))).ToArray();
+
+        if (_topology.Length > 0 && !_topology.SequenceEqual(topology))
         {
-            fallback?.Reset();
-            _knownDevices = devices;
+            // A handle can be recycled when a card disappears while other adapters remain present
+            _gpu = null;
+            _astral = null;
+            _management.Reset();
         }
+
+        _topology = topology;
         return devices;
     }
 
     public NvidiaSensor[] Read(NvidiaDevice device)
     {
-        if (!device.IsAstral)
-        {
-            return fallback?.Read(device) ?? [];
-        }
-
         var handle = _devices.Handle(device.Id);
         if (handle == 0)
         {
             return [];
         }
 
-        _astral ??= new AstralDriverReader(_devices);
+        _gpu ??= new NvidiaGpuDriverReader(_devices);
 
-        var sensors = _astral.Read(handle);
-        return [.. _management.ReadBoard(device.Id), .. sensors];
+        var sensors = _management.ReadBoard(device.Id);
+        _gpu.Read(handle, device.Name, sensors);
+
+        return [.. sensors];
     }
 
     public NvidiaSensor[] ReadPins(NvidiaDevice device)
@@ -64,18 +62,17 @@ public sealed class NativeNvidiaHardwareSource(TimeProvider clock, INvidiaFallba
 
     public void Reset()
     {
+        _topology = [];
         _astral = null;
-        _knownDevices = [];
+        _gpu = null;
 
         _devices.Dispose();
         _management.Reset();
-        fallback?.Reset();
     }
 
     public void Dispose()
     {
         _management.Dispose();
         _devices.Dispose();
-        // Dependency injection owns the optional fallback adapter.
     }
 }

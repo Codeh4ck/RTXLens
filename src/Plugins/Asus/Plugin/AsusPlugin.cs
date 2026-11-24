@@ -1,3 +1,4 @@
+using RTXLens.Hardware.Nvidia;
 using RTXLens.Plugins.Asus.Contracts;
 using RTXLens.Plugins.Asus.Contracts.Configuration;
 using System.Text.Json;
@@ -17,9 +18,12 @@ using RTXLens.Plugins.Asus.Streaming;
 
 namespace RTXLens.Plugins.Asus;
 
-public sealed class AsusPlugin(PluginSettings settings, TimeProvider clock, IAsusGpuReader reader, AsusStream stream, ActiveSettingsProfileState? profiles = null) : ISensorPlugin
+public sealed class AsusPlugin(PluginSettings settings, TimeProvider clock, IAsusGpuReader reader, AsusStream stream, ActiveSettingsProfileState? profiles = null) : ISensorPlugin, IPollTimingSource
 {
     public const string PluginId = AsusIdentity.Id;
+
+    private readonly NvidiaPollTimings _timings = new();
+    public string DescribeLastPoll() => _timings.ToString();
 
     private readonly AsusAlertMonitor _alerts = new();
     private AsusOptions _options = AsusSettings.GetOptions(settings);
@@ -41,6 +45,7 @@ public sealed class AsusPlugin(PluginSettings settings, TimeProvider clock, IAsu
         if (options != _options)
         {
             _alerts.Reset();
+
             if (options.DeviceId != _options.DeviceId)
             {
                 ClearLatest();
@@ -56,7 +61,9 @@ public sealed class AsusPlugin(PluginSettings settings, TimeProvider clock, IAsu
     {
         try
         {
-            var data = reader.Read(_options.DeviceId, cancellationToken);
+            _timings.Clear();
+
+            var data = reader.Read(_options.DeviceId, cancellationToken, _timings);
             cancellationToken.ThrowIfCancellationRequested();
 
             if (data is null)
@@ -137,7 +144,6 @@ public sealed class AsusPlugin(PluginSettings settings, TimeProvider clock, IAsu
         var observed = currents.Any(pin => pin.Value > 0.1f) ? "16-pin cable active"
             : data.CablePinsBelowThreshold && boardPower > 75 ? "Cable load not observed" : UnknownPowerPath;
 
-        // Require two distinct successful GPU samples before classifying either path.
         var confirmed = observed == _cableObservation && _lastCableObservation is { } last
                                                       && timestamp > last && timestamp - last <= Descriptor.StaleAfter;
 

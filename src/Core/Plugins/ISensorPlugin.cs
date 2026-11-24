@@ -8,3 +8,8 @@ public interface ISensorPlugin : IDisposable
     ValueTask<PluginSample> PollAsync(CancellationToken cancellationToken);
     void ApplySettings(PluginSettings settings);
 }
+
+public interface IPollTimingSource
+{
+    string DescribeLastPoll();
+}

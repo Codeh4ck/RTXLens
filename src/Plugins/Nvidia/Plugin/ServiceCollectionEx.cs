@@ -11,7 +11,6 @@ public static class ServiceCollectionEx
 {
     public static IServiceCollection AddGenericNvidiaPlugin(this IServiceCollection services)
     {
-        services.TryAddSingleton<INvidiaFallback, LibreGpuFallback>();
         services.TryAddSingleton<NativeNvidiaHardwareSource>();
         services.TryAddSingleton<INvidiaHardwareSource>(provider => provider.GetRequiredService<NativeNvidiaHardwareSource>());
         services.TryAddSingleton<NvidiaTelemetryReader>();

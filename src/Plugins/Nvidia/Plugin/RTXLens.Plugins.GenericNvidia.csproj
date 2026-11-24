@@ -1,6 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <ItemGroup>
-        <PackageReference Include="LibreHardwareMonitorLib" />
         <ProjectReference Include="../../Asus/Contracts/RTXLens.Plugins.Asus.Contracts.csproj" />
         <ProjectReference Include="../../../Core/RTXLens.Core.csproj" />
         <ProjectReference Include="../../../Common/NvidiaHardware/RTXLens.Hardware.Nvidia.csproj" />

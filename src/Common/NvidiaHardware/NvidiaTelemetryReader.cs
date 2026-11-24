@@ -12,16 +12,61 @@ public sealed class NvidiaTelemetryReader(INvidiaHardwareSource source, TimeProv
     private bool _disposed;
     private NvidiaSample? _latestGpu;
     private TimeSpan _gpuFreshness;
+    private SensorReading[] _lastGpuReadings = [];
 
-    public void ClearGpu()
+    private readonly Selection _gpuSelection = new();
+    private bool _awaitingPinSample;
+    private readonly Selection _pinSelection = new();
+    private readonly Dictionary<string, DateTimeOffset> _retryAfter = [];
+
+    private sealed class Selection
+    {
+        private string? _requested;
+        private string? _pciId;
+
+        public void Forget() => _pciId = null;
+
+        public NvidiaDevice? Resolve(IEnumerable<NvidiaDevice> devices, string? requested)
+        {
+            if (_requested != requested)
+            {
+                _requested = requested;
+                _pciId = null;
+            }
+
+            var device = _pciId is null
+                ? devices.FirstOrDefault(item => requested is null || item.Id == requested || item.LegacyId == requested)
+                : devices.FirstOrDefault(item => item.Id == _pciId);
+
+            _pciId = device?.Id ?? _pciId;
+            return device;
+        }
+    }
+
+    public void ClearGpu(bool forgetSelection = false)
     {
         lock (_lock)
         {
             _latestGpu = null;
+            _lastGpuReadings = [];
+
+            if (forgetSelection)
+            {
+                _gpuSelection.Forget();
+            }
         }
     }
 
-    public NvidiaSample? ReadGpu(string? deviceId, TimeSpan staleAfter, INvidiaDiagnosticsReader? diagnostics, CancellationToken token, out SensorReading[] status)
+    public void ClearPinSelection()
+    {
+        lock (_lock)
+        {
+            _pinSelection.Forget();
+            _awaitingPinSample = false;
+        }
+    }
+
+    public NvidiaSample? ReadGpu(string? deviceId, TimeSpan staleAfter, INvidiaDiagnosticsReader? diagnostics, CancellationToken token, out SensorReading[] status, NvidiaPollTimings? timings = null)
     {
         lock (_lock)
         {
@@ -30,45 +75,110 @@ public sealed class NvidiaTelemetryReader(INvidiaHardwareSource source, TimeProv
 
             token.ThrowIfCancellationRequested();
 
-            if (Select(GetDevices(), deviceId) is not { } device)
+            if (_gpuSelection.Resolve(GetDevices(), deviceId) is not { } device || IsWaitingForDriver(device.Id))
             {
                 return null;
             }
 
-            var sensors = source.Read(device);
-            var sample = new NvidiaSample(device, clock.GetUtcNow(), sensors);
-            var clocks = source.ReadDomainClocks(device);
-
-            status = GenericNvidiaSnapshotMapper.Create(sample, new NvidiaSample(device, clock.GetUtcNow(), clocks));
-
-            if (diagnostics?.Read(sample.Device.Id) is { } diagnostic)
+            try
             {
-                status = [.. status, .. NvidiaDiagnosticsMapper.Create(diagnostic)];
+                NvidiaSensor[] sensors;
+                using (timings?.Measure("GPU readings"))
+                {
+                    sensors = source.Read(device);
+                }
+
+                var sample = new NvidiaSample(device, clock.GetUtcNow(), sensors);
+                NvidiaSensor[] clocks;
+                using (timings?.Measure("internal clocks"))
+                {
+                    clocks = source.ReadDomainClocks(device);
+                }
+
+                status = GenericNvidiaSnapshotMapper.Create(sample, new NvidiaSample(device, clock.GetUtcNow(), clocks));
+
+                if (diagnostics is not null)
+                {
+                    Plugins.GenericNvidia.Contracts.Devices.NvidiaDiagnostics? diagnostic;
+                    using (timings?.Measure("NVML diagnostics"))
+                    {
+                        diagnostic = diagnostics.Read(device.Id);
+                    }
+
+                    if (diagnostic is not null)
+                    {
+                        status = [.. status, .. NvidiaDiagnosticsMapper.Create(diagnostic)];
+                    }
+                }
+
+                token.ThrowIfCancellationRequested();
+
+                if (status.Any(reading => reading.Quality == Contracts.Enums.ReadingQuality.Valid))
+                {
+                    if (_lastGpuReadings.Length > 0 && _lastGpuReadings[0].Identity.DeviceId == device.Id)
+                    {
+                        var current = status.Select(reading => reading.Identity).ToHashSet();
+
+                        status = [.. status, .. _lastGpuReadings.Where(reading => !current.Contains(reading.Identity))
+                            .Select(reading => reading with { Quality = Contracts.Enums.ReadingQuality.Unavailable, Value = null })];
+                    }
+                    _lastGpuReadings = status;
+                }
+                else
+                {
+                    _lastGpuReadings = [];
+                }
+
+                _latestGpu = sample;
+                _gpuFreshness = staleAfter;
+
+                return sample;
             }
-
-            token.ThrowIfCancellationRequested();
-
-            _latestGpu = sample;
-            _gpuFreshness = staleAfter;
-
-            return sample;
+            catch (NvidiaSessionLostException)
+            {
+                InvalidateSession(device.Id);
+                status = [];
+                return null;
+            }
         }
     }
 
-    public NvidiaSample? ReadAstralPins(string deviceId, CancellationToken token, out NvidiaSample? cachedGpu)
+    public NvidiaSample? ReadAstralPins(string? deviceId, CancellationToken token, out NvidiaSample? cachedGpu, NvidiaPollTimings? timings = null)
     {
         lock (_lock)
         {
             token.ThrowIfCancellationRequested();
 
             cachedGpu = null;
-            if (Select(GetDevices(), deviceId) is not { IsAstral: true } device)
+            if (_pinSelection.Resolve(GetDevices().Where(item => item.IsAstral), deviceId) is not { } device || IsWaitingForDriver(device.Id))
+            {
+                _awaitingPinSample = true;
+                return null;
+            }
+
+            NvidiaSensor[] pins;
+            try
+            {
+                using (timings?.Measure("Astral pin reads"))
+                {
+                    pins = source.ReadPins(device);
+                }
+            }
+            catch (NvidiaSessionLostException)
+            {
+                InvalidateSession(device.Id);
+                _awaitingPinSample = true;
+                return null;
+            }
+
+            token.ThrowIfCancellationRequested();
+
+            if (_awaitingPinSample && pins.Length == 0)
             {
                 return null;
             }
 
-            var pins = source.ReadPins(device);
-            token.ThrowIfCancellationRequested();
+            _awaitingPinSample = false;
 
             var now = clock.GetUtcNow();
             if (_latestGpu is { } gpu && gpu.Device.Id == device.Id && now - gpu.ObservedAt <= _gpuFreshness)
@@ -80,9 +190,36 @@ public sealed class NvidiaTelemetryReader(INvidiaHardwareSource source, TimeProv
         }
     }
 
-    private static NvidiaDevice? Select(NvidiaDevice[] devices, string? id) => id is null
-        ? devices.FirstOrDefault()
-        : devices.FirstOrDefault(device => device.Id == id || device.LegacyId == id);
+    private bool IsWaitingForDriver(string deviceId)
+    {
+        if (!_retryAfter.TryGetValue(deviceId, out var retry))
+        {
+            return false;
+        }
+
+        if (clock.GetUtcNow() < retry)
+        {
+            return true;
+        }
+
+        _retryAfter.Remove(deviceId);
+        return false;
+    }
+
+    private void InvalidateSession(string? deviceId)
+    {
+        _latestGpu = null;
+        _lastGpuReadings = [];
+        _devices = [];
+
+        if (deviceId is not null)
+        {
+            _retryAfter[deviceId] = clock.GetUtcNow() + TimeSpan.FromSeconds(5);
+        }
+
+        _discoveredAt = deviceId is null ? clock.GetUtcNow() : DateTimeOffset.MinValue;
+        source.Reset();
+    }
 
     public NvidiaDevice[] GetDevices(bool refresh = false)
     {
@@ -95,9 +232,15 @@ public sealed class NvidiaTelemetryReader(INvidiaHardwareSource source, TimeProv
                 Discover(refresh);
                 return [.. _devices];
             }
+            catch (NvidiaSessionLostException)
+            {
+                InvalidateSession(null);
+                return [];
+            }
             catch
             {
                 _latestGpu = null;
+                _lastGpuReadings = [];
                 _devices = [];
                 _discoveredAt = DateTimeOffset.MinValue;
 
@@ -127,6 +270,7 @@ public sealed class NvidiaTelemetryReader(INvidiaHardwareSource source, TimeProv
 
         if (_devices.Length == 0)
         {
+            _lastGpuReadings = [];
             source.Reset();
         }
 

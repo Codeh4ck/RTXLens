@@ -77,7 +77,7 @@ internal sealed class NvidiaIdentityReader : IDisposable
         _measureClock = Query<MeasureClock>(0x527FC458);
 
         var handles = new nint[64];
-        if (enumerate(handles, out var count) != 0)
+        if (NvidiaDriverStatus.NvApi(enumerate(handles, out var count)) != 0)
         {
             return [];
         }
@@ -87,14 +87,14 @@ internal sealed class NvidiaIdentityReader : IDisposable
             var handle = handles[index];
             var name = new StringBuilder(64);
 
-            if (fullName(handle, name) != 0 || !name.ToString().Contains("GeForce RTX", StringComparison.OrdinalIgnoreCase))
+            if (NvidiaDriverStatus.NvApi(fullName(handle, name)) != 0 || !name.ToString().Contains("GeForce RTX", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
-            if (systemType(handle, out var type) != 0 || type != 2
-                || bus(handle, out var busId) != 0 || slot(handle, out var slotId) != 0
-                || pci(handle, out var device, out var subsystem, out _, out _) != 0)
+            if (NvidiaDriverStatus.NvApi(systemType(handle, out var type)) != 0 || type != 2
+                || NvidiaDriverStatus.NvApi(bus(handle, out var busId)) != 0 || NvidiaDriverStatus.NvApi(slot(handle, out var slotId)) != 0
+                || NvidiaDriverStatus.NvApi(pci(handle, out var device, out var subsystem, out _, out _)) != 0)
             {
                 continue;
             }
@@ -162,7 +162,7 @@ internal sealed class NvidiaIdentityReader : IDisposable
             }
 
             var request = new ClockMeasurement { Version = 0x1000C, DomainIndex = domainIndex };
-            var status = measure(handle, ref request);
+            var status = NvidiaDriverStatus.NvApi(measure(handle, ref request));
 
             switch (status)
             {

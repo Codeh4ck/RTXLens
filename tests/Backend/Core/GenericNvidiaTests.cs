@@ -15,6 +15,12 @@ internal static class GenericNvidiaTests
 {
     public static void Run(TestRunner runner)
     {
+        runner.Run(DecodesDriverTemperaturesForEachSupportedGeneration);
+        runner.Run(RecoversTheSameGpuAfterInvalidation);
+        runner.Run(PinLossDropsTheCachedSample);
+        runner.Run(TemporaryDisappearanceAndSensorFailureRecoverIndependently);
+        runner.Run(OnlyExplicitUnsupportedResultsAreCached);
+        runner.Run(ReportsDriverStageTimings);
         runner.Run(ReadsFreshGpuValuesAtEveryScheduledPoll);
         runner.Run(PreservesSelectedIdentityWhenEnumerationChanges);
         runner.Run(MapsSingleAndMultipleFansByCoolerIdWithoutInventingDuty);
@@ -29,6 +35,155 @@ internal static class GenericNvidiaTests
         runner.Run(PinFailurePreservesTimeAndDoesNotStopClocks);
         runner.Run(MigrationPreservesExistingThresholdsAndDefaults);
         runner.Run(LegacyThresholdPrecedenceSurvivesThePluginMove);
+    }
+
+    private static void RecoversTheSameGpuAfterInvalidation()
+    {
+        foreach (var selection in new string?[] { null, "/gpu-nvidia/0", "pci-first" })
+        {
+            var clock = new TestTimeProvider();
+            var source = Source();
+            var target = source.Devices.Single();
+            using var reader = new NvidiaTelemetryReader(source, clock);
+            var factory = new GenericNvidiaPluginFactory(reader);
+            using var plugin = factory.Create(GenericNvidiaSettings.WithOptions(factory.CreateDefaultSettings(), new() { DeviceId = selection }));
+            TestAssert.Equal(PluginState.Ready, plugin.PollAsync(default).Result.State);
+
+            source.BeforeClocks = () => NvidiaDriverStatus.NvApi(-10);
+            var lost = plugin.PollAsync(default).Result;
+            TestAssert.Equal(PluginState.NoDevice, lost.State);
+            TestAssert.Equal(0, lost.Sensors.Length);
+            TestAssert.Equal(1, source.Resets);
+            source.BeforeClocks = null;
+            source.Devices = [new("second", "/gpu-nvidia/0", target.Name), target with { LegacyId = "/gpu-nvidia/1" }];
+            TestAssert.Equal(PluginState.NoDevice, plugin.PollAsync(default).Result.State);
+            TestAssert.Equal(2, source.Reads);
+            clock.Advance(TimeSpan.FromSeconds(5));
+            var recovered = plugin.PollAsync(default).Result;
+            TestAssert.Equal(PluginState.Ready, recovered.State);
+            TestAssert.Equal(target.Id, recovered.Sensors.Single().Identity.DeviceId);
+        }
+    }
+
+    private static void PinLossDropsTheCachedSample()
+    {
+        var clock = new TestTimeProvider();
+        var source = Source();
+        source.Devices = [source.Devices[0] with { SubsystemId = 0x89E31043 }];
+        using var reader = new NvidiaTelemetryReader(source, clock);
+        reader.ReadGpu(null, TimeSpan.FromSeconds(30), null, default, out _);
+        source.BeforePins = () => NvidiaDriverStatus.NvApi(-10);
+        TestAssert.True(reader.ReadAstralPins(null, default, out var cached) is null && cached is null, "Lost pins clear the shared session.");
+        source.BeforePins = null;
+        clock.Advance(TimeSpan.FromSeconds(5));
+        TestAssert.True(reader.ReadAstralPins(null, default, out cached) is null, "Rediscovery alone cannot signal pin recovery.");
+        source.Pins = [new("12VHPWR Pin 1", SensorType.Current, 1, 2)];
+        TestAssert.True(reader.ReadAstralPins(null, default, out cached) is not null && cached is null, "Old GPU data must not survive a reset.");
+    }
+
+    private static void TemporaryDisappearanceAndSensorFailureRecoverIndependently()
+    {
+        var clock = new TestTimeProvider();
+        var source = Source();
+        var devices = source.Devices;
+        var temperature = new NvidiaSensor("GPU Core", SensorType.Temperature, 0, 55);
+        var clockSensor = source.Sensors.Single();
+        using var reader = new NvidiaTelemetryReader(source, clock);
+        var factory = new GenericNvidiaPluginFactory(reader);
+        using var plugin = factory.Create(factory.CreateDefaultSettings());
+        source.Sensors = [clockSensor, temperature];
+        var original = plugin.PollAsync(default).Result.Sensors.Single(r => r.Identity.Metric == SensorMetric.Temperature);
+        source.Sensors = [clockSensor];
+        clock.Advance(TimeSpan.FromSeconds(1));
+        var partial = plugin.PollAsync(default).Result;
+        TestAssert.Equal(PluginState.Ready, partial.State);
+        var missing = partial.Sensors.Single(r => r.Identity == original.Identity);
+        TestAssert.Equal(ReadingQuality.Unavailable, missing.Quality);
+        TestAssert.Equal<double?>(null, missing.Value);
+        TestAssert.Equal(original.ObservedAt, missing.ObservedAt);
+
+        source.Devices = [];
+        clock.Advance(TimeSpan.FromSeconds(5));
+        TestAssert.Equal(PluginState.NoDevice, plugin.PollAsync(default).Result.State);
+        source.Devices = devices;
+        source.Sensors = [temperature];
+        clock.Advance(TimeSpan.FromSeconds(5));
+        var recovered = plugin.PollAsync(default).Result;
+        TestAssert.Equal(PluginState.Ready, recovered.State);
+        TestAssert.Equal(clock.GetUtcNow(), recovered.Sensors.Single().ObservedAt);
+
+        var lostDiagnostics = new LostDiagnostics();
+        TestAssert.True(reader.ReadGpu(null, TimeSpan.FromSeconds(5), lostDiagnostics, default, out var discarded) is null
+            && discarded.Length == 0, "NVML loss must discard the whole sample, including successful NVAPI reads.");
+    }
+
+    private sealed class LostDiagnostics : INvidiaDiagnosticsReader
+    {
+        public NvidiaDiagnostics? Read(string deviceId)
+        {
+            NvidiaDriverStatus.Nvml(15);
+            return null;
+        }
+    }
+
+    private static void OnlyExplicitUnsupportedResultsAreCached()
+    {
+        var support = new NvidiaQuerySupport<string>();
+        TestAssert.False(support.NvApi("temp", -1), "Transient NVAPI errors produce no value.");
+        TestAssert.True(support.CanQuery("temp"), "Transient failures retry next poll.");
+        TestAssert.False(support.NvApi("temp", -104), "Unsupported readings produce no value.");
+        TestAssert.False(support.CanQuery("temp"), "Unsupported calls are skipped.");
+        TestAssert.False(support.Nvml("power", 3), "NVML unsupported is local to the capability.");
+        TestAssert.False(support.CanQuery("power"), "Skip unsupported NVML power calls.");
+        TestAssert.True(support.CanQuery("clock"), "Other capabilities remain available.");
+        TestAssert.Throws<NvidiaSessionLostException>(() => support.Nvml("clock", 15));
+        TestAssert.True(new NvidiaQuerySupport<string>().CanQuery("power"), "New driver sessions probe capabilities again.");
+    }
+
+    private static void ReportsDriverStageTimings()
+    {
+        var clock = new TestTimeProvider();
+        var source = Source();
+        source.Devices = [source.Devices[0] with { SubsystemId = 0x89E31043 }];
+        using var reader = new NvidiaTelemetryReader(source, clock);
+        var diagnostics = new FakeDiagnosticsReader(clock.GetUtcNow());
+        var timings = new NvidiaPollTimings();
+        reader.ReadGpu(null, TimeSpan.FromSeconds(5), diagnostics, default, out _, timings);
+        foreach (var stage in new[] { "GPU readings", "internal clocks", "NVML diagnostics" })
+        {
+            TestAssert.True(timings.ToString().Contains(stage), $"Missing timing for {stage}.");
+        }
+        timings.Clear();
+        reader.ReadAstralPins(null, default, out _, timings);
+        TestAssert.True(timings.ToString().StartsWith("Astral pin reads"), "Pin timings are independent.");
+    }
+
+    private static void DecodesDriverTemperaturesForEachSupportedGeneration()
+    {
+        uint[] channels = [0, 38 * 256 + 128, 46 * 256, 0, 0, 0, 0, 57 * 256, 0, 69 * 256];
+        foreach (var (model, primaryName, junction) in new[]
+        {
+            ("RTX 2080 Ti", "GPU Hot Spot", 69), ("RTX 3080", "GPU Hot Spot", 69),
+            ("RTX 4090", "GPU Hot Spot", 57), ("RTX 5090", "GPU Core", 46)
+        })
+        {
+            var layout = NvidiaGpuDriverReader.ThermalLayout("NVIDIA GeForce " + model)!.Value;
+            var sensors = new List<NvidiaSensor>();
+            NvidiaGpuDriverReader.AddExtendedTemperatures(sensors, layout, channels);
+            TestAssert.Equal<float?>(38.5f, sensors.Single(sensor => sensor.Name == primaryName).Value);
+            TestAssert.Equal<float?>(junction, sensors.Single(sensor => sensor.Name == "GPU Memory Junction").Value);
+
+            sensors.Clear();
+            NvidiaGpuDriverReader.AddExtendedTemperatures(sensors, layout, channels.AsSpan(0, 2));
+            TestAssert.Equal(primaryName, sensors.Single().Name);
+
+            sensors.Clear();
+            NvidiaGpuDriverReader.AddExtendedTemperatures(sensors, layout, [0, uint.MaxValue, 0]);
+            TestAssert.Equal(0, sensors.Count);
+        }
+
+        TestAssert.True(NvidiaGpuDriverReader.ThermalLayout("NVIDIA GeForce RTX 6090") is null,
+            "Unknown generations use driver-labelled thermal targets.");
     }
 
     private static void ReadsFreshGpuValuesAtEveryScheduledPoll()

@@ -8,7 +8,7 @@ public sealed class AsusGpuReader(NvidiaTelemetryReader reader) : IAsusGpuReader
 {
     public IReadOnlyList<AsusDeviceInfo> Devices { get; private set; } = [];
 
-    public AsusGpuData? Read(string? deviceId, CancellationToken cancellationToken)
+    public AsusGpuData? Read(string? deviceId, CancellationToken cancellationToken, NvidiaPollTimings? timings = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -16,16 +16,16 @@ public sealed class AsusGpuReader(NvidiaTelemetryReader reader) : IAsusGpuReader
 
         Devices = [.. devices.Select(device => new AsusDeviceInfo(device.Id, device.Name))];
 
-        var selected = deviceId is null ? devices.FirstOrDefault()
-            : devices.FirstOrDefault(device => device.Id == deviceId || device.LegacyId == deviceId);
-
-        if (selected is null || reader.ReadAstralPins(selected.Id, cancellationToken, out var cachedGpu) is not { } sample)
+        if (reader.ReadAstralPins(deviceId, cancellationToken, out var cachedGpu, timings) is not { } sample)
         {
             return null;
         }
 
+        var selected = sample.Device;
         var readings = new List<AsusSensorValue>();
+
         AddReadings(sample);
+
         if (cachedGpu is not null)
         {
             AddReadings(cachedGpu);
@@ -54,5 +54,6 @@ public sealed class AsusGpuReader(NvidiaTelemetryReader reader) : IAsusGpuReader
     public void Dispose()
     {
         Devices = [];
+        reader.ClearPinSelection();
     }
 }

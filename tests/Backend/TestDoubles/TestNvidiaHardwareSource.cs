@@ -13,6 +13,7 @@ internal sealed class TestNvidiaHardwareSource : INvidiaHardwareSource
     public NvidiaSensor[] ReadPins(NvidiaDevice device)
     {
         PinReads++;
+        BeforePins?.Invoke();
         return Pins;
     }
 
@@ -33,11 +34,14 @@ internal sealed class TestNvidiaHardwareSource : INvidiaHardwareSource
     }
 
     public NvidiaSensor[] DomainClocks { get; set; } = [];
+    public Action? BeforeClocks { get; set; }
+    public Action? BeforePins { get; set; }
     public int ClockReads { get; private set; }
 
     public NvidiaSensor[] ReadDomainClocks(NvidiaDevice device)
     {
         ClockReads++;
+        BeforeClocks?.Invoke();
         return DomainClocks;
     }
 
