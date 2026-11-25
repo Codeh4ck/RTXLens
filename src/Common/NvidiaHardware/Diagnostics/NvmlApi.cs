@@ -97,14 +97,38 @@ internal sealed class NvmlApi : IDisposable
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     internal delegate int GetPowerRange(nint device, out uint minimum, out uint maximum);
 
-    // nvmlPciInfo_t has a 16-byte legacy bus ID and a 32-byte bus ID after the numeric fields
     [StructLayout(LayoutKind.Explicit, Size = 68)]
-    internal struct PciInfo
+    internal unsafe struct PciInfo
     {
         [FieldOffset(20)] public uint Bus;
         [FieldOffset(24)] public uint Device;
         [FieldOffset(28)] public uint DeviceId;
         [FieldOffset(32)] public uint SubsystemId;
+        [FieldOffset(36)] private fixed byte _busId[32];
+
+        internal (uint Bus, uint Device, uint Function)? ThermalAddress()
+        {
+            fixed (byte* bytes = _busId)
+            {
+                var address = new ReadOnlySpan<byte>(bytes, 32);
+                var end = address.IndexOf((byte)0);
+
+                if (end < 0)
+                {
+                    return null;
+                }
+
+                var id = System.Text.Encoding.ASCII.GetString(address[..end]);
+
+                // PawnIO addresses PCI segment zero only. Check all address fields against NVML
+                if (Bus > 255 || Device > 31 || id.Length < 2 || id[^1] is < '0' or > '7' || !id.Equals($"00000000:{Bus:X2}:{Device:X2}.{id[^1]}", StringComparison.OrdinalIgnoreCase))
+                {
+                    return null;
+                }
+
+                return (Bus, Device, (uint)(id[^1] - '0'));
+            }
+        }
     }
 
     [StructLayout(LayoutKind.Sequential)]

@@ -56,6 +56,16 @@ export class Formatter {
         );
     }
 
+    localTime(timestamp: number): string {
+        const date = new Date(timestamp);
+        const hours = date.getHours();
+        const twelveHour = this.settings.text('widgetClockFormat') === '12h';
+        const hour = twelveHour ? hours % 12 || 12 : hours;
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const suffix = twelveHour ? (hours < 12 ? ' AM' : ' PM') : '';
+        return String(hour).padStart(2, '0') + ':' + minutes + suffix;
+    }
+
     temperature(value: number | null): string {
         return this.value(value === null ? null : this.fahrenheit ? (value * 9) / 5 + 32 : value, this.fahrenheit ? '°F' : '°C', 1);
     }

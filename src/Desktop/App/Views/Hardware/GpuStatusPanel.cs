@@ -50,10 +50,10 @@ internal static class GpuStatusPanel
 
     private static Border CreateClocks(GpuStatusViewModel gpu, bool isDedicatedTab)
     {
-        var clocks = Pair(Column(gpu.CoreClock.Label, gpu.CoreClock), Column(gpu.MemoryClock.Label, gpu.MemoryClock));
+        var clocks = MetricColumns(Column(gpu.CoreClock.Label, gpu.CoreClock), Column(gpu.MemoryClock.Label, gpu.MemoryClock));
 
         var crossbar = Column(gpu.CrossbarClock.Label, gpu.CrossbarClock);
-        var domains = Pair(crossbar, Column(gpu.SystemClock.Label, gpu.SystemClock));
+        var domains = MetricColumns(crossbar, Column(gpu.SystemClock.Label, gpu.SystemClock));
         var system = (Border)domains.Children[1];
 
         if (!isDedicatedTab)
@@ -105,16 +105,64 @@ internal static class GpuStatusPanel
 
     private static Border CreateTemperatures(GpuStatusViewModel gpu)
     {
-        var hotspot = Column("Hotspot temp", gpu.HotspotTemperature);
-        BindTo(hotspot, Visual.IsVisibleProperty, gpu, nameof(gpu.HasHotspotTemperature));
+        var chips = new ItemsControl
+        {
+            ItemTemplate = new FuncDataTemplate<GpuStatusViewModel.MemoryChipRow>((chip, _) =>
+            {
+                var bullet = new Avalonia.Controls.Shapes.Ellipse
+                {
+                    Width = 6, Height = 6, VerticalAlignment = VerticalAlignment.Center,
+                    [!Avalonia.Controls.Shapes.Shape.FillProperty] = new DynamicResourceExtension("PrimaryBrush")
+                };
 
-        var temperatures = Pair(Column("Core temp", gpu.CoreTemperature), Column("VRAM temp", gpu.MemoryTemperature));
-        return Group("Temperatures", DesktopIcons.Temperature, new StackPanel { Spacing = 5, Children = { temperatures, hotspot } });
+                var label = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal, Spacing = 7,
+                    Children = { bullet, Caption($"Chip {chip.Channel}") }
+                };
+
+                return ReadingRow(label, Caption(chip.Value));
+            })
+        };
+
+        BindTo(chips, ItemsControl.ItemsSourceProperty, gpu, nameof(gpu.MemoryChipTemperatures));
+        var details = new Button
+        {
+            Classes = { "desktop-action" },
+            Content = new Image { Source = Icon(DesktopIcons.Info), Width = 16, Height = 16 },
+            Padding = new Thickness(7, 4),
+            Flyout = new Flyout
+            {
+                FlyoutPresenterClasses = { "boost-details" },
+                Content = Inset(new StackPanel
+                {
+                    Spacing = 6, MinWidth = 210,
+                    Children = { Caption("VRAM chip temperatures"), Divider(), new ScrollViewer { MaxHeight = 300, Content = chips } }
+                })
+            }
+        };
+        AutomationProperties.SetName(details, "Show VRAM chip temperatures");
+        ToolTip.SetTip(details, "Show VRAM chip temperatures");
+
+        BindTo(details, Visual.IsVisibleProperty, gpu, nameof(gpu.HasMemoryChipTemperatures));
+
+        var temperatures = MetricColumns(
+            Column(gpu.CoreTemperature.Label, gpu.CoreTemperature),
+            Column(gpu.MemoryTemperature.Label, gpu.MemoryTemperature, details),
+            Column(gpu.HotspotTemperature.Label, gpu.HotspotTemperature));
+
+        var hotspot = temperatures.Children[2];
+
+        BindTo(hotspot, Visual.IsVisibleProperty, gpu, nameof(gpu.HasHotspotTemperature));
+        Watch(temperatures, gpu, () => temperatures.ColumnDefinitions[2].Width =
+            gpu.HasHotspotTemperature ? GridLength.Star : new GridLength(0), nameof(gpu.HasHotspotTemperature));
+
+        return Group("Temperatures", DesktopIcons.Temperature, temperatures);
     }
 
     private static Border CreateFans(GpuStatusViewModel gpu)
     {
-        var fans = Pair(Column("Fan 1", gpu.Fan1), Column("Fan 2", gpu.Fan2));
+        var fans = MetricColumns(Column("Fan 1", gpu.Fan1), Column("Fan 2", gpu.Fan2));
         BindTo(fans.Children[1], Visual.IsVisibleProperty, gpu, nameof(gpu.HasSecondFan));
 
         return Group("Fans", DesktopIcons.Fan, fans);
@@ -305,7 +353,7 @@ internal static class GpuStatusPanel
         return panel;
     }
 
-    private static StackPanel Column(string label, MetricViewModel metric)
+    private static Grid Column(string label, MetricViewModel metric, Control? details = null)
     {
         var marker = new Avalonia.Controls.Shapes.Ellipse
         {
@@ -319,7 +367,7 @@ internal static class GpuStatusPanel
 
         ToolTip.SetTip(marker, "Temperature warning active");
 
-        var title = new TextBlock { Text = label, FontSize = 14, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center };
+        var title = new TextBlock { Text = label, FontSize = 14, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center };
 
         var heading = new StackPanel
         {
@@ -329,26 +377,43 @@ internal static class GpuStatusPanel
             Children = { title, marker }
         };
 
+        if (details is not null)
+        {
+            heading.Children.Add(details);
+        }
+
         var value = Reading(metric, nameof(MetricViewModel.Value));
         value.TextAlignment = TextAlignment.Center;
         value.TextWrapping = TextWrapping.Wrap;
 
-        return new StackPanel { Spacing = 3, Margin = new Thickness(5, 0), Children = { heading, value } };
+        var column = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto"), RowSpacing = 3, Margin = new Thickness(5, 0), Children = { heading, value } };
+        column.RowDefinitions[0].SharedSizeGroup = "MetricHeading";
+
+        Grid.SetRow(value, 1);
+
+        return column;
     }
 
-    private static Grid Pair(Control first, Control second)
+    private static Grid MetricColumns(params Control[] columns)
     {
-        var divided = new Border
+        var grid = new Grid();
+        Grid.SetIsSharedSizeScope(grid, true);
+
+        for (var i = 0; i < columns.Length; i++)
         {
-            BorderThickness = new Thickness(1, 0, 0, 0),
-            Child = second,
-            [!Border.BorderBrushProperty] = new DynamicResourceExtension(DesktopBrushes.PanelBorder)
-        };
+            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
 
-        var pair = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*"), Children = { first, divided } };
-        Grid.SetColumn(divided, 1);
+            var cell = i == 0 ? columns[i] : new Border
+            {
+                BorderThickness = new Thickness(1, 0, 0, 0),
+                Child = columns[i],
+                [!Border.BorderBrushProperty] = new DynamicResourceExtension(DesktopBrushes.PanelBorder)
+            };
 
-        return pair;
+            Grid.SetColumn(cell, i);
+            grid.Children.Add(cell);
+        }
+        return grid;
     }
 
     private static Border Group(string label, string icon, Control readings)

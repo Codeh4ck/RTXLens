@@ -32,7 +32,7 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
-            if (Open() is not { } api || FindDevice(api, identity) is not { } handle)
+            if (Open() is not { } api || FindDevice(api, identity, out _) is not { } handle)
             {
                 return null;
             }
@@ -52,8 +52,9 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
         return _api;
     }
 
-    internal List<NvidiaSensor> ReadBoard(string deviceId)
+    internal List<NvidiaSensor> ReadBoard(string deviceId, out NvmlApi.PciInfo selectedPci)
     {
+        selectedPci = default;
         if (!NvidiaPciIdentity.TryParse(deviceId, out var identity))
         {
             return [];
@@ -61,7 +62,7 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
 
         lock (_gate)
         {
-            if (Open() is not { } api || FindDevice(api, identity) is not { } handle)
+            if (Open() is not { } api || FindDevice(api, identity, out selectedPci) is not { } handle)
             {
                 return [];
             }
@@ -227,8 +228,9 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
             : null;
     }
 
-    internal static nint? FindDevice(NvmlApi api, (uint Bus, uint Slot, uint DeviceId, uint SubsystemId) identity)
+    internal static nint? FindDevice(NvmlApi api, (uint Bus, uint Slot, uint DeviceId, uint SubsystemId) identity, out NvmlApi.PciInfo selectedPci)
     {
+        selectedPci = default;
         var getCount = api.Get<NvmlApi.GetCount>("nvmlDeviceGetCount_v2");
         var getHandle = api.Get<NvmlApi.GetHandle>("nvmlDeviceGetHandleByIndex_v2");
         var getPci = api.Get<NvmlApi.GetPciInfo>("nvmlDeviceGetPciInfo_v3");
@@ -263,9 +265,11 @@ public sealed class NvidiaDiagnosticsReader(TimeProvider clock) : INvidiaDiagnos
 
             if (match.HasValue)
             {
+                selectedPci = default;
                 return null;
             }
 
+            selectedPci = pci;
             match = device;
         }
 

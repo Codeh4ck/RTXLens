@@ -6,6 +6,17 @@
             <RegistrySearch Id="WindowsBuildNumberSearch" Root="HKLM" Key="SOFTWARE\Microsoft\Windows NT\CurrentVersion" Name="CurrentBuildNumber" Type="raw" Bitness="always64" />
         </Property>
         <Launch Condition="Installed OR (VersionNT64 AND WINDOWSBUILDNUMBER &gt;= 17763)" Message="RTX Lens requires 64-bit Windows 10 (build 17763+) or Windows 11." />
+        <Property Id="PAWNIOTHERMALS" Secure="yes" />
+        <Property Id="PREVIOUSPAWNIOTHERMALS" Secure="yes">
+            <RegistrySearch Id="SavedPawnIoThermals" Root="HKLM" Key="SOFTWARE\RTXLens" Name="PawnIoThermals" Type="raw" Bitness="always64" />
+        </Property>
+        <SetProperty Id="PAWNIOTHERMALS" Value="0" After="AppSearch" Sequence="both" Condition="PAWNIOTHERMALS = &quot;&quot; AND PREVIOUSPAWNIOTHERMALS = &quot;#0&quot;" />
+        <SetProperty Action="DefaultPawnIoThermals" Id="PAWNIOTHERMALS" Value="1" After="SetPAWNIOTHERMALS" Sequence="both" Condition="PAWNIOTHERMALS = &quot;&quot;" />
+        <Property Id="RTXDESKTOP" Secure="yes" />
+        <SetProperty Id="ADDLOCAL" Value="Service,Desktop" Before="CostInitialize" Sequence="execute" Condition="RTXDESKTOP = &quot;1&quot; AND NOT REMOVE" />
+        <SetProperty Action="InstallServiceOnly" Id="ADDLOCAL" Value="Service" Before="CostInitialize" Sequence="execute" Condition="RTXDESKTOP = &quot;0&quot; AND NOT (REMOVE ~= &quot;ALL&quot;)" />
+        <SetProperty Action="RepairServiceOnly" Id="REINSTALL" Value="Service" Before="CostInitialize" Sequence="execute" Condition="REINSTALL AND RTXDESKTOP = &quot;0&quot; AND NOT (REMOVE ~= &quot;ALL&quot;)" />
+        <SetProperty Id="REMOVE" Value="Desktop" Before="CostInitialize" Sequence="execute" Condition="RTXDESKTOP = &quot;0&quot; AND NOT REMOVE" />
         <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" />
         <Property Id="ARPPRODUCTICON" Value="MonitorIcon.exe" />
         <Icon Id="MonitorIcon.exe" SourceFile="$(var.PayloadDirectory)/Desktop/RTXLens.App.exe" />
@@ -64,6 +75,7 @@
             <ServiceControl Id="ServiceLifecycle" Name="RTXLensService" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
         </Component>
         <Component Id="InstallationRegistration" Directory="INSTALLFOLDER" Guid="AA3079F5-F011-42B8-AC34-1BE0B984744F" Bitness="always64">
+            <RegistryValue Root="HKLM" Key="SOFTWARE\RTXLens" Name="PawnIoThermals" Type="integer" Value="[PAWNIOTHERMALS]" />
             <RegistryValue Root="HKLM" Key="SOFTWARE\RTXLens" Name="InstallDirectory" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
         </Component>
         <Component Id="DesktopExecutable" Directory="AppInstallFolder" Guid="2B21DA40-41D0-4D26-8CC5-FA7F96B01D7D" Bitness="always64">

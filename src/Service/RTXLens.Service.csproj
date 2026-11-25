@@ -10,6 +10,7 @@
         <PackageReference Include="MailKit" />
         <Compile Include="../Common/SafeguardReporting/*.cs" Link="SafeguardReporting/%(Filename)%(Extension)" />
         <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+        <Content Include="../../assets/PawnIO/*" Link="PawnIO/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
         <Content Include="../../scripts/afterburner/*.ps1" Link="SafeguardScripts/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
         <ProjectReference Include="../Core/RTXLens.Core.csproj" />
         <ProjectReference Include="../Plugins/Asus/Plugin/RTXLens.Plugins.Asus.csproj" />

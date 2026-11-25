@@ -1,12 +1,33 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal" xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
     <Bundle Name="RTX Lens" Manufacturer="Nikolas Andreou" Version="$(var.InstallerVersion)" UpgradeCode="63498E86-5C62-431A-B173-6DE1B4A9E617" IconSourceFile="../../src/Desktop/App/Assets/monitor.ico">
         <BootstrapperApplication>
-            <bal:WixInternalUIBootstrapperApplication Theme="standard" />
+            <bal:WixStandardBootstrapperApplication Theme="hyperlinkLicense" LicenseUrl="" LogoFile="../../src/Mobile/assets/icon.png" ThemeFile="ThermalSetupTheme.xml" SuppressOptionsUI="yes" />
+            <Payload SourceFile="SetupFocus.dll" bal:BAFunctions="yes" />
         </BootstrapperApplication>
         <util:RegistrySearch Id="FindVcRuntime" Variable="VcRuntimeVersion" Root="HKLM" Key="SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" Value="Version" Result="value" Bitness="always64" />
+        <Variable Name="PawnIoThermals" Type="numeric" Value="-1" bal:Overridable="yes" />
+        <util:RegistrySearch Id="PreviousPawnIoChoice" Condition="PawnIoThermals = -1" Variable="PawnIoThermals" Root="HKLM" Key="SOFTWARE\RTXLens" Value="PawnIoThermals" Result="value" Bitness="always64" />
+        <SetVariable Id="DefaultPawnIoChoice" After="PreviousPawnIoChoice" Condition="PawnIoThermals = -1" Variable="PawnIoThermals" Type="numeric" Value="1" />
+        <Variable Name="RtxDesktop" Type="numeric" Value="-1" bal:Overridable="yes" />
+        <Variable Name="RtxInstallFolder" Type="formatted" Value="[ProgramFiles64Folder]RTXLens" />
+        <util:RegistrySearch Id="PreviousRtxFolder" Variable="RtxPreviousFolder" Root="HKLM" Key="SOFTWARE\RTXLens" Value="InstallDirectory" Result="value" Bitness="always64" />
+        <SetVariable Id="UsePreviousRtxFolder" After="PreviousRtxFolder" Condition="RtxPreviousFolder" Variable="RtxInstallFolder" Type="string" Value="[RtxPreviousFolder]" />
+        <util:ComponentSearch Id="InstalledDesktopComponent" After="PreviousRtxFolder" Guid="2B21DA40-41D0-4D26-8CC5-FA7F96B01D7D" Variable="RtxDesktopState" Result="state" />
+        <SetVariable Id="KeepServiceOnly" After="InstalledDesktopComponent" Condition="RtxDesktop = -1 AND RtxPreviousFolder AND NOT (RtxDesktopState &gt;= 3)" Variable="RtxDesktop" Type="numeric" Value="0" />
+        <SetVariable Id="DefaultDesktopChoice" After="KeepServiceOnly" Condition="RtxDesktop = -1" Variable="RtxDesktop" Type="numeric" Value="1" />
+        <util:RegistrySearch Id="InstalledPawnIoVersion" Variable="PawnIoVersion" Root="HKLM" Key="SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO" Value="DisplayVersion" Result="value" Bitness="always64" />
         <Chain>
             <ExePackage Id="VcRuntime" SourceFile="$(var.VcRedistPath)" DetectCondition="VcRuntimeVersion &gt;= v$(var.VcRedistVersion)" InstallArguments="/install /quiet /norestart" RepairArguments="/repair /quiet /norestart" PerMachine="yes" Permanent="yes" Compressed="yes" Vital="yes" />
-            <MsiPackage SourceFile="$(var.RTXLens.Installer.TargetPath)" Visible="no" Compressed="yes" bal:PrimaryPackageType="default" />
+            <ExePackage Id="PawnIoDriver" SourceFile="$(var.PawnIoSetupPath)" DisplayName="PawnIO optional thermal sensor driver"
+                        InstallCondition="PawnIoThermals = 1" DetectCondition="PawnIoVersion &gt;= v$(var.PawnIoSetupVersion)"
+                        InstallArguments="-install -silent" PerMachine="yes" Permanent="yes" Compressed="yes" Vital="no">
+                <ExitCode Value="3010" Behavior="scheduleReboot" />
+            </ExePackage>
+            <MsiPackage SourceFile="$(var.RTXLens.Installer.TargetPath)" Visible="no" Compressed="yes">
+                <MsiProperty Name="INSTALLFOLDER" Value="[RtxInstallFolder]" Condition="WixBundleAction = 6 AND NOT RtxPreviousFolder" />
+                <MsiProperty Name="RTXDESKTOP" Value="[RtxDesktop]" Condition="WixBundleAction = 6 OR WixBundleAction = 8" />
+                <MsiProperty Name="PAWNIOTHERMALS" Value="[PawnIoThermals]" />
+            </MsiPackage>
         </Chain>
     </Bundle>
 </Wix>

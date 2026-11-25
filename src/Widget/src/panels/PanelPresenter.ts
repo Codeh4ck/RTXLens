@@ -244,9 +244,14 @@ export class PanelPresenter {
             metric('coreClock', 'Core clock', this.format.value(value('GpuCore', 'Clock'), 'MHz', 0), 'vcore'),
             metric('memoryClock', 'Memory clock', this.format.value(value('GpuMemory', 'Clock'), 'MHz', 0), 'vram'),
             metric('vram', 'VRAM usage', this.format.memory(used, total, utilization), 'vramusage'),
-            metric('temperatureCore', 'Core temp', this.format.temperature(coreTemperature), 'vtemp', warns('core')),
-            metric('temperatureMemory', 'VRAM temp', this.format.temperature(memoryTemperature), 'vtemp', warns('memory'))
+            metric('temperatureCore', 'Core', this.format.temperature(coreTemperature), 'vtemp', warns('core')),
+            metric('temperatureMemory', 'VRAM', this.format.temperature(memoryTemperature), 'vtemp', warns('memory'))
         ];
+
+        if (this.settings.enabled('showHotspotTemperature')) {
+            const hotspot = value('GpuHotspot', 'Temperature');
+            data.rows.push(metric('temperatureHotspot', 'Hotspot', this.format.temperature(hotspot), 'vtemp'));
+        }
 
         const hideFans = this.settings.enabled('hideGpuFans');
         for (const [option, component, label] of [

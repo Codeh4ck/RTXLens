@@ -7,7 +7,8 @@
     --metric-surface: color-mix(in srgb, var(--bg) 70%, transparent);
     --metric-radius: calc(var(--panel-radius, 10px) * .7);
 }
-.gpu-usage { display: inline-flex; align-items: center; gap: .5em; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 8%, transparent); border-radius: 5px; padding: 7px 10px; font-size: max(18px, calc(var(--label-base) * 1.6)); white-space: nowrap; }
+.widget-clock { font-variant-numeric: tabular-nums; }
+.widget-clock, .gpu-usage { display: inline-flex; align-items: center; gap: .5em; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 8%, transparent); border-radius: 5px; padding: 7px 10px; font-size: max(18px, calc(var(--label-base) * 1.6)); white-space: nowrap; }
 .gpu-usage-value { display: flex; align-items: center; justify-content: flex-end; width: 4.5ch; flex: none; font-variant-numeric: tabular-nums; }
 .panel-title { margin: 0; font: 700 max(14px, calc(var(--title-base) * var(--title-scale, 1))) var(--font-family, Consolas, monospace); overflow-wrap: anywhere; }
 .panel-source { margin: calc(var(--space) * .3) 0 0; font-size: max(14px, calc(var(--label-base) * var(--label-scale, 1))); color: var(--muted); overflow-wrap: anywhere; }

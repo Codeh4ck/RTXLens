@@ -1314,12 +1314,24 @@ internal static class AvaloniaDashboardTests
                 window.Content = new HardwarePage(shell.Dashboard.Panels.Single(item => item.Id == id), shell);
                 foreach (var show in new[] { false, true, false })
                 {
-                    shell.Dashboard.Apply(Frame(3, 4), shell.Preferences with { ShowInternalClocksOnGpuStatusPanels = show }, now);
+                    shell.Dashboard.Apply(Frame(3, 4, show), shell.Preferences with { ShowInternalClocksOnGpuStatusPanels = show }, now);
                     Dispatcher.UIThread.RunJobs();
                     var labels = window.GetVisualDescendants().OfType<TextBlock>().Where(text => text.IsEffectivelyVisible)
                         .Select(text => text.Text).ToArray();
                     TestAssert.Equal(show || id == nvidia, labels.Contains("Crossbar clock"));
                     TestAssert.Equal(show || id == nvidia, labels.Contains("GPU system clock"));
+                    var status = window.GetVisualDescendants().OfType<SectionPanel>().Single(section => Equals(section.Header, "GPU status"));
+                    var expected = show ? new[] { "Core", "VRAM", "Hotspot" } : new[] { "Core", "VRAM" };
+                    var headings = status.GetVisualDescendants().OfType<TextBlock>().Where(text =>
+                        text.IsEffectivelyVisible && text.Text is "Core" or "VRAM" or "Hotspot").ToArray();
+                    TestAssert.True(headings.Select(text => text.Text).SequenceEqual(expected), $"Temperature columns on {id}");
+                    var values = headings.Select(text => text.GetVisualAncestors().OfType<Grid>().First()
+                        .Children.OfType<ReadingText>().Single().TranslatePoint(default, window)!.Value).ToArray();
+                    for (var i = 1; i < values.Length; i++)
+                    {
+                        TestAssert.True(values[i].X > values[i - 1].X && Math.Abs(values[i].Y - values[0].Y) <= 1,
+                            $"Temperature values on {id} should share one row with the VRAM details button visible. Positions: {string.Join(", ", values)}.");
+                    }
                 }
             }
         }
@@ -1330,7 +1342,7 @@ internal static class AvaloniaDashboardTests
 
         return;
 
-        SensorSnapshot Frame(long sequence, double current) => new(1, sequence, now,
+        SensorSnapshot Frame(long sequence, double current, bool hotspot = false) => new(1, sequence, now,
             [
                 new SensorReading(new SensorIdentity(wireView, "device", SensorComponent.GpuPin, SensorMetric.Current, 1),
                     SensorUnit.Amperes, current, now),
@@ -1338,6 +1350,10 @@ internal static class AvaloniaDashboardTests
                     SensorUnit.Megahertz, 1650, now),
                 new SensorReading(new SensorIdentity(nvidia, "Nvidia RTX 5090", SensorComponent.GpuCrossbar, SensorMetric.Clock),
                     SensorUnit.Megahertz, 1800, now),
+                new SensorReading(new SensorIdentity(nvidia, "Nvidia RTX 5090", SensorComponent.GpuMemoryChip, SensorMetric.Temperature, 1),
+                    SensorUnit.Celsius, 42, now),
+                new SensorReading(new SensorIdentity(nvidia, "Nvidia RTX 5090", SensorComponent.GpuHotspot, SensorMetric.Temperature),
+                    SensorUnit.Celsius, hotspot ? 51 : null, now),
                 new SensorReading(new SensorIdentity(nvidia, "Nvidia RTX 5090", SensorComponent.GpuSystem, SensorMetric.Clock),
                     SensorUnit.Megahertz, 1500, now)
             ],

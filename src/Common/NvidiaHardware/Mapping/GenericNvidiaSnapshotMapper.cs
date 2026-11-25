@@ -12,6 +12,11 @@ public static class GenericNvidiaSnapshotMapper
 
         foreach (var sensor in sample.Sensors)
         {
+            if (sensor is { Name: "GPU Memory Chip", Type: SensorType.Temperature, Index: > 0 })
+            {
+                Add(SensorComponent.GpuMemoryChip, SensorMetric.Temperature, sensor.Value, sensor.Index);
+                continue;
+            }
             var definition = (sensor.Name, sensor.Type) switch
             {
                 ("GPU Core", SensorType.Clock) => (SensorComponent.GpuCore, SensorMetric.Clock),
@@ -37,7 +42,6 @@ public static class GenericNvidiaSnapshotMapper
             }
         }
 
-        // A memory junction sensor takes priority over the older memory thermal API
         if (!readings.Any(reading => reading.Identity is { Component: SensorComponent.GpuMemory, Metric: SensorMetric.Temperature }))
         {
             var memory = sample.Sensors.FirstOrDefault(sensor => sensor is { Name: "GPU Memory", Type: SensorType.Temperature });

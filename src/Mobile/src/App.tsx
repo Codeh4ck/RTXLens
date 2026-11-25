@@ -12,6 +12,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { notificationPermission, onWarningNotificationOpened, showWarningNotification } from './notifications';
 import { localSwitchAddress, sessionResult } from './connection';
+import { DemoSession } from './demoSession';
 import { ConnectionCard } from './connectionCard';
 import { IncidentHistory } from './history';
 import type { IncidentRef } from './incidentProtocol';
@@ -78,6 +79,7 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
   const [active, setActive] = useState(AppState.currentState !== 'background');
   const [lastReadingsVisible, setLastReadingsVisible] = useState(false);
   const [tab, setTab] = useState<Tab>('home');
+  const [demo, setDemo] = useState(false);
   const [editingHome, setEditingHome] = useState(false);
   const [notificationLink, setNotificationLink] = useState<{ index: number; incident: IncidentRef | null } | null>(null);
   const [notifications, setNotifications] = useState<'granted' | 'available' | 'blocked'>('available');
@@ -100,25 +102,17 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
 
   useEffect(() => {
     let live = true;
-    if (transport) {
-      void SecureStore.getItemAsync(computerKey).then(value => {
-        if (live && value) {
-          const saved = decodeSavedComputer(value);
-          setComputer(saved);
-          if (!saved) setSavedPairingError('Your saved pairing couldn’t be restored.');
-        }
-      }).catch(() => {
-        if (live) {
-          setSavedPairingError('Your saved pairing couldn’t be read.');
-        }
-      }).finally(() => {
-        if (live) {
-          setLoaded(true);
-        }
-      });
-    } else {
-      setLoaded(true);
-    }
+    void SecureStore.getItemAsync(computerKey).then(value => {
+      if (live && value) {
+        const saved = decodeSavedComputer(value);
+        setComputer(saved);
+        if (!saved) setSavedPairingError('Your saved pairing couldn’t be restored.');
+      }
+    }).catch(() => {
+      if (live) setSavedPairingError('Your saved pairing couldn’t be read.');
+    }).finally(() => {
+      if (live) setLoaded(true);
+    });
 
     const subscription = AppState.addEventListener('change', state => setActive(state === 'active'));
     return () => {
@@ -365,12 +359,17 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
     onSettings={() => navigate('settings')} onCheck={() => { navigate('settings'); retry(); }}
     onLastReadings={frame && !live ? () => setLastReadingsVisible(visible => !visible) : undefined}
     showingLastReadings={showLastReadings} />;
+  const canViewDemo = loaded && !computer && !savedPairingError && canStartPairing;
+  if (demo && canViewDemo) {
+    return <DemoSession appearance={appearance} active={active} exit={() => { setDemo(false); navigate('home'); }} />;
+  }
+  const demoButton = canViewDemo && <Button icon="monitor" label="View demo" onPress={() => setDemo(true)} />;
   let content: ReactNode;
 
   if (!loaded || !transport) {
     content = <Page title="RTX Lens"><Card title={!loaded ? 'Loading…' : 'Native build required'}>
       {!loaded ? null : <Text style={styles.caption}>Install the RTX Lens IPA or APK to pair with your PC.</Text>}
-    </Card></Page>;
+    </Card>{tab === 'home' && demoButton}</Page>;
   } else if (tab === 'settings') {
     content = (
       <Page title="Settings">
@@ -437,7 +436,7 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
   } else if (tab === 'gpu') {
     content = <Gpu frame={showTelemetry ? frame : null} live={live} connectionCard={live ? undefined : connectionCard} />;
   } else if (!showTelemetry && !editingHome) {
-    content = <Page title="RTX Lens">{connectionCard}</Page>;
+    content = <Page title="RTX Lens">{connectionCard}{demoButton}</Page>;
   } else {
     content = <Home frame={frame} live={live} remote={destination?.route === 'remote'} onNavigate={navigate}
       connectionCard={live || editingHome ? undefined : connectionCard}

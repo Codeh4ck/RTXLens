@@ -1,3 +1,8 @@
+1.2.1 - RTX 50-series temperature sensors
+- Setup can enable the optional PawnIO driver for additional temperature readings on supported GeForce RTX 50-series cards.
+- Desktop GPU Status shows the GPU hotspot and a live list of individual chip temperatures beside VRAM temp when those sensors report.
+- Widget profiles can show Hotspot beside Core and VRAM in GPU Status. Enable Show hotspot temperature in the desktop iCUE Widget settings.
+
 1.2.0 - Native ROG Astral telemetry
 - Read connector pin current and voltage directly through the NVIDIA driver on supported ASUS boards, including additional RTX 5080 and RTX 5090 variants. Compute per-pin power and connector totals from those readings.
 - Configure GPU Status polling on the Nvidia tab and connector pin polling on the ROG Astral tab. Each has its own device selection, interval and freshness timeout.

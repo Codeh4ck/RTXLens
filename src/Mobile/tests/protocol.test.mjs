@@ -14,6 +14,8 @@ import { hexToHsv, hsvToHex } from '../src/colorValues.ts';
 import { homeDropIndex } from '../src/homeDropTarget.ts';
 import { WarningEvents } from '../src/warningEvents.ts';
 
+import { demoAlerts, demoFrame, triggerDemoAlert, clearDemoAlerts } from '../src/demoTelemetry.ts';
+
 const now = Date.now();
 
 test('opens only a valid warning or Safeguard+ incident carried by a notification', () => {
@@ -433,4 +435,47 @@ test('restores existing palettes and persists the panel glow preference', () => 
   const enabled = decodeAppearance(JSON.stringify({ ...previous, panelGlow: true }));
   assert.equal(themeColors(enabled).panelGlow, true);
   assert.equal(themeColors(enabled).accent, themeColors({ ...enabled, panelGlow: false }).accent);
+});
+
+test('offline demo feeds all three power tabs and a populated GPU page', () => {
+  const frame = demoFrame(now, []);
+  const groups = hardwareTabGroups(frame.sensors, 'power');
+  assert.deepEqual(groups.map(group => group.source), ['wireview-pro2', 'asus-astral', 'msi-psu']);
+  assert.equal(frame.reportingSources, 3);
+  const [gpu] = gpuDeviceGroups(frame.sensors);
+  assert.ok(gpuStatusRows(gpu.readings).some(row => row.reading.identity.component === 'GpuCrossbar'));
+  assert.ok(gpuConnectorPower(frame.sensors, frame.connectorPowerKey, gpu.readings[0].identity.deviceId, true).value > 0);
+  assert.equal(new Set(frame.sensors.map(r => r.identity.key)).size, frame.sensors.length);
+  const msi = groups[2];
+  assert.deepEqual(powerConnectorGroups(msi, false).map(([id]) => id), ['1', '2']);
+  assert.deepEqual(powerConnectorGroups(msi, true).map(([id]) => id), ['1']);
+  assert.ok(msi.readings.every(r => r.identity.metric === 'Current'));
+  assert.notDeepEqual(frame.sensors, demoFrame(now + 2000, []).sensors);
+});
+
+test('demo alerts change readings, capture incident details and clear without delivering system notifications', () => {
+  let incidents = [];
+  for (const alert of demoAlerts) {
+    incidents = triggerDemoAlert(incidents, alert, now);
+    assert.equal(triggerDemoAlert(incidents, alert, now + 1), incidents);
+  }
+  const active = demoFrame(now, incidents);
+  assert.equal(active.warnings.length, 3);
+  assert.deepEqual(new WarningEvents().receive(active), []);
+  for (const incident of incidents) {
+    assert.ok(incident.readings.length);
+    assert.ok(incident.readings.every(r => r.identity.pluginId === incident.source));
+    assert.ok(active.warnings.some(w => w.episodeId === incident.id));
+  }
+  const sample = (source, component, metric, channel) =>
+    incidents.find(item => item.source === source).readings.find(r => r.identity.component === component
+      && r.identity.metric === metric && r.identity.channel === channel).value;
+  assert.equal(sample('asus-astral', 'GpuCore', 'Temperature', null), 88);
+  assert.equal(sample('wireview-pro2', 'MonitorBoard', 'Temperature', 1), 82);
+  assert.equal(sample('msi-psu', 'PsuPin', 'Current', 3), 10.2);
+  const cleared = clearDemoAlerts(incidents, now + 2000);
+  assert.equal(demoFrame(now + 2000, cleared).warnings.length, 0);
+  assert.ok(cleared.every(item => item.endedAt && item.status === 'Cleared'));
+  assert.equal(cleared[0].readings, incidents[0].readings);
+  assert.equal(triggerDemoAlert(cleared, demoAlerts[0], now + 3000).length, 4);
 });

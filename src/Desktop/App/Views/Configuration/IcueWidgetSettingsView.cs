@@ -180,6 +180,8 @@ internal sealed class IcueWidgetSettingsView : UserControl
             }));
         }
 
+        LinkToggle("showWidgetClock", "widgetClockView", true);
+        LinkToggle("showWidgetClock", "widgetClockFormat", true);
         LinkToggle("hideGpuFans", "showFanDuty", false);
 
         if (inputs.TryGetValue("alwaysShowInternalClocks", out var clockMode))

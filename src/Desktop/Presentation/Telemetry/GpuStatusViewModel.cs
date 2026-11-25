@@ -43,9 +43,9 @@ public sealed class GpuStatusViewModel : ObservableObject
     public bool HasCrossbarClock { get; private set => Set(ref field, value); }
     public bool HasSystemClock { get; private set => Set(ref field, value); }
     public MetricViewModel VramUsage { get; } = new("VRAM usage", iconName: "vramusage");
-    public MetricViewModel CoreTemperature { get; } = new("Core temp", iconName: DesktopIcons.Temperature);
-    public MetricViewModel MemoryTemperature { get; } = new("VRAM temp", iconName: DesktopIcons.Temperature);
-    public MetricViewModel HotspotTemperature { get; } = new("Hotspot temp", iconName: DesktopIcons.Temperature);
+    public MetricViewModel CoreTemperature { get; } = new("Core", iconName: DesktopIcons.Temperature);
+    public MetricViewModel MemoryTemperature { get; } = new("VRAM", iconName: DesktopIcons.Temperature);
+    public MetricViewModel HotspotTemperature { get; } = new("Hotspot", iconName: DesktopIcons.Temperature);
     public MetricViewModel Fan1 { get; } = new("Fans", iconName: DesktopIcons.Fan);
     public MetricViewModel Fan2 { get; } = new("Fan 2", iconName: DesktopIcons.Fan);
 
@@ -53,18 +53,34 @@ public sealed class GpuStatusViewModel : ObservableObject
     public bool HasVramUsage { get; private set => Set(ref field, value); }
     public bool HasHotspotTemperature { get; private set => Set(ref field, value); }
     public bool HasSecondFan { get; private set => Set(ref field, value); }
+    public sealed record MemoryChipRow(int Channel, string Value);
+    public MemoryChipRow[] MemoryChipTemperatures { get; private set => Set(ref field, value); } = [];
+    public bool HasMemoryChipTemperatures { get; private set => Set(ref field, value); }
     public GpuDiagnosticsViewModel Diagnostics { get; } = new();
 
     private readonly MetricViewModel[] _metrics;
 
     public GpuStatusViewModel()
     {
-        _metrics = [CoreClock, MemoryClock, CrossbarClock, SystemClock, VramUsage, CoreTemperature, MemoryTemperature, HotspotTemperature, Fan1, Fan2];
+        _metrics =
+        [
+            CoreClock,
+            MemoryClock,
+            CrossbarClock,
+            SystemClock,
+            VramUsage,
+            CoreTemperature,
+            MemoryTemperature,
+            HotspotTemperature,
+            Fan1,
+            Fan2
+        ];
     }
 
     public void Apply(SensorSnapshot snapshot, ConfigurationSnapshot? configuration, AppPreferences preferences, DateTimeOffset now)
     {
         ShowInternalClocksOnGpuStatusPanels = preferences.ShowInternalClocksOnGpuStatusPanels;
+
         var settings = configuration?.Configuration.Plugins.GetValueOrDefault(PluginId);
         var options = settings?.Options?.Deserialize(ClientJsonContext.Default.GenericNvidiaOptions) ?? new GenericNvidiaOptions();
 
@@ -129,7 +145,20 @@ public sealed class GpuStatusViewModel : ObservableObject
             VramUsage.Value = "Unavailable";
         }
 
+        var chips = readings.Where(reading => reading.Identity is
+                { Component: SensorComponent.GpuMemoryChip, Metric: SensorMetric.Temperature, Channel: > 0 } && Valid(reading))
+            .OrderBy(reading => reading.Identity.Channel)
+            .Select(reading => new MemoryChipRow(reading.Identity.Channel!.Value, Temperature(reading.Value))).ToArray();
+
+        if (!MemoryChipTemperatures.SequenceEqual(chips))
+        {
+            MemoryChipTemperatures = chips;
+        }
+
+        HasMemoryChipTemperatures = chips.Length > 0;
+
         var hotspot = Value(SensorComponent.GpuHotspot, SensorMetric.Temperature);
+
         CoreTemperature.Value = Temperature(Value(SensorComponent.GpuCore, SensorMetric.Temperature));
         MemoryTemperature.Value = Temperature(Value(SensorComponent.GpuMemory, SensorMetric.Temperature));
         HotspotTemperature.Value = Temperature(hotspot);
@@ -229,6 +258,8 @@ public sealed class GpuStatusViewModel : ObservableObject
         PowerText = CurrentText = VoltageText = "Unavailable";
         GpuUsageText = CoreVoltageText = "-";
         HasCrossbarClock = HasSystemClock = false;
+        MemoryChipTemperatures = [];
+        HasMemoryChipTemperatures = false;
         HasVramUsage = HasHotspotTemperature = HasSecondFan = false;
         VramUsagePercent = 0;
         Fan1.Label = "Fans";

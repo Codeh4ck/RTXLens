@@ -6,6 +6,7 @@ public sealed class NativeNvidiaHardwareSource(TimeProvider clock) : INvidiaHard
 {
     private readonly NvidiaIdentityReader _devices = new();
     private readonly NvidiaDiagnosticsReader _management = new(clock);
+    private readonly PawnIoThermalReader _thermals = new(clock);
     private NvidiaGpuDriverReader? _gpu;
     private AstralDriverReader? _astral;
 
@@ -20,9 +21,10 @@ public sealed class NativeNvidiaHardwareSource(TimeProvider clock) : INvidiaHard
 
         if (_topology.Length > 0 && !_topology.SequenceEqual(topology))
         {
-            // A handle can be recycled when a card disappears while other adapters remain present
             _gpu = null;
             _astral = null;
+
+            _thermals.Dispose();
             _management.Reset();
         }
 
@@ -40,9 +42,13 @@ public sealed class NativeNvidiaHardwareSource(TimeProvider clock) : INvidiaHard
 
         _gpu ??= new NvidiaGpuDriverReader(_devices);
 
-        var sensors = _management.ReadBoard(device.Id);
+        var sensors = _management.ReadBoard(device.Id, out var pci);
         _gpu.Read(handle, device.Name, sensors);
 
+        if (_thermals.Enabled && NvidiaGpuDriverReader.ThermalLayout(device.Name) is { Blackwell: true } && pci.ThermalAddress() is { } address)
+        {
+            _thermals.Read(address.Bus, address.Device, address.Function, sensors);
+        }
         return [.. sensors];
     }
 
@@ -66,12 +72,14 @@ public sealed class NativeNvidiaHardwareSource(TimeProvider clock) : INvidiaHard
         _astral = null;
         _gpu = null;
 
+        _thermals.Dispose();
         _devices.Dispose();
         _management.Reset();
     }
 
     public void Dispose()
     {
+        _thermals.Dispose();
         _management.Dispose();
         _devices.Dispose();
     }

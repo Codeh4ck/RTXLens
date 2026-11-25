@@ -12,21 +12,24 @@ import { readingIcon, ReadingRow } from './screens';
 import { transport } from './transport';
 import { Button, Card, Icon, Notice, Page, PanelList, useStyles } from './ui';
 
-export function IncidentHistory({ computer, destination, live, target, onNotificationClosed }: {
+export function IncidentHistory({ computer, destination, live, target, onNotificationClosed, demoIncidents }: {
   computer: PairedComputer | null; destination: Destination | null; live: boolean;
+  demoIncidents?: Incident[];
   target?: IncidentRef | null; onNotificationClosed?: () => void;
 }) {
   const styles = useStyles();
-  const [items, setItems] = useState<IncidentSummary[]>([]);
+  const [fetchedItems, setItems] = useState<IncidentSummary[]>([]);
   const [next, setNext] = useState<string | null>(null);
   const [selected, setSelected] = useState<IncidentRef | null>(target ?? null);
-  const [detail, setDetail] = useState<Incident | null>(null);
+  const [fetchedDetail, setDetail] = useState<Incident | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
   const generation = useRef(0);
   const inFlight = useRef(false);
   const address = destination?.address;
+  const items = demoIncidents ?? fetchedItems;
+  const detail = demoIncidents ? demoIncidents.find(item => item.id === selected?.id) : fetchedDetail;
 
   const request = useCallback(async (path: string) => {
     if (!transport || !computer || !address || !live) {
@@ -69,15 +72,15 @@ export function IncidentHistory({ computer, destination, live, target, onNotific
   }, [request]);
 
   useEffect(() => {
-    if (live && selected === null) void loadPage(null);
+    if (!demoIncidents && live && selected === null) void loadPage(null);
     return () => {
       generation.current++;
       inFlight.current = false;
     };
-  }, [live, loadPage, reload, selected]);
+  }, [demoIncidents, live, loadPage, reload, selected]);
 
   useEffect(() => {
-    if (!selected || !live) return;
+    if (demoIncidents || !selected || !live) return;
     const current = ++generation.current;
     inFlight.current = true;
     setBusy(true);
@@ -92,7 +95,7 @@ export function IncidentHistory({ computer, destination, live, target, onNotific
         setBusy(false);
       }
     });
-  }, [live, reload, request, selected]);
+  }, [demoIncidents, live, reload, request, selected]);
 
   if (!live) {
     return <Card title="History unavailable" icon="warnings">
@@ -108,7 +111,7 @@ export function IncidentHistory({ computer, destination, live, target, onNotific
 
   return (
     <>
-      <Button icon="refresh" label="Refresh history" onPress={() => setReload(value => value + 1)} />
+      {!demoIncidents && <Button icon="refresh" label="Refresh history" onPress={() => setReload(value => value + 1)} />}
       {error && <Notice>{error}</Notice>}
       {items.length > 0 && <Card title="Recent incidents" icon="warnings">
         <PanelList>{items.map(item => <Pressable key={entryKey(item)} accessibilityRole="button" disabled={busy}
@@ -122,7 +125,7 @@ export function IncidentHistory({ computer, destination, live, target, onNotific
         </Pressable>)}</PanelList>
       </Card>}
       {busy && <Text style={styles.caption}>Loading history…</Text>}
-      {!busy && !error && items.length === 0 && <Text style={styles.caption}>No incidents in the configured retention period.</Text>}
+      {!busy && !error && items.length === 0 && <Text style={styles.caption}>{demoIncidents ? 'Trigger a sample alert in Settings to see its incident report here.' : 'No incidents in the configured retention period.'}</Text>}
       {next && !busy && <Button icon="next" label="Load older incidents" onPress={() => void loadPage(next)} />}
       {selected && <Modal animationType="slide" onRequestClose={closeReport}>
         <SafeAreaView style={styles.screen}>

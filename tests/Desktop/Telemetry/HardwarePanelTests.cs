@@ -144,6 +144,9 @@ internal static class HardwarePanelTests
             Reading(SensorComponent.GpuCore, SensorMetric.Temperature, 85), Reading(SensorComponent.GpuMemory, SensorMetric.Temperature, 70),
             Reading(SensorComponent.GpuMemory, SensorMetric.MemoryUsed, 8192), Reading(SensorComponent.GpuMemory, SensorMetric.MemoryTotal, 32768),
             Reading(SensorComponent.GpuMemory, SensorMetric.Utilization, 25), Reading(SensorComponent.GpuCore, SensorMetric.Utilization, 80),
+            Reading(SensorComponent.GpuHotspot, SensorMetric.Temperature, 81),
+            Reading(SensorComponent.GpuMemoryChip, SensorMetric.Temperature, 42, 4),
+            Reading(SensorComponent.GpuMemoryChip, SensorMetric.Temperature, 40, 1),
             Reading(SensorComponent.GpuCrossbar, SensorMetric.Clock, 2025),
             Reading(SensorComponent.GpuBoard, SensorMetric.Power, 450)] };
         frame = frame with
@@ -153,6 +156,12 @@ internal static class HardwarePanelTests
         };
         var model = new GpuStatusViewModel();
         model.Apply(frame, null, new AppPreferences(), frame.Timestamp);
+        TestAssert.True(model.HasHotspotTemperature && model.HasMemoryChipTemperatures, "Both thermal details should appear.");
+        TestAssert.Equal(2, model.MemoryChipTemperatures.Length);
+        TestAssert.Equal(1, model.MemoryChipTemperatures[0].Channel);
+        TestAssert.Equal(4, model.MemoryChipTemperatures[1].Channel);
+        model.Apply(frame, null, new AppPreferences { Fahrenheit = true }, frame.Timestamp);
+        TestAssert.Equal(104d.ToString("F1", CultureInfo.CurrentCulture) + " °F", model.MemoryChipTemperatures[0].Value);
         TestAssert.Equal("VRAM usage", model.VramUsage.Label);
         TestAssert.Equal("1200 RPM", model.Fan1.Value);
         TestAssert.Equal("1400 RPM", model.Fan2.Value);
@@ -166,6 +175,8 @@ internal static class HardwarePanelTests
         TestAssert.False(model.CoreTemperature.IsWarning, "Warning colors must consume the shared backend state, not infer independent thresholds.");
         model.Clear();
         TestAssert.True(model.IsUnavailable, "Disconnected GPU status must be explicit.");
+        TestAssert.False(model.HasMemoryChipTemperatures || model.HasHotspotTemperature, "Disconnected thermal readings must be cleared.");
+        TestAssert.Equal(0, model.MemoryChipTemperatures.Length);
         TestAssert.False(model.HasVramUsage, "An expired reading must not leave a populated VRAM bar.");
         return;
 

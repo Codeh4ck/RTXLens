@@ -33,6 +33,19 @@ test('decimal dropdown accepts all choices and preserves numeric slider preferen
     assert.equal(settings.number('precision'), 1);
 });
 
+test('widget clock uses local hours and handles midnight and noon in either format', () => {
+    const settings = new Settings();
+    const formatter = new Formatter(settings);
+    assert.equal(settings.enabled('showWidgetClock'), false);
+    for (const [hour, full, half] of [[0, '00:05', '12:05 AM'], [12, '12:05', '12:05 PM'], [13, '13:05', '01:05 PM']]) {
+        const timestamp = new Date(2026, 0, 1, hour, 5).getTime();
+        for (const [format, expected] of [['24h', full], ['12h', half]]) {
+            settings.update(key => key === 'widgetClockFormat' ? format : undefined);
+            assert.equal(formatter.localTime(timestamp), expected);
+        }
+    }
+});
+
 test('trailing zeros reach every producer, PSU comparison, headroom and summary without changing raw values', () => {
     assert.ok(!definitions.some(definition => definition.id === 'barSmoothing'));
     const settings = new Settings();
