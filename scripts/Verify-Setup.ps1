@@ -14,7 +14,15 @@ Import-Module (Join-Path $PSScriptRoot 'Release.psm1') -Force
 $tool = Join-Path $env:USERPROFILE '.nuget/packages/wixtoolset.sdk/7.0.0/tools/net472/x64/wix.exe'
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 
-Invoke-ReleaseCommand $tool @('burn', 'extract', '-acceptEula', 'wix7', $SetupPath, '-o', $OutputDirectory)
+$baDirectory = Join-Path $OutputDirectory 'bootstrapper'
+Invoke-ReleaseCommand $tool @('burn', 'extract', '-acceptEula', 'wix7', $SetupPath, '-o', $OutputDirectory, '-oba', $baDirectory)
+
+[xml]$baData = Get-Content -LiteralPath (Join-Path $baDirectory 'BootstrapperApplicationData.xml') -Raw
+$focus = $baData.SelectSingleNode("//*[local-name()='WixBalBAFunctions' and @FilePath='SetupFocus.dll']")
+if (!$focus -or !(Test-Path -LiteralPath (Join-Path $baDirectory 'SetupFocus.dll') -PathType Leaf))
+{
+    throw 'Setup is missing its registered window-focus extension.'
+}
 
 foreach ($source in @($MsiPath, $VcRedistPath, $PawnIoSetupPath))
 {

@@ -2,6 +2,7 @@
     <Bundle Name="RTX Lens" Manufacturer="Nikolas Andreou" Version="$(var.InstallerVersion)" UpgradeCode="63498E86-5C62-431A-B173-6DE1B4A9E617" IconSourceFile="../../src/Desktop/App/Assets/monitor.ico">
         <BootstrapperApplication>
             <bal:WixStandardBootstrapperApplication Theme="hyperlinkLicense" LicenseUrl="" LogoFile="../../src/Mobile/assets/icon.png" ThemeFile="ThermalSetupTheme.xml" SuppressOptionsUI="yes" />
+            <Payload SourceFile="SetupFocus.dll" bal:BAFunctions="yes" />
         </BootstrapperApplication>
         <util:RegistrySearch Id="FindVcRuntime" Variable="VcRuntimeVersion" Root="HKLM" Key="SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" Value="Version" Result="value" Bitness="always64" />
         <Variable Name="PawnIoThermals" Type="numeric" Value="-1" bal:Overridable="yes" />

@@ -6,6 +6,9 @@
         <DefineConstants>$(DefineConstants);InstallerVersion=$(InstallerVersion);PawnIoSetupPath=$(PawnIoSetupPath);PawnIoSetupVersion=$(PawnIoSetupVersion);VcRedistPath=$(VcRedistPath);VcRedistVersion=$(VcRedistVersion)</DefineConstants>
     </PropertyGroup>
     <ItemGroup>
+        <PackageReference Include="Vezel.Zig.Toolsets.win-x64" PrivateAssets="all" />
+        <PackageDownload Include="WixToolset.WixStandardBootstrapperApplicationFunctionApi" Version="[7.0.0]" />
+        <PackageDownload Include="WixToolset.BootstrapperApplicationApi" Version="[7.0.0]" />
         <PackageReference Include="WixToolset.BootstrapperApplications.wixext" />
         <PackageReference Include="WixToolset.Util.wixext" />
         <ProjectReference Include="../Package/RTXLens.Installer.wixproj" />
@@ -13,6 +16,14 @@
     <PropertyGroup Condition="'$(SigningCertificateThumbprint)' != ''">
         <SignOutput>true</SignOutput>
     </PropertyGroup>
+    <Target Name="BuildSetupFocus" BeforeTargets="CoreCompile">
+        <ItemGroup><BindPath Include="$(IntermediateOutputPath)" /></ItemGroup>
+        <MakeDir Directories="$(IntermediateOutputPath)" />
+        <Exec WorkingDirectory="$(IntermediateOutputPath)" Command="&quot;$(ZigExePath)&quot; c++ -target x86_64-windows-gnu -shared -Os -s -fno-exceptions -fno-rtti -nostdlib++ -I&quot;$(NuGetPackageRoot)wixtoolset.bootstrapperapplicationapi/7.0.0/build/native/include&quot; -I&quot;$(NuGetPackageRoot)wixtoolset.wixstandardbootstrapperapplicationfunctionapi/7.0.0/lib/native/include&quot; &quot;$(MSBuildProjectDirectory)/SetupFocus.cpp&quot; -luser32 -o SetupFocus.dll" />
+        <ItemGroup>
+            <FileWrites Include="$(IntermediateOutputPath)SetupFocus.dll" />
+        </ItemGroup>
+    </Target>
     <Target Name="SignBundleEngine" Condition="'$(SigningCertificateThumbprint)' != ''">
         <Exec Command="&quot;$(SignToolPath)&quot; sign /sha1 $(SigningCertificateThumbprint) /fd SHA256 /tr &quot;$(TimestampUrl)&quot; /td SHA256 &quot;%(SignBundleEngine.FullPath)&quot;" />
     </Target>
