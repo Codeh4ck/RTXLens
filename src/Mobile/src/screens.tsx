@@ -17,9 +17,9 @@ import { Card, Icon, Page, PanelList, Selection, useStyles, type IconName, type 
 type TelemetryProps = { frame: SensorFrame | null; live: boolean; connectionCard?: ReactNode };
 
 export function Home({
-  frame, live, connectionCard, remote, panels, saveLayout, layoutEnabled, initiallyEditing, onEditingChange, onNavigate,
+  frame, live, connectionCard, remote, demo = false, panels, saveLayout, layoutEnabled, initiallyEditing, onEditingChange, onNavigate,
 }: TelemetryProps & {
-  remote: boolean; panels: HomePanel[];
+  remote: boolean; demo?: boolean; panels: HomePanel[];
   saveLayout: (panels: HomePanel[]) => Promise<void>; layoutEnabled: boolean; initiallyEditing: boolean; onEditingChange: (editing: boolean) => void;
   onNavigate: (tab: Tab) => void;
 }) {
@@ -52,10 +52,10 @@ export function Home({
     <Card title={title} icon={live && warningCount ? 'warnings' : 'monitor'}>
       <View style={styles.row}>
         <View style={[local.statusDot, { backgroundColor: tone }]} />
-        <Text style={[local.status, { color: tone }]}>{live ? 'Live' : 'Offline'}</Text>
+        <Text style={[local.status, { color: tone }]}>{demo ? 'Demo' : live ? 'Live' : 'Offline'}</Text>
       </View>
       {live && <Text style={styles.caption}>
-        {remote ? 'Remote connection' : 'Local connection'}
+        {demo ? 'Simulated devices' : remote ? 'Remote connection' : 'Local connection'}
         {frame && ` · ${frame.reportingSources} reporting ${frame.reportingSources === 1 ? 'source' : 'sources'}`}
       </Text>}
 
