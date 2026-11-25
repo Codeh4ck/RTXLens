@@ -18,5 +18,6 @@ public enum SensorComponent
     GpuPerformance,
     GpuPowerLimits,
     GpuCrossbar,
-    GpuSystem
+    GpuSystem,
+    GpuMemoryChip
 }

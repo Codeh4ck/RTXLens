@@ -15,6 +15,7 @@ internal static class GenericNvidiaTests
 {
     public static void Run(TestRunner runner)
     {
+        runner.Run(DecodesPawnIoThermalSamples);
         runner.Run(DecodesDriverTemperaturesForEachSupportedGeneration);
         runner.Run(RecoversTheSameGpuAfterInvalidation);
         runner.Run(PinLossDropsTheCachedSample);
@@ -156,6 +157,20 @@ internal static class GenericNvidiaTests
         timings.Clear();
         reader.ReadAstralPins(null, default, out _, timings);
         TestAssert.True(timings.ToString().StartsWith("Astral pin reads"), "Pin timings are independent.");
+    }
+
+    private static void DecodesPawnIoThermalSamples()
+    {
+        TestAssert.Equal<float?>(42.5f, PawnIoThermalReader.DecodeHotspot(0x40002a80));
+        TestAssert.Equal<float?>(null, PawnIoThermalReader.DecodeHotspot(0x2a80));
+        TestAssert.Equal<float?>(null, PawnIoThermalReader.DecodeHotspot(uint.MaxValue));
+        var sensors = new List<NvidiaSensor>();
+        PawnIoThermalReader.AddMemoryTemperatures([0, 3, 46, 0x80000000, 42], sensors);
+        PawnIoThermalReader.AddMemoryTemperatures([0, 48, 10], sensors);
+        var chips = GenericNvidiaSnapshotMapper.Create(Sample([.. sensors]));
+        TestAssert.Equal(2, chips.Length);
+        TestAssert.True(chips.All(r => r.Identity.Component == SensorComponent.GpuMemoryChip && r.Unit == SensorUnit.Celsius), "Chip identity is distinct from memory junction.");
+        TestAssert.Equal<double?>(42, chips.Single(r => r.Identity.Channel == 3).Value);
     }
 
     private static void DecodesDriverTemperaturesForEachSupportedGeneration()

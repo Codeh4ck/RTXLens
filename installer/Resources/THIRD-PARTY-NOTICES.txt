@@ -6,6 +6,10 @@ LibreHardwareMonitor - Mozilla Public License 2.0.
 HidSharp - Apache License 2.0.
 WiX Toolset / DTF / Burn runtime components - Microsoft Reciprocal License and component notices.
 Microsoft Visual C++ Redistributable - Microsoft redistributable license terms.
+PawnIO optional shared driver. Official installer redistributed unmodified.
+https://github.com/namazso/PawnIO.Setup/releases/latest
+PawnIO NVIDIA module 0.2.12 - LGPL-2.1-or-later. Module source and license in Service/PawnIO.
+https://github.com/namazso/PawnIO.Modules/tree/0.2.12
 CORSAIR iCUE widget SDK resources - see widget THIRD-PARTY-NOTICES.md.
 
 Dependency license texts and source references resolved from the pinned NuGet packages follow below.

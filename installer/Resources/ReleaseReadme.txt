@@ -2,7 +2,7 @@ RTX LENS - WINDOWS x64
 
 1. Extract this complete ZIP to a local folder.
 2. Run RTXLens-Setup-<version>-win-x64.exe. Administrator approval is required.
-3. Keep the required monitoring service selected. The desktop app/configurator is optional.
+3. Setup includes the monitoring service. The desktop app and PawnIO temperature driver are selected by default on a new installation. Clear either checkbox to skip it.
 4. Import rtxlens.icuewidget manually through iCUE's Import Widget command.
 5. Open RTX Lens from the Start menu to configure the backend. The app can be closed afterward.
 

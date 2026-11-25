@@ -12,6 +12,7 @@ const template = `
             <div class="heading-text"><h1 class="panel-title"></h1><p class="panel-source"></p></div></div>
         <div class="panel-actions"><span class="gpu-usage" aria-label="GPU usage"><span>GPU</span><b class="gpu-usage-value"></b></span><span class="core-voltage" aria-label="GPU core voltage">C. VLT <b class="core-voltage-value"></b></span>
             <span class="status-pill" role="status"></span>
+            <b class="widget-clock" title="Local system time" hidden></b>
             <nav class="page-controls" aria-label="Hidden panels"><button type="button" class="previous-panel" aria-label="Previous panel">‹</button><button type="button" class="next-panel" aria-label="Next panel">›</button></nav></div>
     </header>
     <div class="panel-summary"></div>
@@ -149,6 +150,7 @@ export class PanelView {
         element.querySelector('.panel-alert')!.remove();
 
         for (const name of [
+            'widget-clock',
             'panel-title',
             'panel-source',
             'gpu-usage',
@@ -277,7 +279,7 @@ export class PanelView {
             .forEach((button) => button.addEventListener('click', () => metricChanged(slot, button.dataset.metric!)));
     }
 
-    render(data: PanelData): void {
+    render(data: PanelData, localTime: string): void {
         if (getComputedStyle(this.element).display === 'none') {
             return;
         }
@@ -288,6 +290,10 @@ export class PanelView {
         if (this.nodes['panel-source']) {
             setText(this.nodes['panel-source'], data.source);
         }
+
+        const clock = this.nodes['widget-clock']!;
+        clock.hidden = !localTime;
+        if (localTime) setText(clock, localTime);
 
         this.usage?.set(data.gpuUsage);
         this.coreVoltage?.set(data.coreVoltage);

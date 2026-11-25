@@ -3,6 +3,7 @@ param(
     [Parameter(Mandatory)][string] $SetupPath,
     [Parameter(Mandatory)][string] $MsiPath,
     [Parameter(Mandatory)][string] $VcRedistPath,
+    [Parameter(Mandatory)][string] $PawnIoSetupPath,
     [Parameter(Mandatory)][string] $OutputDirectory
 )
 
@@ -15,7 +16,7 @@ New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 
 Invoke-ReleaseCommand $tool @('burn', 'extract', '-acceptEula', 'wix7', $SetupPath, '-o', $OutputDirectory)
 
-foreach ($source in @($MsiPath, $VcRedistPath))
+foreach ($source in @($MsiPath, $VcRedistPath, $PawnIoSetupPath))
 {
     $expected = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
     $matches = @(Get-ChildItem -LiteralPath $OutputDirectory -Recurse -File | Where-Object {
@@ -28,4 +29,4 @@ foreach ($source in @($MsiPath, $VcRedistPath))
     }
 }
 
-Write-Host 'PASS: Setup contains the exact validated MSI and Microsoft redistributable; extraction executed no installer actions.'
+Write-Host 'PASS: Setup contains the exact validated MSI and both verified prerequisites; extraction executed no installer actions.'

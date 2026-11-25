@@ -100,6 +100,18 @@ try {
     await page.waitForFunction(() => document.querySelector('.widget').dataset.connection === 'live');
     const base = { panel1: 'asusPins', panel2: 'asusStatus', panel3: 'msiConnector1', numberLocale: 'en-GB',
         asusCompare: true, wireviewCompare: true, showPeak: true, showAlerts: false };
+    const headerClock = page.locator('#panel1 .widget-clock');
+    for (const [view, panel1] of [['wireview-pro2', 'wireviewPins'], ['wireview-pro2', 'wireviewStatus'],
+            ['asus-astral', 'autoPins'], ['msi-psu', 'msiConnector1'], ['msi-psu', 'msiConnector2'], ['msi-psu', 'msiStatus']]) {
+        await properties({ ...base, panel1, panel2: 'nvidiaStatus', showWidgetClock: true, widgetClockView: view, widgetClockFormat: '12h' });
+        assert.ok(await headerClock.isVisible(), panel1);
+        assert.match(await headerClock.innerText(), /^\d{2}:\d{2} (AM|PM)$/);
+        assert.equal(await page.locator('#panel2 .widget-clock').isVisible(), false);
+    }
+    await properties({ ...base, showWidgetClock: true, widgetClockView: 'msi-psu' });
+    assert.equal(await headerClock.isVisible(), false);
+    await properties(base);
+    assert.equal(await headerClock.isVisible(), false);
     await verifyGpuStatus(page, base, properties, async value => { transform = value; for (const socket of sockets) send(socket); });
     metadata = { ...metadata, revision: 8, configuration: { ...metadata.configuration, widget: { profiles: {
         Default: { panel1: 'nvidiaStatus', showCrossbarClock: 'true', showSystemClock: 'true' },
@@ -155,6 +167,12 @@ try {
         const report = await measure(name);
         assert.equal(report.panels, count, name+' panel count');
         reports.push(report);
+        await properties({ ...base, showWidgetClock: true, widgetClockView: 'asus-astral', widgetClockFormat: '12h' });
+        const clock = await headerClock.boundingBox();
+        const title = await page.locator('#panel1 .panel-heading').boundingBox();
+        const arrows = await page.locator('#panel1 .page-controls').boundingBox();
+        assert.ok(clock && clock.x >= title.x + title.width - 1 && clock.x + clock.width <= width, name + ' clock fits beside title');
+        if (arrows) assert.ok(clock.x + clock.width <= arrows.x + 1, name + ' clock fits before arrows');
     }
     for (const [name, width, height] of [['S-H',840,344], ['S-V',696,416], ['M-H',840,696],
         ['M-V',696,840], ['L-H',1688,696], ['L-V',696,1688], ['XL-H',2536,696], ['XL-V',696,2536]]) {
@@ -165,12 +183,12 @@ try {
         await card.getByText('System', { exact: true }).waitFor();
         reports.push(await measure(name + ' extended clocks at maximum font sizes'));
         if (name === 'M-H') await page.screenshot({ path: join(output, 'GPU-extended-clocks.png') });
-        await properties({ ...base, ...largeFonts, panel1: 'nvidiaStatus', alwaysShowInternalClocks: true });
+        await properties({ ...base, ...largeFonts, panel1: 'nvidiaStatus', alwaysShowInternalClocks: true, showHotspotTemperature: true });
         assert.equal(await card.locator('.clock-page').count(), 0);
         for (const label of ['Core clock', 'Memory clock', 'Crossbar', 'System']) {
             assert.ok(await card.getByText(label, { exact: true }).isVisible());
         }
-        for (const metric of ['vram', 'temperatureCore', 'temperatureMemory', 'fan1', 'fan2']) {
+        for (const metric of ['vram', 'temperatureCore', 'temperatureMemory', 'temperatureHotspot', 'fan1', 'fan2']) {
             assert.ok(await page.locator(`#panel1 .status-row[data-metric="${metric}"] .row-value`).isVisible());
         }
         reports.push(await measure(name + ' all clocks with fans at maximum font sizes'));

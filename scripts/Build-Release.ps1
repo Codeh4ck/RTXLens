@@ -55,6 +55,8 @@ if (-not $VcRedistPath)
 $VcRedistPath = [IO.Path]::GetFullPath($VcRedistPath)
 $vcVersion = Get-VerifiedVcRedistributable $VcRedistPath
 
+$pawnIo = & (Join-Path $PSScriptRoot 'Get-PawnIoSetup.ps1') -Directory (Join-Path $solution '.dist/prerequisites')
+
 Push-Location $solution
 
 try
@@ -147,14 +149,14 @@ try
     }
 
     Invoke-ReleaseCommand dotnet (@('build', 'installer/Bootstrapper/RTXLens.Bootstrapper.wixproj') + $buildProperties +
-        @('-p:BuildProjectReferences=false', "-p:VcRedistPath=$VcRedistPath", "-p:VcRedistVersion=$vcVersion",
+        @('-p:BuildProjectReferences=false', "-p:VcRedistPath=$VcRedistPath", "-p:VcRedistVersion=$vcVersion", "-p:PawnIoSetupPath=$($pawnIo.Path)", "-p:PawnIoSetupVersion=$($pawnIo.Version)",
             "-p:SigningCertificateThumbprint=$SigningCertificateThumbprint", "-p:TimestampUrl=$TimestampUrl", "-p:SignToolPath=$signTool"))
 
     $setup = Join-Path $solution "installer\Bootstrapper\bin\x64\Release\RTXLens-Setup-$Version-win-x64.exe"
 
     if (-not $SkipChecks)
     {
-        & (Join-Path $PSScriptRoot 'Verify-Setup.ps1') -SetupPath $setup -MsiPath $msi -VcRedistPath $VcRedistPath -OutputDirectory (Join-Path $work 'extracted-setup')
+        & (Join-Path $PSScriptRoot 'Verify-Setup.ps1') -SetupPath $setup -MsiPath $msi -VcRedistPath $VcRedistPath -PawnIoSetupPath $pawnIo.Path -OutputDirectory (Join-Path $work 'extracted-setup')
     }
 
     New-Item -ItemType Directory -Path $release -Force | Out-Null
@@ -194,6 +196,9 @@ try
         sourceCommit = $commit
         sourceHasChanges = $sourceHasChanges
         signed = [bool]$SigningCertificateThumbprint
+        pawnIoReleaseTag = $pawnIo.ReleaseTag
+        pawnIoVersion = $pawnIo.Version
+        pawnIoSha256 = $pawnIo.Sha256
         vcRedistVersion = $vcVersion
         vcRedistSha256 = (Get-FileHash -LiteralPath $VcRedistPath -Algorithm SHA256).Hash
         builtAt = [DateTime]::UtcNow.ToString('o')

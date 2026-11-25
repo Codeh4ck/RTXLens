@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 
 export async function verifyGpuStatus(page, base, properties, transform) {
     await page.setViewportSize({ width: 840, height: 696 });
-    await properties({ ...base, panelCount: 'One', panel1: 'nvidiaStatus', showHotspot: true, precision: '2' });
+    await properties({ ...base, panelCount: 'One', panel1: 'nvidiaStatus', showHotspotTemperature: true, precision: '2' });
     await page.waitForFunction(() => document.querySelector('#panel1 .core-voltage-value')?.textContent.replaceAll(' ', '').includes('925.00mV'));
     assert.equal(await page.locator('#panel1 .status-pill').isVisible(), false);
     const cards = page.locator('#panel1 .status-rows > .gpu-card');
@@ -23,8 +23,8 @@ export async function verifyGpuStatus(page, base, properties, transform) {
     assert.ok(cardStyles.every(style => style.border.startsWith('1px solid') && style.borderColor === style.accent),
         'GPU status cards share a visible accent border');
     assert.deepEqual(await page.locator('#panel1 .gpu-temperatures .row-label').allTextContents(),
-        ['Core temp', 'VRAM temp']);
-    assert.match(await page.locator('#panel1 .gpu-temperatures .gpu-reading-columns').innerText(), /62\.0.*70\.0/s);
+        ['Core', 'VRAM', 'Hotspot']);
+    assert.match(await page.locator('#panel1 .gpu-temperatures .gpu-reading-columns').innerText(), /62\.0.*70\.0.*73\.3/s);
     const vram = page.locator('#panel1 .gpu-vram');
     assert.ok(await vram.locator('.gpu-card-title [data-icon="vramusage"]').isVisible());
     assert.ok(await page.locator('#panel1 .gpu-card-title > .icon').evaluateAll(icons => {

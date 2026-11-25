@@ -53,12 +53,19 @@ test('a disabled GenericNvidia source cannot silently switch to ASUS', () => {
     assert.equal(present().coreVoltage, '-');
 });
 
-test('GPU status shows core and VRAM temperatures with one decimal even when hotspot is reported', () => {
+test('GPU temperature columns follow the hotspot preference and the selected temperature unit', () => {
+    const temperatures = (settings, frame) => context(settings, frame).present().rows.filter(row => row.id.startsWith('temperature'));
+    assert.deepEqual(temperatures({}).map(row => row.label), ['Core', 'VRAM']);
     for (const precision of ['0', '1', '2']) {
-        const temperatures = context({ precision, showHotspot: true }).present().rows
-            .filter(row => row.id.startsWith('temperature'));
-        assert.deepEqual(temperatures.map(row => row.text), ['62.0 °C', '70.0 °C']);
+        const rows = temperatures({ precision, showHotspotTemperature: true });
+        assert.deepEqual(rows.map(row => row.label), ['Core', 'VRAM', 'Hotspot']);
+        assert.deepEqual(rows.map(row => row.text), ['62.0 °C', '70.0 °C', '73.3 °C']);
     }
+    const enabled = { showHotspotTemperature: true, temperatureUnit: '°F' };
+    assert.equal(temperatures(enabled).at(-1).text, '163.9 °F');
+    const frame = fixture();
+    frame.sensors = frame.sensors.filter(reading => reading.identity.component !== 'GpuHotspot');
+    assert.equal(temperatures(enabled, frame).at(-1).text, '-');
 });
 
 test('fan duty follows its RPM and can be hidden without changing fan labels', () => {

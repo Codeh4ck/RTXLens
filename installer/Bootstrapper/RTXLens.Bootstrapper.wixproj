@@ -3,7 +3,7 @@
         <OutputType>Bundle</OutputType>
         <OutputName>RTXLens-Setup-$(InstallerVersion)-win-x64</OutputName>
         <OutputPath>bin/x64/$(Configuration)/</OutputPath>
-        <DefineConstants>$(DefineConstants);InstallerVersion=$(InstallerVersion);VcRedistPath=$(VcRedistPath);VcRedistVersion=$(VcRedistVersion)</DefineConstants>
+        <DefineConstants>$(DefineConstants);InstallerVersion=$(InstallerVersion);PawnIoSetupPath=$(PawnIoSetupPath);PawnIoSetupVersion=$(PawnIoSetupVersion);VcRedistPath=$(VcRedistPath);VcRedistVersion=$(VcRedistVersion)</DefineConstants>
     </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="WixToolset.BootstrapperApplications.wixext" />

@@ -1,5 +1,5 @@
 import { chartSettings } from './settings/chartSettings.ts';
-import { MsiId, WireViewId } from './pluginIds.ts';
+import { AsusId, MsiId, WireViewId } from './pluginIds.ts';
 import { UpdateChecker } from './updates/UpdateChecker.ts';
 import { UpdateStateStore } from './updates/UpdateStateStore.ts';
 import { widgetVersion } from './updates/WidgetVersion.ts';
@@ -387,6 +387,8 @@ export class WidgetApplication {
             this.advancePage(1, assigned);
         }
         const activeIndex = assigned.indexOf(this.active);
+        const clockView = this.settings.enabled('showWidgetClock') ? this.settings.text('widgetClockView') : '';
+        let localTime = '';
 
         for (let index = 0; index < this.views.length; index++) {
             const element = document.getElementById(`panel${index + 1}`)!;
@@ -442,7 +444,10 @@ export class WidgetApplication {
                 this.viewKeys[index] = key;
             }
 
-            this.views[index]!.render(data);
+            const gpuStatus = binding.kind === 'status' && binding.pluginId === AsusId;
+            const showClock = binding.pluginId === clockView && !gpuStatus;
+            if (showClock && !localTime) localTime = this.format.localTime(now);
+            this.views[index]!.render(data, showClock ? localTime : '');
         }
 
         this.root.dataset.paged = String(assigned.length > visibleCount);
@@ -450,7 +455,8 @@ export class WidgetApplication {
             'aria-label',
             `${this.store.connection === 'live' ? 'Telemetry connected' : this.store.connectionMessage}. Double tap or press Enter to view backend configuration.`
         );
-        return autoPage ? this.lastPageAt + pageInterval : Infinity;
+        const nextMinute = localTime ? now - now % 60000 + 60000 : Infinity;
+        return Math.min(nextMinute, autoPage ? this.lastPageAt + pageInterval : Infinity);
     }
 
     private destroy(): void {
