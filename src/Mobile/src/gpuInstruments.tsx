@@ -28,6 +28,7 @@ function Metric({ row, inGrid = false }: { row: Row; inGrid?: boolean }) {
   const name = row.label ?? metricLabel(row.reading);
   const value = row.value ?? formatReading(row.reading);
   const internalClock = row.reading.identity.component === 'GpuCrossbar' || row.reading.identity.component === 'GpuSystem';
+
   return <View style={[local.cell, inGrid && local.gridCell]} accessible accessibilityLabel={`${name}, ${value}`}>
     <Text style={local.label}>{name}</Text>
     <Text style={[local.value, internalClock && local.internalClock, value === 'Unavailable' && local.muted]}>
@@ -51,12 +52,15 @@ export function ConnectorSummary({ readings }: { readings: SensorReading[] }) {
   const metrics = readings.some(r => r.identity.component === 'PsuConnector')
     ? connectorMetrics.filter(({ metric }) => readings.some(r => r.identity.metric === metric))
     : connectorMetrics;
+
   const other = readings.filter(r => !connectorMetrics.some(c => c.metric === r.identity.metric));
+
   return <>
     {other.length < readings.length && <View style={local.connectorRow}>
       {metrics.map(({ metric, label }) => {
         const reading = readings.find(r => r.identity.metric === metric);
         const value = formatReading(reading);
+
         return <View key={metric} style={local.connectorCell} accessible accessibilityLabel={`${label}, ${value}`}>
           <Text style={local.label}>{label}</Text>
           <Text adjustsFontSizeToFit minimumFontScale={0.7} numberOfLines={1} style={[local.value, value === 'Unavailable' && local.muted]}>
@@ -82,18 +86,20 @@ export function GpuOverview({ rows, readings, connectorPower }: { rows: Row[]; r
   const total = findMetric(readings, 'GpuMemory', 'MemoryTotal')?.value;
   const used = memory?.reading.quality === 'Valid' ? memory.reading.value : null;
   const memoryLoad = rows.find(({ reading: r }) => r.identity.component === 'GpuMemory' && r.identity.metric === 'Utilization');
-  const memoryRatio = used != null && total != null && total > 0 ? used / total
-    : memoryLoad?.reading.quality === 'Valid' && memoryLoad.reading.value != null ? memoryLoad.reading.value / 100 : null;
+  const memoryRatio = used != null && total != null && total > 0 ? used / total : memoryLoad?.reading.quality === 'Valid' && memoryLoad.reading.value != null ? memoryLoad.reading.value / 100 : null;
   const memoryValue = used != null && memory ? memory.value ?? formatReading(memory.reading) : undefined;
   const electrical: Row[] = [];
+
   if (connectorPower) electrical.push({ reading: connectorPower, label: 'Connector power' });
   if (voltage) electrical.push(voltage);
+
   const percent = usage?.reading.quality === 'Valid' ? usage.reading.value : null;
   const clocks = rows.filter(({ reading }) => reading.identity.metric === 'Clock');
   const temps = rows.filter(({ reading }) => reading.identity.metric === 'Temperature');
   const fans = rows.filter(({ reading }) => reading.identity.component === 'GpuFan');
-  const other = rows.filter(row => row !== usage && row !== voltage && row !== memory && row !== memoryLoad &&
-    !clocks.includes(row) && !temps.includes(row) && !fans.includes(row));
+  const other = rows.filter(row => row !== usage && row !== voltage && row !== memory && row !== memoryLoad && !clocks.includes(row) && !temps.includes(row) && !fans.includes(row));
+
+  
   return <>
     {(usage || electrical.length > 0 || memory || memoryLoad) && <Card title="GPU status" icon="gpu"><View style={local.hero}>
       {usage && <View style={local.gauge} accessible accessibilityLabel={`GPU usage, ${formatReading(usage.reading)}`}>
@@ -137,8 +143,8 @@ export function BoardPower({ watts, limit }: { watts: SensorReading; limit?: Sen
   const { number, formatReading } = useContext(ReadingFormatContext);
   const shared = useStyles();
   const local = useThemeStyles(styles);
-  const ratio = watts.quality === 'Valid' && watts.value != null && limit?.value != null && limit.value > 0
-    ? watts.value / limit.value : null;
+  const ratio = watts.quality === 'Valid' && watts.value != null && limit?.value != null && limit.value > 0 ? watts.value / limit.value : null;
+
   return <View style={local.power}>
     <Text style={local.label}>Board power</Text><Text style={local.headline}>{formatReading(watts)}</Text>
     {ratio !== null && <><Meter ratio={ratio} />
@@ -150,8 +156,9 @@ export function LinkLanes({ readings }: { readings: SensorReading[] }) {
   const local = useThemeStyles(styles);
   const current = findMetric(readings, 'GpuPcie', 'LinkWidth')?.value;
   const max = findMetric(readings, 'GpuPcie', 'MaximumLinkWidth')?.value;
-  if (current == null || max == null || !Number.isInteger(max) || !Number.isInteger(current) ||
-    max < 1 || max > 32 || current < 0 || current > max) return null;
+
+  if (current == null || max == null || !Number.isInteger(max) || !Number.isInteger(current) || max < 1 || max > 32 || current < 0 || current > max) return null;
+  
   return <View style={local.lanes} accessible accessibilityLabel={`${current} of ${max} PCIe lanes active`}>
     {Array.from({ length: max }, (_, i) => <View key={i} style={[local.lane, i < current && local.activeLane]} />)}
   </View>;

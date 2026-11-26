@@ -40,21 +40,27 @@ const pairingMessages = {
 export default function App() {
   const [appearance, setAppearance] = useState(defaultAppearance);
   const [ready, setReady] = useState(false);
+
   const writes = useRef(Promise.resolve());
+
   useEffect(() => {
     void SecureStore.getItemAsync('rtxlens.appearance').then(raw => {
       if (raw) setAppearance(decodeAppearance(raw));
     }).catch(() => {}).finally(() => setReady(true));
   }, []);
+
   const palette = useMemo(() => themeColors(appearance), [appearance]);
+  
   function save(next: Appearance) {
     const pending = writes.current.then(async () => {
       await SecureStore.setItemAsync('rtxlens.appearance', JSON.stringify(next));
       setAppearance(next);
     });
+
     writes.current = pending.catch(() => {});
     return pending;
   }
+
   return <ThemeContext.Provider value={palette}><SafeAreaProvider>
     <StatusBar style={isLight(palette.background) ? 'dark' : 'light'} />
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.background }} edges={['top', 'left', 'right']}>
@@ -62,6 +68,7 @@ export default function App() {
     </SafeAreaView>
   </SafeAreaProvider></ThemeContext.Provider>;
 }
+
 function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance; saveAppearance: (next: Appearance) => Promise<void> }) {
   const styles = useStyles();
   const local = useThemeStyles(createLocalStyles);
@@ -93,18 +100,22 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
   const canNotify = useRef(false);
   const preferences = useMobilePreferences();
   const { notificationRef, loaded: preferencesLoaded } = preferences;
+
   const { progress, frame, destination, live, retry } = usePcConnection(
     computer, active, network.type, preferencesLoaded, receiveFrame,
   );
+
   const localAddress = live && wifi && computer ? localSwitchAddress(computer, destination) : null;
   const push = useLockScreenNotifications(computer, destination?.address, live, notificationRef, preferencesLoaded && !preferences.error);
   const canStartPairing = !scanning && pairing === null && !openingCamera && !push.busy;
 
   useEffect(() => {
     let live = true;
+
     void SecureStore.getItemAsync(computerKey).then(value => {
       if (live && value) {
         const saved = decodeSavedComputer(value);
+
         setComputer(saved);
         if (!saved) setSavedPairingError('Your saved pairing couldn’t be restored.');
       }
@@ -136,6 +147,7 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
         setNotifications(value);
       }
     }).catch(() => {});
+
     return () => { live = false; };
   }, [active]);
 
@@ -145,13 +157,12 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
         setNotificationLink(previous => ({ index: (previous?.index ?? 0) + 1, incident }));
         setTab('warnings');
       });
+
       return () => subscription.remove();
     }
   }, []);
 
-  useEffect(() => {
-    if (live) setLastReadingsVisible(false);
-  }, [live]);
+  useEffect(() => { if (live) setLastReadingsVisible(false); }, [live]);
 
   function receiveFrame(nextFrame: SensorFrame) {
     if (nextFrame.simulationWarnings.length > 0) {
@@ -163,12 +174,14 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
 
     for (const warning of warningEvents.current.receive(nextFrame)) {
       const options = notificationRef.current;
+     
       if (canNotify.current && !push.registered.current && allowsWarning(options, warning.category)) {
         const title = options.showTitle ? (warning.simulation ? `Simulation · ${warning.title}` : warning.title)
           : warning.simulation ? 'RTX Lens simulation' : 'RTX Lens warning';
+
         const detail = options.showTitle ? warning.detail : 'Open RTX Lens to view the alert.';
-        void showWarningNotification(title, detail, warning.incident)
-          .catch(() => setNotificationError('Could not show a system notification.'));
+
+        void showWarningNotification(title, detail, warning.incident).catch(() => setNotificationError('Could not show a system notification.'));
       }
     }
   }
@@ -180,25 +193,27 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
     const native = transport;
     const address = localAddress;
     const { publicKeyFingerprint, token } = computer;
+
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     async function probe() {
       try {
         const reply = await native.get(address, publicKeyFingerprint, mobileProtocol.Session, token);
+
         if (disposed) return;
+
         if (sessionResult(reply) === 'connect') {
           setOfferLocalConnection(true);
           return;
         }
-      } catch {
-        // The PC can still be reached via its current connection.
-      }
+      } catch { }
 
       if (!disposed) timer = setTimeout(() => void probe(), localProbeInterval);
     }
 
     void probe();
+
     return () => {
       disposed = true;
       clearTimeout(timer);
@@ -212,14 +227,19 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
 
   async function startScan() {
     if (cameraRequest.current || !canStartPairing) return;
+
     const request = new AbortController();
     cameraRequest.current = request;
+
     setOpeningCamera(true);
     setError(null);
     setPairingNetworkDenied(false);
+
     try {
       const access = permission?.granted ? permission : await requestPermission();
+
       if (request.signal.aborted) return;
+
       if (!access.granted) {
         setError('Allow camera access in Settings to scan the pairing code.');
         return;
@@ -243,15 +263,19 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
     }
 
     scanReady.current = false;
+
     setScanning(false);
     setError(null);
+
     const native = transport;
     const job = new AbortController();
+
     pairingJob.current = job;
 
     try {
       const code = decodePairingCode(data);
       setPairing('contacting');
+
       const device = Platform.OS === 'ios' ? 'iPhone' : 'Android phone';
       const paired = await requestPairing(code, device,
         (path, json) => native.post(code.localAddress, code.publicKeyFingerprint, path, json),
@@ -259,12 +283,15 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
 
       if (paired && !job.signal.aborted) {
         setPairing('saving');
+
         await SecureStore.setItemAsync(computerKey, JSON.stringify(paired), {
           keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
         });
+
         if (job.signal.aborted) return;
 
         const oldAlertsRemoved = !computer || await push.forgetRegistration().catch(() => false);
+
         if (push.available) await enableNotifications(paired.token);
         if (job.signal.aborted) return;
 
@@ -272,9 +299,12 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
         setLastReadingsVisible(false);
         setNotificationLink(null);
         setSimulations([]);
+
         warningEvents.current = new WarningEvents();
+
         setComputer(paired);
         setTab('home');
+
         if (!oldAlertsRemoved) {
           setError('Revoke the previous pairing in Mobile Access on your PC if it is still listed.');
         }
@@ -284,11 +314,13 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
         if (failure instanceof Error && 'code' in failure && failure.code === 'LOCAL_NETWORK_DENIED') {
           setPairingNetworkDenied(true);
         }
+
         setError(failure instanceof Error ? failure.message : 'Pairing failed.');
       }
     } finally {
       if (pairingJob.current === job) {
         pairingJob.current = null;
+
         setPairing(null);
       }
     }
@@ -297,9 +329,11 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
   function cancelPairing() {
     scanReady.current = false;
     setScanning(false);
+
     cameraRequest.current?.abort();
     cameraRequest.current = null;
     setOpeningCamera(false);
+
     pairingJob.current?.abort();
     pairingJob.current = null;
     setPairing(null);
@@ -309,11 +343,13 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
     try {
       const registrationRemoved = await push.forgetRegistration();
       await SecureStore.deleteItemAsync(computerKey);
+
       setComputer(null);
       setLastReadingsVisible(false);
       setError(registrationRemoved ? null : 'Revoke this phone in Mobile Access on your PC to stop its notifications.');
       setNotificationLink(null);
       setSimulations([]);
+
       warningEvents.current = new WarningEvents();
     } catch {
       setError('The pairing could not be removed from this phone.');
@@ -324,17 +360,22 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
     if (next !== 'settings' && pairing !== 'saving' && (scanning || pairing || openingCamera)) {
       cancelPairing();
     }
+
     if (next !== tab) setLastReadingsVisible(false);
     if (next !== 'warnings') setNotificationLink(null);
+
     setTab(next);
   }
 
   async function enableNotifications(newPairingToken?: string) {
     setNotificationError(null);
+
     try {
       const value = await notificationPermission(true);
       canNotify.current = value === 'granted';
+
       setNotifications(value);
+
       if (value === 'granted' && newPairingToken) {
         await push.saveEnabledPairing(newPairingToken);
       }
@@ -345,6 +386,7 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
 
   async function saveNotificationPreferences(value: NotificationPreferences) {
     await preferences.saveNotifications(value);
+
     if (push.enabled && live && !await push.applyPreferences(value)) {
       throw new Error('Saved on this phone. Reconnect to sync lock-screen preferences with your PC.');
     }
@@ -354,15 +396,18 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
   const showLastReadings = !live && lastReadingsVisible && frame !== null;
   const showTelemetry = live || showLastReadings;
   const hasRemote = computer !== null && computer.localAddress !== computer.remoteAddress;
+
   const connectionCard = <ConnectionCard progress={progress} savedPairingError={savedPairingError} hasRemote={hasRemote}
     onPair={openPairing} onSystemSettings={() => void Linking.openSettings()}
     onSettings={() => navigate('settings')} onCheck={() => { navigate('settings'); retry(); }}
     onLastReadings={frame && !live ? () => setLastReadingsVisible(visible => !visible) : undefined}
     showingLastReadings={showLastReadings} />;
+
   const canViewDemo = loaded && !computer && !savedPairingError && canStartPairing;
   if (demo && canViewDemo) {
     return <DemoSession appearance={appearance} active={active} exit={() => { setDemo(false); navigate('home'); }} />;
   }
+
   const demoButton = canViewDemo && <Button icon="monitor" label="View demo" onPress={() => setDemo(true)} />;
   let content: ReactNode;
 
@@ -382,6 +427,7 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
               await SecureStore.setItemAsync(computerKey, JSON.stringify(updated), {
                 keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
               });
+              
               setError(null);
               setComputer(updated);
               retry();

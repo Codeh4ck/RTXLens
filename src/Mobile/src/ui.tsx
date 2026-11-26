@@ -51,6 +51,7 @@ const paths = {
 
 export type IconName = keyof typeof paths;
 export type Tab = 'home' | 'power' | 'gpu' | 'warnings' | 'settings';
+
 const tabs: { id: Tab; label: string }[] = [
   { id: 'power', label: 'Power' }, { id: 'gpu', label: 'GPU' }, { id: 'home', label: 'Home' },
   { id: 'warnings', label: 'Warnings' }, { id: 'settings', label: 'Settings' },
@@ -58,6 +59,7 @@ const tabs: { id: Tab; label: string }[] = [
 
 export function Icon({ name, color, size = 20 }: { name: IconName; color?: string; size?: number }) {
   const colors = useColors();
+
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d={paths[name]} stroke={color ?? colors.accent} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
@@ -71,6 +73,7 @@ export function BottomNavigation({ selected, warningCount, onSelect }: {
   const styles = useStyles();
   const colors = useColors();
   const { bottom } = useSafeAreaInsets();
+
   return (
     <View style={[styles.dock, { paddingBottom: bottom }]}>
       <View accessibilityRole="tablist" style={styles.navigation}>
@@ -79,6 +82,7 @@ export function BottomNavigation({ selected, warningCount, onSelect }: {
           const home = id === 'home';
           const badge = id === 'warnings' && warningCount > 0;
           const ink = active ? colors.accent : colors.muted;
+
           return (
             <Pressable key={id} accessibilityRole="tab" accessibilityState={{ selected: active }}
               accessibilityLabel={badge ? `${label}, ${warningCount} active` : label}
@@ -103,6 +107,7 @@ export function BottomNavigation({ selected, warningCount, onSelect }: {
 
 export function Page({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   const styles = useStyles();
+
   return (
     <ScrollView contentContainerStyle={styles.page}>
       <View style={styles.pageHeader}>
@@ -120,6 +125,7 @@ export function Card({ title, icon, compact = false, onPress, children }: {
   const styles = useStyles();
   const colors = useColors();
   const onLongPress = useHomeLongPress();
+
   const content = <>
     <View style={[styles.cardHeader, compact && styles.compactHeader, children == null && styles.emptyCardHeader]}>
       {icon && <View style={[styles.cardIcon, compact && styles.compactIcon]}><Icon name={icon} size={compact ? 14 : 18} /></View>}
@@ -143,6 +149,7 @@ export function Card({ title, icon, compact = false, onPress, children }: {
 
 export function PanelList({ children }: { children: ReactNode }) {
   const styles = useStyles();
+
   return (
     <View>
       {Children.toArray(children).map((row, index) => (
@@ -158,7 +165,9 @@ export function Button({ icon, label, accessibilityLabel, variant = 'secondary',
   const styles = useStyles();
   const colors = useColors();
   const onLongPress = useHomeLongPress();
+
   const color = variant === 'primary' ? colors.onAccent : variant === 'danger' ? colors.danger : colors.text;
+
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled }} disabled={disabled} onLongPress={onLongPress} delayLongPress={420} onPress={onPress}
       style={({ pressed }) => [styles.button, variant === 'primary' && styles.primaryButton, (pressed || disabled) && styles.pressed]}>
@@ -173,6 +182,7 @@ export function Selection<T extends string>({ options, selected, onSelect }: {
 }) {
   const styles = useStyles();
   const onLongPress = useHomeLongPress();
+
   return (
     <View style={styles.selection}>
       {options.map(option => (
@@ -187,6 +197,7 @@ export function Selection<T extends string>({ options, selected, onSelect }: {
 
 export function Notice({ children }: { children: string }) {
   const styles = useStyles();
+  
   return <Text accessibilityRole="alert" style={styles.notice}>{children}</Text>;
 }
 

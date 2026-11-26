@@ -16,9 +16,15 @@ export function AppearanceSettings({ value, save, editHome, canEditHome }: {
   const [error, setError] = useState('');
   const [showSchemes, setShowSchemes] = useState(false);
   const [picking, setPicking] = useState<keyof Palette | null>(null);
+
   async function change(next: Appearance) {
-    try { await save(next); setError(''); }
-    catch { setError('Could not save appearance settings.'); }
+    try { 
+      await save(next);
+      setError('');
+    }
+    catch { 
+      setError('Could not save appearance settings.');
+    }
   }
 
   return <Card title="Appearance" icon="palette">
@@ -37,6 +43,7 @@ export function AppearanceSettings({ value, save, editHome, canEditHome }: {
     {showSchemes && <Sheet title="Color scheme" close={() => setShowSchemes(false)}>
       {schemeNames.map(scheme => {
         const selected = scheme === value.scheme;
+
         return (
           <Pressable key={scheme} accessibilityRole="button" accessibilityState={{ selected }} onPress={() => {
             setShowSchemes(false);
@@ -50,6 +57,7 @@ export function AppearanceSettings({ value, save, editHome, canEditHome }: {
             <View style={{ width: 18 }}>{selected && <Icon name="check" size={18} />}</View>
           </Pressable>
         );
+        
       })}
     </Sheet>}
     {value.scheme === 'Custom' && <>

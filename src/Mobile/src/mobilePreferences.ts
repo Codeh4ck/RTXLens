@@ -35,8 +35,10 @@ export function homePanelKey(panel: HomePanel): string {
 
 export function moveHomePanel(panels: HomePanel[], index: number, target: number): HomePanel[] {
   if (!panels[index] || !panels[target]) return panels;
+
   const reordered = [...panels];
   reordered.splice(target, 0, reordered.splice(index, 1)[0]);
+
   return reordered;
 }
 
@@ -47,10 +49,12 @@ function readHomePanel(value: unknown): HomePanel | null {
     const card = homeCards.find(card => card.id === value.id);
     return card ? { kind: 'metric', id: card.id } : null;
   }
+
   if (value.kind === 'pins' && 'pluginId' in value && typeof value.pluginId === 'string' && 'deviceId' in value
     && typeof value.deviceId === 'string' && 'connectorId' in value && (value.connectorId === null || typeof value.connectorId === 'string')) {
     return { kind: 'pins', pluginId: value.pluginId, deviceId: value.deviceId, connectorId: value.connectorId };
   }
+
   return null;
 }
 
@@ -59,6 +63,7 @@ export function decodeDisplayPreferences(value: string): DisplayPreferences {
   if (typeof parsed !== 'object' || parsed === null) throw new Error('Invalid display preferences.');
 
   let panels = defaultDisplayPreferences.homePanels;
+
   if ('homePanels' in parsed && Array.isArray(parsed.homePanels)) {
     const saved = parsed.homePanels.map(readHomePanel).filter(panel => panel !== null);
     panels = Array.from(new Map(saved.map(panel => [homePanelKey(panel), panel])).values());
@@ -67,7 +72,6 @@ export function decodeDisplayPreferences(value: string): DisplayPreferences {
     panels = panels.filter(panel => panel.kind === 'metric' && saved.includes(panel.id));
   }
 
-  // Older dashboards always displayed the status panel above the saved cards.
   if (!('layoutVersion' in parsed) && !panels.some(panel => panel.kind === 'metric' && panel.id === 'status')) {
     panels = [{ kind: 'metric', id: 'status' }, ...panels];
   }
@@ -86,11 +90,13 @@ export const defaultNotificationPreferences: NotificationPreferences = {
 
 export function decodeNotificationPreferences(value: string): NotificationPreferences {
   const parsed: unknown = JSON.parse(value);
+
   if (typeof parsed === 'object' && parsed !== null && 'categories' in parsed && 'showTitle' in parsed
     && typeof parsed.categories === 'number' && Number.isInteger(parsed.categories)
     && parsed.categories >= 0 && parsed.categories <= defaultNotificationPreferences.categories && typeof parsed.showTitle === 'boolean') {
     return { categories: parsed.categories, showTitle: parsed.showTitle };
   }
+  
   throw new Error('Invalid notification preferences.');
 }
 

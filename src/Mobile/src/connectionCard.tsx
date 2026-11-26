@@ -63,25 +63,25 @@ export function ConnectionCard({ progress, savedPairingError, settings, hasRemot
 }) {
   const styles = useStyles();
   const colors = useColors();
+
   const { stage, route, checks } = progress;
+
   const info = stages[stage];
   const busy = stage === 'checking' || stage === 'opening-stream' || stage === 'waiting-for-readings';
   const pairingNeeded = stage === 'idle' || stage === 'revoked';
   const routes: Destination['route'][] = hasRemote ? ['local', 'remote'] : ['local'];
   const showChecks = settings && stage !== 'idle' && routes.some(candidate => checks[candidate] !== undefined);
   const showSettings = !settings && (busy || stage === 'offline' || stage === 'local-network-denied');
-  const detail = stage === 'unreachable' && !hasRemote ? 'Connect to the same network as your PC and check that Mobile Access is enabled.'
-    : info.detail;
+  const detail = stage === 'unreachable' && !hasRemote ? 'Connect to the same network as your PC and check that Mobile Access is enabled.' : info.detail;
 
   let action: ReactNode;
+
   if (pairingNeeded) {
-    action = <Button icon="scan" label={stage === 'revoked' || savedPairingError ? 'Pair again' : 'Scan pairing code'}
-      variant="primary" onPress={onPair} />;
+    action = <Button icon="scan" label={stage === 'revoked' || savedPairingError ? 'Pair again' : 'Scan pairing code'} variant="primary" onPress={onPair} />;
   } else if (stage === 'local-network-denied') {
     action = <Button icon="settings" label="Open system settings" variant="primary" onPress={onSystemSettings} />;
   } else if (stage === 'changed-key') {
-    action = settings ? <Button icon="scan" label="Pair again" onPress={onPair} />
-      : <Button icon="settings" label="Check addresses" variant="primary" onPress={onSettings} />;
+    action = settings ? <Button icon="scan" label="Pair again" onPress={onPair} /> : <Button icon="settings" label="Check addresses" variant="primary" onPress={onSettings} />;
   } else if (stage !== 'live' && !busy && stage !== 'offline') {
     action = <Button icon="refresh" label={settings ? 'Retry now' : 'Check connection'} variant="primary" onPress={onCheck} />;
   }
@@ -91,8 +91,7 @@ export function ConnectionCard({ progress, savedPairingError, settings, hasRemot
       <View accessibilityLiveRegion="polite" style={styles.row}>
         {busy && <ActivityIndicator size="small" color={colors.accent} />}
         <Text style={[styles.caption, { flexShrink: 1 }]}>
-          {savedPairingError ?? (stage === 'live' && route ? `Receiving readings via ${routeNames[route].toLowerCase()}.`
-            : busy && route ? `${routeNames[route]} · ${info.check}` : detail)}
+          {savedPairingError ?? (stage === 'live' && route ? `Receiving readings via ${routeNames[route].toLowerCase()}.` : busy && route ? `${routeNames[route]} · ${info.check}` : detail)}
         </Text>
       </View>
       {showChecks && <PanelList>{routes.map(candidate => (
@@ -107,8 +106,7 @@ export function ConnectionCard({ progress, savedPairingError, settings, hasRemot
       {stage === 'idle' && savedPairingError && <Text style={styles.caption}>{info.detail}</Text>}
       {showSettings &&
         <Button icon="settings" label="Connection settings" onPress={onSettings} />}
-      {onLastReadings && <Button icon="clock" label={showingLastReadings ? 'Hide last readings' : 'View last readings'}
-        onPress={onLastReadings} />}
+      {onLastReadings && <Button icon="clock" label={showingLastReadings ? 'Hide last readings' : 'View last readings'} onPress={onLastReadings} />}
       {children}
     </Card>
   );

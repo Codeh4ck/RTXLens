@@ -27,15 +27,18 @@ export function isPin(reading: SensorReading) {
 
 export function groupMetrics(sensors: SensorReading[], kind: 'power' | 'gpu'): MetricGroup[] {
   const groups = new Map<string, MetricGroup>();
+
   for (const sensor of sensors) {
     const { pluginId, deviceId, component } = sensor.identity;
     const isPower = isPin(sensor) || ['GpuConnector', 'PsuConnector', 'MonitorBoard', 'ExternalProbe', 'Psu'].includes(component);
+
     if (isPower !== (kind === 'power')) {
       continue;
     }
 
     const key = JSON.stringify([pluginId, deviceId]);
     const existing = groups.get(key);
+
     if (existing) {
       existing.readings.push(sensor);
     } else {
@@ -49,6 +52,7 @@ export function groupMetrics(sensors: SensorReading[], kind: 'power' | 'gpu'): M
     .sort((left, right) => left.name.localeCompare(right.name) || left.key.localeCompare(right.key))
     .map(group => {
       const index = (labels.get(group.name) ?? 0) + 1;
+
       labels.set(group.name, index);
       return index === 1 ? group : { ...group, name: `${group.name} ${index}` };
     });
@@ -67,60 +71,68 @@ export function hardwareTabGroups(sensors: SensorReading[], kind: 'power' | 'gpu
       && other.channel === identity.channel && other.connectorId === identity.connectorId)));
 }
 
-// NVIDIA and Astral use the same adapter ID from the shared hardware reader.
+// NVIDIA and Astral use the same adapter ID from the shared hardware reader
 export function gpuDeviceGroups(sensors: SensorReading[]): MetricGroup[] {
   const devices = new Map<string, { group: MetricGroup; metrics: Map<string, SensorReading> }>();
+
   for (const group of groupMetrics(sensors, 'gpu')) {
     const sharedAdapter = group.source === AsusId || group.source === NvidiaId;
     const key = sharedAdapter ? JSON.stringify(['gpu', group.readings[0].identity.deviceId]) : group.key;
     const device = devices.get(key) ?? { group, metrics: new Map<string, SensorReading>() };
+
     if (group.source === NvidiaId) device.group = group;
+
     for (const reading of group.readings) {
       const { component, metric, channel, connectorId } = reading.identity;
       const slot = JSON.stringify([component, metric, channel, connectorId]);
       const previous = device.metrics.get(slot);
       const valid = reading.quality === 'Valid' && reading.value !== null;
+
       if (!previous || (valid && (previous.quality !== 'Valid' || previous.value === null || group.source === NvidiaId))) {
         device.metrics.set(slot, reading);
       }
     }
+
     devices.set(key, device);
   }
+
   return Array.from(devices, ([key, { group, metrics }]) => ({ ...group, key, readings: [...metrics.values()] }));
 }
 
 export function gpuConnectorPower(sensors: SensorReading[], selectedKey: string | null | undefined, deviceId: string, onlyGpu: boolean) {
-  const connectors = sensors.filter(({ identity }) => identity.metric === 'Power'
-    && (identity.component === 'GpuConnector' || identity.component === 'PsuConnector'));
-  const sameAdapter = (r: SensorReading) => (r.identity.pluginId === NvidiaId || r.identity.pluginId === AsusId)
-    && r.identity.deviceId === deviceId;
+  const connectors = sensors.filter(({ identity }) => identity.metric === 'Power' && (identity.component === 'GpuConnector' || identity.component === 'PsuConnector'));
+  const sameAdapter = (r: SensorReading) => (r.identity.pluginId === NvidiaId || r.identity.pluginId === AsusId) && r.identity.deviceId === deviceId;
+
   if (selectedKey === undefined) {
     const local = connectors.filter(sameAdapter);
-    return local.find(r => r.quality === 'Valid' && r.value !== null && r.identity.pluginId === NvidiaId)
-      ?? local.find(r => r.quality === 'Valid' && r.value !== null);
+    return local.find(r => r.quality === 'Valid' && r.value !== null && r.identity.pluginId === NvidiaId) ?? local.find(r => r.quality === 'Valid' && r.value !== null);
   }
+
   const selected = connectors.find(r => r.identity.key === selectedKey);
   if (!selected) return undefined;
-  // External meters have no GPU adapter ID. A global selection is ambiguous with multiple GPUs.
+
   if (selected.identity.pluginId === AsusId || selected.identity.pluginId === NvidiaId) return sameAdapter(selected) ? selected : undefined;
   return onlyGpu ? selected : undefined;
 }
 
 export function findMetric(sensors: SensorReading[], component: string, metric: string, channel?: number) {
-  return sensors.find(sensor => sensor.identity.component === component && sensor.identity.metric === metric
+  return sensors.find(sensor => sensor.identity.component === component && sensor.identity.metric === metric 
     && (channel === undefined || channel === sensor.identity.channel) && sensor.quality === 'Valid' && sensor.value !== null);
 }
 
 export function powerConnectorGroups(group: MetricGroup, hideIdleMsiConnectors: boolean) {
   const byConnector = new Map<string | null, SensorReading[]>();
+
   for (const reading of group.readings) {
     const id = reading.identity.connectorId;
     const existing = byConnector.get(id);
+
     if (existing) existing.push(reading);
     else byConnector.set(id, [reading]);
   }
 
   const connectors = [...byConnector];
+
   return hideIdleMsiConnectors && group.source === MsiId
     ? connectors.filter(([id, readings]) => id === null || findMetric(readings, 'PsuConnector', 'Current')?.value !== 0)
     : connectors;
@@ -135,8 +147,10 @@ export function pinCurrentSummary(readings: SensorReading[]) {
     if (identity.metric !== 'Current' || quality !== 'Valid' || value === null || !Number.isFinite(value)) continue;
 
     const pin = { channel: identity.channel, value };
+
     if (!high || value > high.value) high = pin;
     if (!low || value < low.value) low = pin;
+
     count++;
   }
 
@@ -149,13 +163,16 @@ export function pinPanelTitle(panel: HomePinPanel, deviceName = sourceName(panel
 
 export function pinPanelSources(groups: MetricGroup[]) {
   const sources = new Map<string, { panel: HomePinPanel; title: string; pins: SensorReading[] }>();
+
   for (const group of groups) {
     for (const [connectorId, readings] of powerConnectorGroups(group, false)) {
       const pins = readings.filter(reading => isPin(reading) && pinMetrics.some(metric => metric === reading.identity.metric));
+
       if (pins.length === 0) continue;
 
       const { pluginId, deviceId } = pins[0].identity;
       const panel: HomePinPanel = { kind: 'pins', pluginId, deviceId, connectorId };
+
       sources.set(homePanelKey(panel), { panel, title: pinPanelTitle(panel, group.name), pins });
     }
   }
@@ -188,22 +205,27 @@ export function gpuStatusRows(readings: SensorReading[], format = formatReading)
   const other: GpuStatusRow[] = [];
   const fans = new Map<number, { reading: SensorReading; speed?: SensorReading; duty?: SensorReading }>();
   const memoryTotal = findMetric(readings, 'GpuMemory', 'MemoryTotal');
+
   for (const reading of readings) {
     const { component, metric, channel } = reading.identity;
-    if (isGpuPowerReading(reading) || component === 'GpuPcie' || component === 'GpuPerformance'
-      || metric === 'MemoryTotal' || metric === 'MemoryFree') continue;
+
+    if (isGpuPowerReading(reading) || component === 'GpuPcie' || component === 'GpuPerformance' || metric === 'MemoryTotal' || metric === 'MemoryFree') continue;
+
     if (metric === 'Clock' && gpuClockLabels.has(component)) {
       clocks.set(component, { reading });
     } else if (component === 'GpuFan' && (metric === 'FanSpeed' || metric === 'FanDuty')) {
       const index = channel ?? 1;
       const fan = fans.get(index) ?? { reading };
+
       if (metric === 'FanSpeed') fan.speed = reading;
       else fan.duty = reading;
+
       fans.set(index, fan);
     } else if (metric === 'MemoryUsed' && memoryTotal && reading.quality === 'Valid' && reading.value !== null) {
       const used = format(reading);
       const total = format(memoryTotal);
       const unit = total.slice(total.lastIndexOf(' '));
+
       other.push({ reading, value: `${used.endsWith(unit) ? used.slice(0, -unit.length) : used} / ${total}` });
     } else {
       other.push({ reading });
@@ -211,27 +233,36 @@ export function gpuStatusRows(readings: SensorReading[], format = formatReading)
   }
 
   const rows: GpuStatusRow[] = [];
+
   for (const component of gpuClockLabels.keys()) {
     const clock = clocks.get(component);
     if (clock) rows.push(clock);
   }
+
   rows.push(...other);
+
   for (const [index, { reading, speed, duty }] of [...fans].sort(([a], [b]) => a - b)) {
     const rpm = format(speed);
     const hasDuty = duty?.quality === 'Valid' && duty.value !== null;
+
     let value = rpm;
+
     if (hasDuty) {
       const percent = format(duty);
       value = speed?.quality === 'Valid' && speed.value !== null ? `${rpm} (${percent})` : `${percent} duty`;
     }
+
     rows.push({ reading, label: `Fan ${index}`, value });
   }
+
   return rows;
 }
 
 export function metricLabel({ identity }: SensorReading) {
   const { component, metric, channel } = identity;
+
   if (metric === 'Clock') return gpuClockLabels.get(component) ?? words(metric);
+
   if (metric === 'Temperature') {
     if (component === 'GpuCore') return 'Core temperature';
     if (component === 'GpuMemory') return 'VRAM temperature';
@@ -240,24 +271,29 @@ export function metricLabel({ identity }: SensorReading) {
     if (component === 'ExternalProbe') return channel == null ? 'External temperature' : `Ext. ${channel} temperature`;
     if (component === 'Psu') return 'PSU temperature';
   }
+
   if (component === 'GpuCore') {
     if (metric === 'Voltage') return 'Core voltage';
     if (metric === 'Utilization') return 'GPU usage';
   }
+
   if (component === 'GpuMemory') {
     if (metric === 'Utilization') return 'Memory usage';
   }
+
   if (component === 'GpuFan' || component === 'Psu') {
     const fan = component === 'Psu' ? 'PSU fan' : `Fan ${channel ?? 1}`;
     if (metric === 'FanSpeed') return fan;
     if (metric === 'FanDuty') return `${fan} duty`;
     if (metric === 'FanAutomatic') return `${fan} mode`;
   }
+
   if (component === 'GpuBoard' && metric === 'Power') return 'GPU board power';
   if (component === 'GpuConnector' || component === 'PsuConnector') {
     if (metric === 'Power') return 'Connector power';
     if (metric === 'Current') return 'Total current';
   }
+
   return Object.hasOwn(labels, metric) ? labels[metric] : words(metric);
 }
 
@@ -277,6 +313,7 @@ const faultNames = ['Overtemperature', 'Overcurrent', 'Wire overcurrent', 'Overp
 export function wireViewFaults(readings: SensorReading[]) {
   const active = findMetric(readings, 'MonitorBoard', 'FaultStatus')?.value;
   const logged = findMetric(readings, 'MonitorBoard', 'FaultLog')?.value;
+
   return [...faultNames.map((name, index) => ({ name, mask: 2 << index })),
     { name: 'Unrecognized device fault', mask: 0xffff & ~0x3e }].flatMap(({ name, mask }) => {
       const isActive = ((active ?? 0) & mask) !== 0;
@@ -289,15 +326,18 @@ export function boostLimitRows(readings: SensorReading[]) {
   const active = findMetric(readings, 'GpuPerformance', 'ActiveClockReasons')?.value;
   const supported = findMetric(readings, 'GpuPerformance', 'SupportedClockReasons')?.value;
   const mask = (1 << clockReasons.length) - 1;
+
   const rows = clockReasons.flatMap((name, index) => {
     const flag = 1 << index;
     const seconds = findMetric(readings, 'GpuPerformance', 'ClockLimitDuration', flag)?.value ?? null;
     const isActive = active == null ? null : (active & flag) !== 0;
     return isActive || ((supported ?? 0) & flag) !== 0 || seconds !== null ? [{ name, active: isActive, seconds }] : [];
   });
+
   if ((active ?? 0) > mask || (supported ?? 0) > mask) {
     rows.push({ name: 'Unknown boost limit', active: active == null ? null : active > mask, seconds: null });
   }
+
   return rows;
 }
 
@@ -307,22 +347,27 @@ export function formatReading(sensor?: SensorReading, temperatureUnit: Temperatu
   }
 
   const { identity: { component, metric }, unit, value } = sensor;
+
   if (metric === 'FaultStatus' || metric === 'FaultLog') {
     return value === 0 ? 'OK' : metric === 'FaultStatus' ? 'Fault detected' : 'Faults logged';
   }
+
   if (metric === 'PerformanceState') return `P${value}`;
+
   if (metric === 'SupportedPerformanceStates') {
-    return Array.from({ length: 16 }, (_, index) => index).filter(index => value & (1 << index))
-      .map(index => `P${index}`).join(', ') || 'None reported';
+    return Array.from({ length: 16 }, (_, index) => index).filter(index => value & (1 << index)).map(index => `P${index}`).join(', ') || 'None reported';
   }
+
   if (metric === 'ActiveClockReasons') {
     return clockReasons.filter((_, index) => value & (1 << index)).join(', ') || (value ? 'Unknown boost limit' : 'None active');
   }
+
   if (metric === 'FanAutomatic') return value ? 'Automatic' : 'Manual';
   if (unit === 'Boolean') return value ? 'Yes' : 'No';
   if (component === 'GpuCore' && metric === 'Voltage' && unit === 'Volts') return `${number(value * 1000, 1, useGrouping)} mV`;
   if (unit === 'Megabytes' && value >= 1024) return `${number(value / 1024, 2, useGrouping)} GiB`;
   if (unit === 'Celsius' && temperatureUnit === 'fahrenheit') return `${number(value * 9 / 5 + 32, 1, useGrouping)} °F`;
+  
   if (unit === 'BytesPerSecond' && value >= 1024) {
     const exponent = Math.min(3, Math.floor(Math.log(value) / Math.log(1024)));
     return `${number(value / 1024 ** exponent, 2, useGrouping)} ${['B/s', 'KiB/s', 'MiB/s', 'GiB/s'][exponent]}`;
