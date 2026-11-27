@@ -477,7 +477,7 @@ public sealed class HardwarePanelViewModel : ObservableObject
                 SetDeviceConfiguration(config);
             }
         }
-        catch (Exception error) when (error is HttpRequestException or RTXLens.Client.Http.MonitoringApiException or IOException
+        catch (Exception error) when (error is HttpRequestException or Client.Http.MonitoringApiException or IOException
             or InvalidDataException or System.Text.Json.JsonException or OperationCanceledException)
         {
             if (_pendingDeviceRead == request && !token.IsCancellationRequested)

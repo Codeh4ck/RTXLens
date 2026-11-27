@@ -16,6 +16,7 @@ using RTXLens.App.ViewModels.Shell;
 using RTXLens.App.Views.Diagnostics;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using RTXLens.Presentation.Configuration;
+using RTXLens.Contracts.Configuration;
 using RTXLens.Presentation.Telemetry;
 using static RTXLens.App.Views.Shell.DesktopControls;
 
@@ -621,7 +622,7 @@ internal sealed class ConfigurationPage : UserControl
         {
             Height = 132,
             ItemsSource = metric.Sources,
-            ItemTemplate = new FuncDataTemplate<ConnectorPluginChoice>((source, _) => new TextBlock { Text = source.Label }),
+            ItemTemplate = new FuncDataTemplate<ConnectorPluginChoice>((source, _) => new TextBlock { Text = source?.Label }),
             ShowAddButton = false,
             RemoveCommand = remove,
             MoveUpCommand = moveUp,
@@ -805,6 +806,16 @@ internal sealed class ConfigurationPage : UserControl
         BindTo(input, NumericUpDown.ValueProperty, source, property, BindingMode.TwoWay);
 
         return input;
+    }
+
+    internal static Slider CreatePowerLimitSlider() => new() { TickFrequency = 1, IsSnapToTickEnabled = true };
+
+    internal static void SetPowerLimitSlider(Slider slider, PowerTarget? gpu, uint? milliwatts)
+    {
+        slider.Minimum = 0;
+        slider.Maximum = (gpu?.Maximum > 0 ? gpu.Maximum : milliwatts ?? 0) / 1000d;
+        slider.Minimum = (gpu?.Minimum ?? 0) / 1000d;
+        slider.Value = milliwatts is { } saved ? saved / 1000d : slider.Minimum;
     }
 
     internal static StackPanel Field(string label, Control input)

@@ -122,10 +122,10 @@ internal static class MobileAccessListener
         if (warningActions is not null)
         {
             paired.MapGet(MobileProtocol.WarningActions, (HttpContext context) =>
-                warningActions.GetOptions((Guid)context.Items[DeviceIdentity]!)).RequireRateLimiting("mobile-registration");
+                warningActions.GetAvailability((Guid)context.Items[DeviceIdentity]!)).RequireRateLimiting("mobile-read");
 
-            paired.MapPost(MobileProtocol.WarningActions, (HttpContext context, MobileWarningActionSettings settings) =>
-                warningActions.Save((Guid)context.Items[DeviceIdentity]!, settings)).RequireRateLimiting("mobile-registration");
+            paired.MapPost(MobileProtocol.WarningActions, () => Results.StatusCode(StatusCodes.Status403Forbidden))
+                .RequireRateLimiting("mobile-registration");
 
             paired.MapPost(MobileProtocol.RunWarningAction, (HttpContext context, MobileWarningActionRequest request) =>
                 warningActions.Execute((Guid)context.Items[DeviceIdentity]!, request)).RequireRateLimiting("mobile-warning-actions");

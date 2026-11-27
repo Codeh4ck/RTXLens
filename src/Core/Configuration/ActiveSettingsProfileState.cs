@@ -4,11 +4,9 @@ namespace RTXLens.Core.Configuration;
 
 public sealed class ActiveSettingsProfileState
 {
-    private ActiveSettingsProfile? _current;
-
     public ActiveSettingsProfile? Current
     {
-        get => Volatile.Read(ref _current);
-        set => Volatile.Write(ref _current, value);
+        get => Volatile.Read(ref field);
+        set => Volatile.Write(ref field, value);
     }
 }

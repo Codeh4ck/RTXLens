@@ -6,35 +6,43 @@ namespace RTXLens.Service.Mobile;
 
 internal sealed class MobileWarningActions(MobilePairing pairing, WarningPowerService power, WarningShutdownCoordinator shutdown, DeviceWarningProfileStore profiles)
 {
-    public MobileWarningActionOptions GetOptions(Guid phone)
+    public MobileWarningActionAvailability GetAvailability(Guid phone)
     {
-        var (allowed, settings) = pairing.GetWarningActions(phone);
-        if (!allowed)
-        {
-            return new(false, settings, [], []);
-        }
-
-        var targets = power.Targets();
-        var configured = profiles.PowerReactionProfiles();
-
-        return new(true, settings, targets,
-            [.. configured.Select(profile => new MobileWarningPowerProfile(profile.Name, profile.PowerReduction!.GpuId, profile.PowerReduction.TargetMilliwatts))]);
+        var settings = pairing.GetWarningActions(phone);
+        return new(true, settings?.EnableShutdown == true, settings?.EnableLowPower == true, settings?.GpuId, settings?.PowerMilliwatts);
     }
 
-    public IResult Save(Guid phone, MobileWarningActionSettings settings)
+    public MobileAccessResponse GetDesktopOptions(Guid phone)
     {
-        if (!pairing.GetWarningActions(phone).Allowed)
+        if (pairing.GetWarningActions(phone, requireListening: false) is not { } settings)
         {
-            return Results.StatusCode(StatusCodes.Status403Forbidden);
+            return new(false, Error: "This phone is no longer paired.");
         }
 
-        if (settings.GpuId is { Length: > 128 } || (settings.EnableLowPower && !power.Targets().Any(target =>
+        var options = new MobileWarningActionOptions(settings, power.Targets(),
+            [.. profiles.PowerReactionProfiles().Select(profile =>
+                new MobileWarningPowerProfile(profile.Name, profile.PowerReduction!.GpuId, profile.PowerReduction.TargetMilliwatts))]);
+        return new(true, WarningActions: options);
+    }
+
+    public MobileAccessResponse ConfigureDesktop(Guid phone, MobileWarningActionSettings settings)
+    {
+        if (pairing.GetWarningActions(phone, requireListening: false) is not { } previous)
+        {
+            return new(false, Error: "This phone is no longer paired.");
+        }
+
+        var keepsPreviousPower = previous.EnableLowPower && previous.GpuId == settings.GpuId
+            && previous.PowerMilliwatts == settings.PowerMilliwatts;
+        if (settings.GpuId is { Length: > 128 } || (settings.EnableLowPower && !keepsPreviousPower && !power.Targets().Any(target =>
                 target.Id == settings.GpuId && settings.PowerMilliwatts >= target.Minimum && settings.PowerMilliwatts <= target.Maximum)))
         {
-            return Results.BadRequest(new MobileWarningActionResult("unavailable", Message: "Select an available GPU and a supported power limit."));
+            return new(false, Error: "Select an available GPU and a supported power limit.");
         }
 
-        return pairing.SetWarningActions(phone, settings) ? Results.NoContent() : Results.StatusCode(StatusCodes.Status403Forbidden);
+        return pairing.SetWarningActions(phone, settings)
+            ? new(true)
+            : new(false, Error: "This phone is no longer paired.");
     }
 
     public IResult Execute(Guid phone, MobileWarningActionRequest request)
@@ -45,8 +53,8 @@ internal sealed class MobileWarningActions(MobilePairing pairing, WarningPowerSe
             return Results.BadRequest();
         }
 
-        var (allowed, settings) = pairing.GetWarningActions(phone);
-        if (!allowed || (request.Action == "shutdown" && !settings.EnableShutdown) || (request.Action == "low-power" && !settings.EnableLowPower))
+        if (pairing.GetWarningActions(phone) is not { } settings
+            || (request.Action == "shutdown" ? !settings.EnableShutdown : !settings.EnableLowPower))
         {
             return Results.StatusCode(StatusCodes.Status403Forbidden);
         }
@@ -60,12 +68,12 @@ internal sealed class MobileWarningActions(MobilePairing pairing, WarningPowerSe
         if (request.Action == "low-power")
         {
             return Results.Ok(settings is not { GpuId: { } gpu, PowerMilliwatts: { } milliwatts }
-                ? new MobileWarningActionResult("unavailable", Message: "Set a GPU power limit in Settings.")
+                ? new MobileWarningActionResult("unavailable", Message: "Set this phone’s GPU power limit in RTX Lens on the PC.")
                 : power.RequestMobilePower(phone, request.InstanceId, request.EpisodeId!, gpu, milliwatts, request.StatusOnly));
         }
 
-        var outcome = shutdown.RequestMobile(warning, () => pairing.GetWarningActions(phone) is { Allowed: true, Settings.EnableShutdown: true }
-                                                            && power.ActiveMobileWarning(request.InstanceId, request.EpisodeId) is not null);
+        var outcome = shutdown.RequestMobile(warning, () => pairing.GetWarningActions(phone) is { EnableShutdown: true }
+            && power.ActiveMobileWarning(request.InstanceId, request.EpisodeId) is not null);
 
         if (outcome is ShutdownOutcome.Accepted or ShutdownOutcome.Unconfirmed)
         {

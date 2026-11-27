@@ -272,6 +272,7 @@ internal static class MobileAccessTests
             PowerReduction = new(gpuId, 400000)
         };
         profiles.Save(automaticProfile);
+        profiles.Save(automaticProfile with { Id = Guid.NewGuid().ToString("N"), Name = "Disabled profile", Enabled = false });
         var observed = new WarningObservation(automaticProfile.PluginId, gpuId, "overcurrent", true, true, "") { ProfileId = automaticProfile.Id };
         var definition = new WarningDefinition(observed.TypeId, observed.PluginId, "Pin overcurrent");
         var now = clock.GetUtcNow();
@@ -301,14 +302,35 @@ internal static class MobileAccessTests
             using (var forbidden = await client.PostAsJsonAsync(MobileProtocol.RunWarningAction, request, ct))
                 TestAssert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
 
-            TestAssert.True(pairing.SetWarningActionAccess(credential.DeviceId, true), "Grant actions on the PC.");
-            var options = await client.GetFromJsonAsync<MobileWarningActionOptions>(MobileProtocol.WarningActions, ct);
-            TestAssert.True(options is { Allowed: true, Settings: { EnableShutdown: false, EnableLowPower: false } }, "Actions start off.");
-            TestAssert.True(options!.Profiles.Any(profile => profile.Name == "Astral overcurrent" && profile.PowerMilliwatts == 400000),
-                "The phone receives the configured warning name and limit.");
-            using (var saved = await client.PostAsJsonAsync(MobileProtocol.WarningActions, new MobileWarningActionSettings(EnableShutdown: true), ct))
-                TestAssert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
-            TestAssert.True(pairing.SetWarningActions(credential.DeviceId, new(true, true, gpuId, 500000)), "Seed the power target for the fake GPU.");
+            var options = actions.GetDesktopOptions(credential.DeviceId);
+            TestAssert.True(options.WarningActions is { Settings: { EnableShutdown: false, EnableLowPower: false } },
+                "New pairings start with both actions disabled.");
+            TestAssert.True(options.WarningActions!.Profiles is [{ Name: "Astral overcurrent", PowerMilliwatts: 400000 }],
+                "The desktop only receives enabled profiles with GPU power reactions.");
+
+            pairing.SetListening(false);
+            TestAssert.True(actions.ConfigureDesktop(credential.DeviceId, new(EnableShutdown: true)).Success,
+                "The desktop can change a phone's settings while Mobile Access is off.");
+            pairing.SetListening(true);
+
+            using var secondClient = CreateClient(MobileAccessListener.GetAddress(server), cert.Fingerprint);
+            var secondPhone = await PairAsync(secondClient, pairing, pairing.CreateInvite(cert.Fingerprint)!, ct);
+            secondClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", secondPhone.Token);
+
+            var availability = await client.GetFromJsonAsync<MobileWarningActionAvailability>(MobileProtocol.WarningActions, ct);
+            var secondAvailability = await secondClient.GetFromJsonAsync<MobileWarningActionAvailability>(MobileProtocol.WarningActions, ct);
+            TestAssert.True(availability is { ManagedOnDesktop: true, EnableShutdown: true, EnableLowPower: false }
+                && secondAvailability is { ManagedOnDesktop: true, EnableShutdown: false, EnableLowPower: false },
+                "Granting shutdown to the first phone does not grant power reduction or change the second phone.");
+
+            using (var phoneEdit = await client.PostAsJsonAsync(MobileProtocol.WarningActions, new MobileWarningActionSettings(), ct))
+                TestAssert.Equal(HttpStatusCode.Forbidden, phoneEdit.StatusCode);
+            TestAssert.False(actions.ConfigureDesktop(credential.DeviceId, new(true, true, "unavailable-gpu", 500000)).Success,
+                "The desktop cannot save a new power limit for an unavailable GPU.");
+            TestAssert.True(pairing.SetWarningActions(credential.DeviceId, new(true, true, gpuId, 500000)), "Seed the fake GPU.");
+            availability = await client.GetFromJsonAsync<MobileWarningActionAvailability>(MobileProtocol.WarningActions, ct);
+            TestAssert.True(availability is { EnableShutdown: true, EnableLowPower: true, PowerMilliwatts: 500000 },
+                "The phone receives the settings saved by the PC.");
 
             await power.StartAsync(ct);
             Publish([], mobile with { Phase = WarningPhase.Recovering });
@@ -319,6 +341,11 @@ internal static class MobileAccessTests
             TestAssert.Equal(0, actuator.Calls);
 
             Publish([], mobile);
+            using (var noPower = await secondClient.PostAsJsonAsync(MobileProtocol.RunWarningAction, request, ct))
+                TestAssert.Equal(HttpStatusCode.Forbidden, noPower.StatusCode);
+            using (var noShutdown = await secondClient.PostAsJsonAsync(MobileProtocol.RunWarningAction, request with { Action = "shutdown" }, ct))
+                TestAssert.Equal(HttpStatusCode.Forbidden, noShutdown.StatusCode);
+
             TestAssert.Equal("inactive", (await Run(request with { StatusOnly = true })).State);
             TestAssert.Equal("requested", (await Run(request)).State);
             await Until(() => driver.Current == 500000, () => Publish([], mobile));
@@ -526,6 +553,9 @@ internal static class MobileAccessTests
             http.DefaultRequestHeaders.Add("Origin", "http://example.test");
             using var forbidden = await http.GetAsync("warnings/history", ct);
             TestAssert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+            using var forbiddenClear = await http.DeleteAsync("/warnings/history", ct);
+            TestAssert.Equal(HttpStatusCode.Forbidden, forbiddenClear.StatusCode);
+            http.DefaultRequestHeaders.Remove("Origin");
 
             await using var listener = await MobileAccessListener.StartAsync(IPAddress.Loopback, GetUnusedPort(), cert, pairing,
                 local.SensorHub, ct, history: endpoints);
@@ -553,6 +583,27 @@ internal static class MobileAccessTests
             TestAssert.Equal(9d, detail.RootElement.GetProperty("readings")[0].GetProperty("value").GetDouble());
             restarted.Observe(Frame(now.AddDays(2)), 1);
             TestAssert.False(Directory.EnumerateFiles(root, "*.json").Any(), "The retention change should remove expired incidents.");
+
+            var activeId = Guid.NewGuid();
+            var endedId = Guid.NewGuid();
+            var active = new WarningState("test-active", "wireview-pro2", "test-device", "overcurrent", "Wire overcurrent",
+                "Active test warning", WarningPhase.Active, activeId.ToString("N"), now, new(), 1, now);
+            var ended = active with { Id = "test-ended", EpisodeId = endedId.ToString("N") };
+            restarted.Observe(Frame(now, active, ended), 30);
+            restarted.Observe(Frame(now, active), 30);
+            using var mobileClear = await remote.DeleteAsync("/incidents", ct);
+            TestAssert.Equal(HttpStatusCode.MethodNotAllowed, mobileClear.StatusCode);
+
+            var afterClear = await desktopApi.ClearWarningHistoryAsync(ct);
+            TestAssert.Equal(activeId, afterClear.Single().Id);
+            TestAssert.Equal("Active", afterClear.Single().Status);
+            TestAssert.Equal(activeId, (await desktopApi.ClearWarningHistoryAsync(ct)).Single().Id);
+            using var removed = await http.GetAsync($"/warnings/history/warning/{endedId}", ct);
+            TestAssert.Equal(HttpStatusCode.NotFound, removed.StatusCode);
+            using var refreshedPhone = JsonDocument.Parse(await remote.GetStringAsync("/incidents", ct));
+            TestAssert.Equal(activeId, refreshedPhone.RootElement.GetProperty("items").EnumerateArray().Single().GetProperty("id").GetGuid());
+            TestAssert.Equal(activeId.ToString("N") + ".json", Path.GetFileName(Directory.GetFiles(root, "*.json").Single()));
+
             TestAssert.True(pairing.Revoke(credential.DeviceId), "The test phone should be revoked.");
             using var revoked = await remote.GetAsync("/session", ct);
             TestAssert.Equal(HttpStatusCode.Unauthorized, revoked.StatusCode);

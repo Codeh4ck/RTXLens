@@ -114,15 +114,25 @@ internal static class AvaloniaDashboardTests
             Id = Guid.NewGuid(), Source = "generic-nvidia", Title = "Core temperature", Status = "Active",
             Detail = "84.2 °C - threshold 81.0 °C", Thresholds = [], Readings = []
         };
+        var clearRequests = 0;
         using var shell = CreateShell(address => new HttpClient(new JsonResponseHandler(request =>
-            request.RequestUri!.AbsolutePath.EndsWith("/history")
-                ? System.Text.Json.JsonSerializer.Serialize(new[] { incident, second }, ClientJsonContext.Default.WarningIncidentArray)
-                : System.Text.Json.JsonSerializer.Serialize(
-                    request.RequestUri.AbsolutePath.EndsWith(second.Id.ToString(), StringComparison.Ordinal) ? second : incident,
-                    ClientJsonContext.Default.WarningIncident))) { BaseAddress = address });
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/history"))
+            {
+                if (request.Method == HttpMethod.Delete)
+                    clearRequests++;
+
+                return System.Text.Json.JsonSerializer.Serialize(clearRequests == 0 ? [incident, second] : [second],
+                    ClientJsonContext.Default.WarningIncidentArray);
+            }
+
+            return System.Text.Json.JsonSerializer.Serialize(
+                request.RequestUri.AbsolutePath.EndsWith(second.Id.ToString(), StringComparison.Ordinal) ? second : incident,
+                ClientJsonContext.Default.WarningIncident);
+        })) { BaseAddress = address });
         var frame = DashboardFixture(shell) with { Warnings = new("fixture", 1, true,
             [new("pin", "asus-astral", "test-gpu", "overcurrent", incident.Title, incident.Detail,
-                RTXLens.Contracts.Warnings.WarningPhase.Active, incident.Id.ToString("N"), now, new(), 1, now)]) };
+                Contracts.Warnings.WarningPhase.Active, incident.Id.ToString("N"), now, new(), 1, now)]) };
         shell.Dashboard.Apply(frame, shell.Preferences, now);
         var window = new ShellWindow(shell) { Width = 1180, Height = 700 };
         window.Show();
@@ -175,7 +185,7 @@ internal static class AvaloniaDashboardTests
             TestAssert.True(labels.Contains("Warning thresholds") && !labels.Contains("Detected") && !labels.Contains("Not detected")
                 && labels.Contains("≤ " + GpuStatusViewModel.Format(11.5, "V", 2)),
                 "Thresholds must show the comparisons and use highlights for triggered rules.");
-            var sections = info.GetVisualDescendants().OfType<RTXLens.App.Controls.SectionPanel>().ToArray();
+            var sections = info.GetVisualDescendants().OfType<SectionPanel>().ToArray();
             var thresholdsPanel = sections.Single(panel => Equals(panel.Header, "Warning thresholds"));
             TestAssert.False(thresholdsPanel.GetVisualDescendants().OfType<TextBlock>().Any(text => text.Text == "Imbalance"),
                 "Imbalance belongs above the pins.");
@@ -221,7 +231,7 @@ internal static class AvaloniaDashboardTests
                 AvaloniaControlsTests.Capture(info, screenshots, "warning-info-pins.png");
                 foreach (var (heading, filename) in new[] { ("Warning thresholds", "warning-info-thresholds.png"), ("GPU status", "warning-info-gpu.png") })
                 {
-                    var panel = info.GetVisualDescendants().OfType<RTXLens.App.Controls.SectionPanel>().Single(item => Equals(item.Header, heading));
+                    var panel = info.GetVisualDescendants().OfType<SectionPanel>().Single(item => Equals(item.Header, heading));
                     var top = panel.TranslatePoint(default, scroll)!.Value.Y;
                     scroll.Offset = new Vector(0, Math.Max(0, scroll.Offset.Y + top - 8));
                     AvaloniaControlsTests.Capture(info, screenshots, filename);
@@ -247,6 +257,25 @@ internal static class AvaloniaDashboardTests
             var savedLimit = "≥ " + GpuStatusViewModel.FormatTemperature(81, shell.Preferences.Fahrenheit);
             AvaloniaControlsTests.PumpUntil(() => earlier.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == savedLimit));
             earlier.Close();
+
+            source.SelectedItem = "ROG Astral";
+            var clear = window.GetVisualDescendants().OfType<Button>()
+                .Single(button => AutomationProperties.GetName(button) == "Clear warning history");
+            TestAssert.Equal(RightEdge((Control)clear.Parent!, window), RightEdge(clear, window));
+            AvaloniaControlsTests.InvokeButton(clear);
+            AvaloniaControlsTests.PumpUntil(() => window.OwnedWindows.Count == 1);
+            ClickShellAction(window.OwnedWindows.Single(), "Cancel");
+            AvaloniaControlsTests.PumpUntil(() => clear.IsEnabled);
+            TestAssert.Equal(0, clearRequests);
+            AvaloniaControlsTests.InvokeButton(clear);
+            AvaloniaControlsTests.PumpUntil(() => window.OwnedWindows.Count == 1);
+            ClickShellAction(window.OwnedWindows.Single(), "Clear warning history");
+            AvaloniaControlsTests.PumpUntil(() => window.GetVisualDescendants().OfType<ContentControl>()
+                .Any(control => Equals(control.Content, "Completed warning history cleared.")));
+            TestAssert.Equal(1, clearRequests);
+            TestAssert.Equal(1, list.ItemCount);
+            TestAssert.Equal("All sources", source.SelectedItem as string);
+            TestAssert.False(clear.IsEnabled, "An active incident alone cannot be cleared.");
 
             var wireView = incident with
             {
@@ -410,6 +439,8 @@ internal static class AvaloniaDashboardTests
                 TestAssert.Equal($"Selected {kind}", AutomationProperties.GetName(picker));
                 if (tab == "Nvidia")
                 {
+                    TestAssert.True(picker.ItemTemplate!.Build(null) is TextBlock { Text: null },
+                        "A missing GPU selection must render without dereferencing the item.");
                     shell.Configuration.SetNvidiaDevices([new("test-gpu", "GeForce RTX 5090", "/gpu-nvidia/0")]);
                     Dispatcher.UIThread.RunJobs();
                     TestAssert.Equal(0, picker.SelectedIndex);
@@ -474,6 +505,8 @@ internal static class AvaloniaDashboardTests
             var addSource = window.GetVisualDescendants().OfType<ComboBox>()
                 .Single(box => AutomationProperties.GetName(box) == "Power source to add");
             TestAssert.True(addSource.SelectedItem is null, "Opening Source selections should show an unselected source dropdown.");
+            TestAssert.True(addSource.ItemTemplate!.Build(null) is TextBlock { Text: null },
+                "Rendering an empty source selection must preserve the placeholder.");
             TestAssert.Equal("Choose a source", addSource.PlaceholderText);
 
             addSource.SelectedItem = addSource.Items.OfType<ConnectorPluginChoice>()
@@ -1570,7 +1603,7 @@ internal static class AvaloniaDashboardTests
 
             second.Value = 0;
             var recovering = simulated.Compose(now.AddMilliseconds(2600)).Snapshot.Warnings!.States.Single(state => state.Id == fired.Id);
-            TestAssert.Equal(RTXLens.Contracts.Warnings.WarningPhase.Recovering, recovering.Phase);
+            TestAssert.Equal(Contracts.Warnings.WarningPhase.Recovering, recovering.Phase);
             TestAssert.False(simulated.Compose(now.AddMilliseconds(4700)).Snapshot.Warnings!.States.Any(state => state.Id == fired.Id),
                 "The simulated warning must honor the saved clear duration.");
         }

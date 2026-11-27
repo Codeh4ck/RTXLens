@@ -55,7 +55,7 @@ internal static class MobileAccessRegistration
         var pipeName = MobileAccessProtocol.GetPipeName(debugInstance);
         services.AddHostedService(provider => new MobileAccessAdminPipe(
             pipeName, provider.GetRequiredService<MobileAccessService>(), provider.GetRequiredService<MobilePairing>(),
-            provider.GetRequiredService<ILogger<MobileAccessAdminPipe>>()));
+            provider.GetRequiredService<MobileWarningActions>(), provider.GetRequiredService<ILogger<MobileAccessAdminPipe>>()));
     }
 
     private sealed class MobileNoIpService(MobilePairing pairing, NoIpUpdater updater) : BackgroundService

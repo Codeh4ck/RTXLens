@@ -17,6 +17,7 @@ public sealed class DebugPluginViewModel : ObservableObject
     public DebugMetricViewModel[] Metrics { get; }
     public event Action<bool>? Edited;
     public DebugSourceMode Mode => _mode;
+
     public int ModeIndex
     {
         get => (int)_mode;
@@ -106,6 +107,7 @@ public sealed class DebugPluginViewModel : ObservableObject
         _installed = _enabled = true;
         _state = PluginState.Ready;
         _deviceId = "debug-" + Id;
+
         foreach (var metric in Metrics)
         {
             metric.Reset();

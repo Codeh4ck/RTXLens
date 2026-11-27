@@ -8,7 +8,7 @@ public static class MobileAccessProtocol
     public const int DefaultPort = 59275;
     public const int DefaultWarningHistoryDays = 30;
     public const int MaxRequestSize = 4096;
-    public const int MaxResponseSize = 16384;
+    public const int MaxResponseSize = 65536;
 
     public static string GetPipeName(bool debug) => debug ? "RTXLens.Debug.MobileAccess" : "RTXLens.MobileAccess";
 
@@ -28,7 +28,8 @@ public enum MobileAccessOperation
     Revoke,
     PublishSimulationWarning,
     SendTestNotification,
-    SetWarningActionAccess
+    GetWarningActions,
+    ConfigureWarningActions
 }
 
 public sealed record MobileAccessRequest(
@@ -37,7 +38,7 @@ public sealed record MobileAccessRequest(
     Guid? Id = null,
     bool KeepNoIpCredentials = false,
     MobileSimulationWarning? SimulationWarning = null,
-    bool AllowWarningActions = false);
+    MobileWarningActionSettings? WarningActions = null);
 
 public sealed record MobileSimulationWarning(string Title, string Detail)
 {
@@ -49,7 +50,8 @@ public sealed record MobileAccessResponse(
     bool Success,
     MobileAccessStatus? Status = null,
     MobilePairingInvite? Invite = null,
-    string? Error = null);
+    string? Error = null,
+    MobileWarningActionOptions? WarningActions = null);
 
 public sealed record MobileAccessStatus(
     bool Enabled,
@@ -69,7 +71,7 @@ public sealed record MobileAccessStatus(
 public sealed record MobilePairingInvite(string Secret, string PublicKeyFingerprint, DateTimeOffset ExpiresAt);
 public sealed record MobilePairingApproval(Guid Id, string DeviceName, DateTimeOffset ExpiresAt);
 public sealed record MobileDevice(Guid Id, string Name, DateTimeOffset? LastConnectedAt, DateTimeOffset? LastExternalConnectionAt = null,
-    bool LockScreenNotifications = false, bool WarningActionsAllowed = false);
+    bool LockScreenNotifications = false);
 
 public sealed record MobilePairingCode(int SchemaVersion, Uri LocalAddress, Uri RemoteAddress, string PublicKeyFingerprint, string Secret, DateTimeOffset ExpiresAt);
 

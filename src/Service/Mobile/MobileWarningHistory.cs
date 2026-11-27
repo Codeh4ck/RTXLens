@@ -103,6 +103,16 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
         }
     }
 
+    public void ClearCompleted()
+    {
+        lock (_gate)
+        {
+            var records = Load();
+            foreach (var (id, record) in records.Where(item => !_active.ContainsKey(item.Key)).ToArray())
+                Delete(records, id, record);
+        }
+    }
+
     public WarningIncident[] Summaries(DateTimeOffset cutoff)
     {
         lock (_gate)
@@ -226,14 +236,18 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
                 break;
             }
 
-            File.Delete(Location(record.Summary.Id));
-            records.Remove(record.Summary.Id);
-
-            _bytes -= record.Size;
+            Delete(records, record.Summary.Id, record);
         }
 
         _retention = days;
         _nextCleanup = now.AddMinutes(15);
+    }
+
+    private void Delete(Dictionary<Guid, StoredIncident> records, Guid id, StoredIncident record)
+    {
+        File.Delete(Location(id));
+        records.Remove(id);
+        _bytes -= record.Size;
     }
 
     private string Location(Guid id) => Path.Combine(directory, id.ToString("N") + ".json");

@@ -14,5 +14,5 @@ public sealed record DebugMetricDefinition(string Group, string Label, SensorCom
     public double Maximum => IsBoolean ? 1 : IsFault ? ushort.MaxValue : Unit == SensorUnit.Percent ? 100 : 1_000_000;
     public SensorIdentity Identity(string plugin, string device) => new(plugin, device, Component, Metric, Channel, ConnectorId);
     public bool Matches(SensorIdentity identity) => identity.Component == Component && identity.Metric == Metric
-        && identity.Channel == Channel && identity.ConnectorId == ConnectorId;
+                                                                                    && identity.Channel == Channel && identity.ConnectorId == ConnectorId;
 }

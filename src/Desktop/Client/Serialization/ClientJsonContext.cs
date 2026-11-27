@@ -16,10 +16,9 @@ using RTXLens.Plugins.WireView.Contracts.Input;
 
 namespace RTXLens.Client.Serialization;
 
-[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
-    PropertyNameCaseInsensitive = true, UseStringEnumConverter = true, WriteIndented = true)]
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true, UseStringEnumConverter = true, WriteIndented = true)]
 [JsonSerializable(typeof(SensorSnapshot))]
-[JsonSerializable(typeof(RTXLens.Contracts.Warnings.WarningIncident[]))]
+[JsonSerializable(typeof(Contracts.Warnings.WarningIncident[]))]
 [JsonSerializable(typeof(ServiceLogPage))]
 [JsonSerializable(typeof(HealthResponse))]
 [JsonSerializable(typeof(RTXLens.Contracts.Updates.ServiceVersionResponse))]

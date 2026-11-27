@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using RTXLens.Contracts.Warnings;
+using RTXLens.Contracts.Errors;
 using RTXLens.Contracts.Monitoring;
 using RTXLens.Service.Endpoints;
 using RTXLens.Service.Services;
@@ -31,8 +32,23 @@ internal sealed class MobileHistoryEndpoints(MobileWarningHistory warnings, Safe
             context.HttpContext.Response.Headers.CacheControl = "no-store";
             return await next(context);
         });
-        history.MapGet("", (MobileHistoryEndpoints incidents) => Results.Json(incidents.Summaries(), MobileHistoryEndpoints.Json));
+        history.MapGet("", (MobileHistoryEndpoints incidents) => Results.Json(incidents.Summaries(), Json));
+        history.MapDelete("", (MobileHistoryEndpoints incidents) => incidents.ClearCompleted());
         history.MapGet("/{kind}/{id:guid}", (string kind, Guid id, MobileHistoryEndpoints incidents) => incidents.Detail(kind, id));
+    }
+
+    private IResult ClearCompleted()
+    {
+        try
+        {
+            warnings.ClearCompleted();
+            return Results.Json(Summaries(), Json);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return Results.Json(new ErrorResponse("The service could not delete all completed warning records. Refresh to see the remaining records."),
+                Json, statusCode: StatusCodes.Status500InternalServerError);
+        }
     }
 
     public IResult List(string? before)

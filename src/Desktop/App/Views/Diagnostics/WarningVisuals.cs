@@ -91,7 +91,7 @@ internal static class WarningVisuals
         if (text.EndsWith(" °C", StringComparison.Ordinal) && double.TryParse(text[..^3].Replace(',', '.'),
             NumberStyles.Float, CultureInfo.InvariantCulture, out var temperature))
         {
-            return RTXLens.Presentation.Telemetry.GpuStatusViewModel.FormatTemperature(temperature, fahrenheit);
+            return Presentation.Telemetry.GpuStatusViewModel.FormatTemperature(temperature, fahrenheit);
         }
 
         var separator = NumberFormatInfo.CurrentInfo.NumberDecimalSeparator;

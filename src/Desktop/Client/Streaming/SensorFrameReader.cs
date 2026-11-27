@@ -85,12 +85,12 @@ public static class SensorFrameReader
     }
     private static bool ValidWarnings(Contracts.Warnings.WarningSnapshot warnings)
     {
-        if (string.IsNullOrWhiteSpace(warnings.InstanceId) || warnings.Sequence < 0 || warnings.States is null || warnings.States.Length > 256)
+        if (string.IsNullOrWhiteSpace(warnings.InstanceId) || warnings.Sequence < 0 || warnings.States.Length > 256)
         {
             return false;
         }
 
-        if (warnings.States.Any(state => state is null || string.IsNullOrWhiteSpace(state.Id) || string.IsNullOrWhiteSpace(state.EpisodeId)
+        if (warnings.States.Any(state => string.IsNullOrWhiteSpace(state.Id) || string.IsNullOrWhiteSpace(state.EpisodeId)
                                                                              || string.IsNullOrWhiteSpace(state.PluginId) || string.IsNullOrWhiteSpace(state.DeviceId)
                                                                              || string.IsNullOrWhiteSpace(state.TypeId) || !Enum.IsDefined(state.Phase) || state.Policy?.IsValid() != true
                                                                              || state.NotificationSequence < 0 || state.NotificationSequence > warnings.Sequence))

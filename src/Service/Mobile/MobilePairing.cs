@@ -256,36 +256,22 @@ internal sealed class MobilePairing(IMobileAccessStore store, TimeProvider clock
             return
             [
                 .. _devices.Values.Select(device =>
-                    new MobileDevice(device.Credential.Id, device.Credential.Name, device.LastConnectedAt, device.LastExternalConnectionAt, device.Credential.PushToken is not null, device.Credential.WarningActionsAllowed))
+                    new MobileDevice(device.Credential.Id, device.Credential.Name, device.LastConnectedAt, device.LastExternalConnectionAt, device.Credential.PushToken is not null))
             ];
         }
     }
 
-    public (bool Allowed, MobileWarningActionSettings Settings) GetWarningActions(Guid id)
+    public MobileWarningActionSettings? GetWarningActions(Guid id, bool requireListening = true)
     {
         lock (_gate)
         {
-            return _listening && _devices.TryGetValue(id, out var device) && device.Credential.WarningActionsAllowed
-                ? (true, device.Credential.WarningActions ?? new())
-                : (false, new());
+            return (!requireListening || _listening) && _devices.TryGetValue(id, out var device)
+                ? device.Credential.DesktopWarningActions ?? new()
+                : null;
         }
     }
 
     public bool SetWarningActions(Guid id, MobileWarningActionSettings settings)
-    {
-        lock (_gate)
-        {
-            if (!_listening || !_devices.TryGetValue(id, out var device) || !device.Credential.WarningActionsAllowed)
-            {
-                return false;
-            }
-
-            SaveWarningActions(device, device.Credential with { WarningActions = settings });
-            return true;
-        }
-    }
-
-    public bool SetWarningActionAccess(Guid id, bool allowed)
     {
         lock (_gate)
         {
@@ -294,25 +280,15 @@ internal sealed class MobilePairing(IMobileAccessStore store, TimeProvider clock
                 return false;
             }
 
-            SaveWarningActions(device, device.Credential with
+            if (device.Credential.DesktopWarningActions != settings)
             {
-                WarningActionsAllowed = allowed,
-                WarningActions = allowed ? device.Credential.WarningActions : null
-            });
+                var updated = device.Credential with { DesktopWarningActions = settings };
+                Save(_data with { Devices = [.. _data.Devices.Select(value => value.Id == id ? updated : value)] });
+                device.Credential = updated;
+            }
 
             return true;
         }
-    }
-
-    private void SaveWarningActions(PairedDevice device, MobileDeviceCredential updated)
-    {
-        if (updated == device.Credential)
-        {
-            return;
-        }
-
-        Save(_data with { Devices = [.. _data.Devices.Select(value => value.Id == updated.Id ? updated : value)] });
-        device.Credential = updated;
     }
 
     public bool SetPushToken(Guid id, string? token, string? expected = null, MobileNotificationPreferences? preferences = null)

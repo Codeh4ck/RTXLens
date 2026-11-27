@@ -11,7 +11,8 @@ using RTXLens.Contracts.Mobile;
 namespace RTXLens.Service.Mobile;
 
 [SupportedOSPlatform("windows")]
-internal sealed class MobileAccessAdminPipe(string pipeName, MobileAccessService service, MobilePairing pairing, ILogger<MobileAccessAdminPipe> logger) : BackgroundService
+internal sealed class MobileAccessAdminPipe(string pipeName, MobileAccessService service, MobilePairing pairing,
+    MobileWarningActions warningActions, ILogger<MobileAccessAdminPipe> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -120,8 +121,13 @@ internal sealed class MobileAccessAdminPipe(string pipeName, MobileAccessService
                 case { Operation: MobileAccessOperation.Approve, Id: { } approvalId } when pairing.Approve(approvalId):
                 case { Operation: MobileAccessOperation.Reject, Id: { } rejectionId } when pairing.Reject(rejectionId):
                 case { Operation: MobileAccessOperation.Revoke, Id: { } deviceId } when pairing.Revoke(deviceId):
-                case { Operation: MobileAccessOperation.SetWarningActionAccess, Id: { } actionId } when pairing.SetWarningActionAccess(actionId, request.AllowWarningActions):
                     return new MobileAccessResponse(true);
+
+                case { Operation: MobileAccessOperation.GetWarningActions, Id: { } optionsId }:
+                    return warningActions.GetDesktopOptions(optionsId);
+
+                case { Operation: MobileAccessOperation.ConfigureWarningActions, Id: { } settingsId, WarningActions: { } actions }:
+                    return warningActions.ConfigureDesktop(settingsId, actions);
 
                 case { Operation: MobileAccessOperation.PublishSimulationWarning, SimulationWarning: { IsValid: true } warning }:
                     var published = await service.PublishSimulationWarningAsync(warning, cancellationToken);

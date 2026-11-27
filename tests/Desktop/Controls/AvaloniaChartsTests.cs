@@ -85,14 +85,14 @@ internal static class AvaloniaChartsTests
 
     private static void DismissIconFollowsAlertTone()
     {
-        var alert = RTXLens.App.Views.Shell.DesktopControls.Alert("Test alert", "warning", () => { });
+        var alert = App.Views.Shell.DesktopControls.Alert("Test alert", "warning", () => { });
         var window = new Window { Content = alert };
         window.Show();
         try
         {
             foreach (var tone in new[] { "warning", "error", "success" })
             {
-                RTXLens.App.Views.Shell.DesktopControls.SetAlert(alert, "Test alert", tone);
+                App.Views.Shell.DesktopControls.SetAlert(alert, "Test alert", tone);
                 Dispatcher.UIThread.RunJobs();
                 var close = alert.GetVisualDescendants().OfType<Button>().Single();
                 var glyph = (PathIcon)close.Content!;

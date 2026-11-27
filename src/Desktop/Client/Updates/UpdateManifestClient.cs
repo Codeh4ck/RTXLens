@@ -11,8 +11,10 @@ public sealed class UpdateManifestClient(HttpClient http)
         using var request = new HttpRequestMessage(HttpMethod.Get, ReleaseManifest.ManifestUrl);
         request.Headers.UserAgent.ParseAdd("RTXLens-UpdateCheck/1.0");
         request.Headers.CacheControl = new System.Net.Http.Headers.CacheControlHeaderValue { NoCache = true };
+
         using var response = await http.SendAsync(request, token);
         response.EnsureSuccessStatusCode();
+        
         var text = await response.Content.ReadAsStringAsync(token);
 
         if (text.Length > 16384)

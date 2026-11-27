@@ -22,8 +22,7 @@ public sealed class HardwareCatalog
 
     public PluginHardwareMetadata? Find(string id) => _entries.GetValueOrDefault(id);
 
-    public Dictionary<string, PluginHardwareMetadata> PinSources() =>
-        _entries.Where(pair => pair.Value.PinProfiles is not null).ToDictionary(StringComparer.Ordinal);
+    public Dictionary<string, PluginHardwareMetadata> PinSources() => _entries.Where(pair => pair.Value.PinProfiles is not null).ToDictionary(StringComparer.Ordinal);
 
     public IEnumerable<DeviceWarningProfile> DefaultProfiles =>
         _entries.Values.Select(entry => entry.PinProfiles?.DefaultProfile).OfType<DeviceWarningProfile>();
@@ -40,6 +39,7 @@ public sealed class HardwareCatalog
                 return device;
             }
         }
+
         return null;
     }
 
@@ -52,6 +52,7 @@ public sealed class HardwareCatalog
                 profile = contributor.ApplyProfileDefaults(profile, settings);
             }
         }
+
         return profile;
     }
 

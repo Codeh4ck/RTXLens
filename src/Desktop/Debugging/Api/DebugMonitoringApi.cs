@@ -26,11 +26,13 @@ public sealed class DebugMonitoringApi(DebugSession session, TimeProvider clock)
 
     public Task<ConfigurationSnapshot> GetConfigurationAsync(CancellationToken token) => Task.FromResult(Current.Configuration);
 
-    public Task<HealthResponse> GetHealthAsync(CancellationToken token) => Task.FromResult(new HealthResponse("DEBUG", clock.GetUtcNow(), 0, Current.Snapshot.Plugins, 0));
+    public Task<HealthResponse> GetHealthAsync(CancellationToken token) =>
+        Task.FromResult(new HealthResponse("DEBUG", clock.GetUtcNow(), 0, Current.Snapshot.Plugins, 0));
 
     public Task<ConfigurationSnapshot> SetConfigurationAsync(ServiceConfiguration configuration, string version, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
+
         session.SetConfiguration(configuration, version);
         return Task.FromResult(Current.Configuration);
     }
@@ -38,10 +40,8 @@ public sealed class DebugMonitoringApi(DebugSession session, TimeProvider clock)
     public Task<DeviceConfig> GetWireViewConfigurationAsync(CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        var configuration = session.GetSimulatedWireViewConfiguration()
-            ?? throw new IOException("The simulated WireView Pro II is not available.");
+        var configuration = session.GetSimulatedWireViewConfiguration() ?? throw new IOException("The simulated WireView Pro II is not available.");
 
-        // Refresh should reload the editor even when the saved values are unchanged.
         return Task.FromResult(configuration with { });
     }
 
@@ -52,14 +52,20 @@ public sealed class DebugMonitoringApi(DebugSession session, TimeProvider clock)
     }
 
     public Task<RTXLens.Plugins.GenericNvidia.Contracts.Devices.NvidiaDeviceInfo[]> GetNvidiaDevicesAsync(CancellationToken token) =>
-        Task.FromResult<RTXLens.Plugins.GenericNvidia.Contracts.Devices.NvidiaDeviceInfo[]>([new(session.Plugins.Single(plugin => plugin.Id == NvidiaIdentity.Id).DeviceId, "DEBUG GeForce RTX GPU", "debug-nvidia")]);
+        Task.FromResult<RTXLens.Plugins.GenericNvidia.Contracts.Devices.NvidiaDeviceInfo[]>([
+            new(session.Plugins.Single(plugin => plugin.Id == NvidiaIdentity.Id).DeviceId, "DEBUG GeForce RTX GPU", "debug-nvidia")
+        ]);
 
-    public Task<AsusDeviceInfo[]> GetAsusDevicesAsync(CancellationToken token) => Task.FromResult<AsusDeviceInfo[]>([new AsusDeviceInfo(session.Plugins[1].DeviceId, "DEBUG ROG Astral")]);
-    public Task<MsiDeviceInfo[]> GetMsiDevicesAsync(CancellationToken token) => Task.FromResult<MsiDeviceInfo[]>([new MsiDeviceInfo(session.Plugins[2].DeviceId, "DEBUG MPG TS PSU")]);
+    public Task<AsusDeviceInfo[]> GetAsusDevicesAsync(CancellationToken token) =>
+        Task.FromResult<AsusDeviceInfo[]>([new AsusDeviceInfo(session.Plugins[1].DeviceId, "DEBUG ROG Astral")]);
+
+    public Task<MsiDeviceInfo[]> GetMsiDevicesAsync(CancellationToken token) =>
+        Task.FromResult<MsiDeviceInfo[]>([new MsiDeviceInfo(session.Plugins[2].DeviceId, "DEBUG MPG TS PSU")]);
 
     public Task ClearWireViewFaultsAsync(ClearFaultsRequest request, CancellationToken token)
     {
         var plugin = session.Plugins[0];
+
         foreach (var metric in plugin.Metrics.Where(metric => metric.Definition.Metric is SensorMetric.FaultStatus or SensorMetric.FaultLog))
         {
             var mask = metric.Definition.Metric == SensorMetric.FaultStatus ? request.FaultStatusMask : request.FaultLogMask;
@@ -71,6 +77,7 @@ public sealed class DebugMonitoringApi(DebugSession session, TimeProvider clock)
             metric.Value = (ushort)metric.Value & ~mask;
             metric.ModeIndex = (int)DebugMetricMode.Fixed;
         }
+
         return Task.CompletedTask;
     }
 

@@ -28,6 +28,7 @@ internal sealed class DebugAsusAlerts
         if (_device != device || _options != options)
         {
             Reset();
+
             _device = device;
             _options = options;
         }
@@ -74,6 +75,7 @@ internal sealed class DebugAsusAlerts
                 {
                     var highest = currents.MaxBy(pin => pin.Value);
                     var lowest = currents.MinBy(pin => pin.Value);
+
                     alerts.Add(new SensorAlert(plugin.Id, device, AsusAlertKinds.CurrentImbalance, now, [Pin(highest), Pin(lowest)], _monitor.ImbalancePercentage));
                 }
             }
@@ -83,11 +85,13 @@ internal sealed class DebugAsusAlerts
         {
             var pin = metric.Definition.Channel!.Value;
             overcurrent.Remove(pin);
+
             if (metric is { Mode: DebugMetricMode.Fixed, Value: 1 } && currents.TryGetValue("Pin " + pin, out var current))
             {
                 overcurrent[pin] = new AlertPin(pin, current);
             }
         }
+
         alerts.RemoveAll(alert => alert.Kind == AsusAlertKinds.WireOvercurrent);
 
         if (overcurrent.Count > 0)

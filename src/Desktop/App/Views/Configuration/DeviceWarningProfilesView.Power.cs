@@ -15,14 +15,14 @@ internal sealed partial class DeviceWarningProfilesView
     private readonly ToggleSwitch _reducePower = Switch("Enable GPU power limit reduction on warning");
     private readonly ToggleSwitch _autoRestore = Switch("Automatically restore previous limit when warning clears");
     private readonly ComboBox _powerGpu = new() { PlaceholderText = "Select the GPU powered by this connector" };
-    private readonly Slider _powerLimit = new() { TickFrequency = 1, IsSnapToTickEnabled = true };
+    private readonly Slider _powerLimit = CreatePowerLimitSlider();
     private readonly TextBlock _watts = new() { VerticalAlignment = VerticalAlignment.Center, MinWidth = 60 };
     private readonly StackPanel _heldActions = new() { Spacing = 6 };
 
     private PowerTarget[] _powerTargets = [];
 
-    private PowerTarget? SelectedPowerTarget => _powerGpu.SelectedIndex >= 0 && _powerGpu.SelectedIndex < _powerTargets.Length
-        ? _powerTargets[_powerGpu.SelectedIndex] : null;
+    private PowerTarget? SelectedPowerTarget => _powerGpu.SelectedIndex >= 0
+                                                && _powerGpu.SelectedIndex < _powerTargets.Length ? _powerTargets[_powerGpu.SelectedIndex] : null;
 
     private Control BuildReactions()
     {
@@ -77,6 +77,7 @@ internal sealed partial class DeviceWarningProfilesView
         };
 
         _autoRestore.IsCheckedChanged += (_, _) => UpdateSaveState();
+
         _powerGpu.SelectionChanged += (_, _) =>
         {
             if (_loading)
@@ -128,13 +129,7 @@ internal sealed partial class DeviceWarningProfilesView
 
     private void ConfigureSlider(GpuPowerReaction? selected)
     {
-        var gpu = SelectedPowerTarget;
-
-        _powerLimit.Minimum = 0;
-        _powerLimit.Maximum = (gpu?.Maximum > 0 ? gpu.Maximum : selected?.TargetMilliwatts ?? 0) / 1000d;
-        _powerLimit.Minimum = (gpu?.Minimum ?? 0) / 1000d;
-        _powerLimit.Value = selected is null ? _powerLimit.Minimum : selected.TargetMilliwatts / 1000d;
-
+        SetPowerLimitSlider(_powerLimit, SelectedPowerTarget, selected?.TargetMilliwatts);
         ShowWatts();
     }
 
@@ -166,6 +161,7 @@ internal sealed partial class DeviceWarningProfilesView
     private void ShowHeld(HeldGpuLimit[] limits)
     {
         _heldActions.Children.Clear();
+
         foreach (var limit in limits)
         {
             var button = ActionButton($"Restore previous limit · {limit.Original / 1000m:0.###} W", "refresh", () => RunAsync(async api =>

@@ -1,3 +1,12 @@
+1.2.2 - Warning history and GPU protection
+- The desktop Warnings tab shows active warnings and searchable history, with captured pin readings, warning thresholds, and GPU statistics.
+- Clear completed warning records from the Warning History toolbar on the desktop. The change is reflected on paired phones.
+- Warning profiles can reduce the NVIDIA GPU power limit and restore the previous limit after the warning clears.
+- Paired phones can request shutdown or a GPU power cap during an active warning when allowed in Mobile Access. The lower cap wins when a phone command and an automatic reaction overlap.
+- Debug Console warnings use saved warning profiles and record simulated readings in Warning History.
+- WireView Pro II warning details show firmware fault names alongside board and external temperatures.
+- Fixed crashes when opening Configuration with an empty dropdown selection and a Mobile Access alert when a paired phone uses lock-screen notifications.
+
 1.2.1 - RTX 50-series temperature sensors
 - Setup can enable the optional PawnIO driver for additional temperature readings on supported GeForce RTX 50-series cards.
 - Desktop GPU Status shows the GPU hotspot and a live list of individual chip temperatures beside VRAM temp when those sensors report.

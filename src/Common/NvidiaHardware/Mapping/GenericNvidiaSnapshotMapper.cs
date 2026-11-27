@@ -137,7 +137,7 @@ public static class GenericNvidiaSnapshotMapper
                 number = null;
             }
 
-            readings.Add(new SensorReading(new SensorIdentity(RTXLens.Plugins.GenericNvidia.Contracts.NvidiaIdentity.Id, sample.Device.Id, component, metric, channel),
+            readings.Add(new SensorReading(new SensorIdentity(Plugins.GenericNvidia.Contracts.NvidiaIdentity.Id, sample.Device.Id, component, metric, channel),
                 SensorUnits.For(metric), number, observedAt ?? sample.ObservedAt, number is null ? ReadingQuality.Unavailable : ReadingQuality.Valid));
         }
     }

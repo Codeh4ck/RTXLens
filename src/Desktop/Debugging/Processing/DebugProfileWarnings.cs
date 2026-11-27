@@ -43,8 +43,10 @@ internal sealed class DebugProfileWarnings
                 {
                     var targets = profiles[plugin.Id]
                         .Where(p => p.ConnectorId == profile.ConnectorId && p.DeviceId is not null)
-                        .Select(p => p.DeviceId).Distinct(StringComparer.Ordinal)
-                        .Take(2).ToArray();
+                        .Select(p => p.DeviceId)
+                        .Distinct(StringComparer.Ordinal)
+                        .Take(2)
+                        .ToArray();
 
                     if (targets.Length == 1)
                     {

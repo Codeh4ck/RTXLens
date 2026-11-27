@@ -41,7 +41,7 @@ internal static class WarningProfileEndpoints
                         throw new ArgumentException("Choose a reporting GPU and a limit inside its driver range.");
                     }
 
-                    if (draft.PluginId == RTXLens.Plugins.Asus.Contracts.AsusIdentity.Id && draft.DeviceId is not null && draft.DeviceId != target.Id)
+                    if (draft.PluginId == Plugins.Asus.Contracts.AsusIdentity.Id && draft.DeviceId is not null && draft.DeviceId != target.Id)
                     {
                         throw new ArgumentException("An Astral warning must reduce power on the same GPU.");
                     }
