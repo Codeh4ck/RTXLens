@@ -4,9 +4,14 @@ using RTXLens.UI.Tests.Settings;
 using RTXLens.UI.Tests.Streaming;
 using RTXLens.UI.Tests.Telemetry;
 
-if (args is ["--verify-warning-notifier"])
+if (args is ["--verify-warning-notifier"] or ["--verify-warning-notifier", _])
 {
-    return RTXLens.UI.Tests.Controls.NotifierIntegration.Run();
+    return RTXLens.UI.Tests.Controls.NotifierIntegration.Run(args.Length == 2 ? args[1] : null);
+}
+
+if (args is ["--verify-warning-history"] or ["--verify-warning-history", _])
+{
+    return RTXLens.UI.Tests.Controls.AvaloniaControlsTests.Run(args.Length == 2 ? args[1] : null, warningsOnly: true);
 }
 
 if (args is ["--verify-avalonia-controls"] or ["--verify-avalonia-controls", _])

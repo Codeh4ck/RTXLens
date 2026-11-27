@@ -11,6 +11,10 @@ public sealed record SensorIdentity(
     int? Channel = null,
     string? ConnectorId = null)
 {
+    public bool IsGpuStatus() => Component is SensorComponent.GpuBoard or SensorComponent.GpuCore or SensorComponent.GpuMemory
+        or SensorComponent.GpuFan or SensorComponent.GpuHotspot or SensorComponent.GpuMemoryChip
+        or SensorComponent.GpuCrossbar or SensorComponent.GpuSystem;
+
     public bool IsGpuDiagnostic() => Component is SensorComponent.GpuPcie or SensorComponent.GpuPerformance or SensorComponent.GpuPowerLimits
         or SensorComponent.GpuCrossbar or SensorComponent.GpuSystem;
 

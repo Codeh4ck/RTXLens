@@ -176,7 +176,6 @@ internal sealed class MobilePairing(IMobileAccessStore store, TimeProvider clock
 
             logger.LogActivity(LogLevel.Information, "mobile.paired", "Mobile access", "A phone was paired.");
 
-            // Permit the same claim to recover its response until the invite expires.
             return (true, claim.Credential);
         }
     }
@@ -259,6 +258,36 @@ internal sealed class MobilePairing(IMobileAccessStore store, TimeProvider clock
                 .. _devices.Values.Select(device =>
                     new MobileDevice(device.Credential.Id, device.Credential.Name, device.LastConnectedAt, device.LastExternalConnectionAt, device.Credential.PushToken is not null))
             ];
+        }
+    }
+
+    public MobileWarningActionSettings? GetWarningActions(Guid id, bool requireListening = true)
+    {
+        lock (_gate)
+        {
+            return (!requireListening || _listening) && _devices.TryGetValue(id, out var device)
+                ? device.Credential.DesktopWarningActions ?? new()
+                : null;
+        }
+    }
+
+    public bool SetWarningActions(Guid id, MobileWarningActionSettings settings)
+    {
+        lock (_gate)
+        {
+            if (!_devices.TryGetValue(id, out var device))
+            {
+                return false;
+            }
+
+            if (device.Credential.DesktopWarningActions != settings)
+            {
+                var updated = device.Credential with { DesktopWarningActions = settings };
+                Save(_data with { Devices = [.. _data.Devices.Select(value => value.Id == id ? updated : value)] });
+                device.Credential = updated;
+            }
+
+            return true;
         }
     }
 

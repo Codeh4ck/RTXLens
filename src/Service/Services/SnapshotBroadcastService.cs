@@ -29,9 +29,11 @@ internal sealed class SnapshotBroadcastService(
     WarningShutdownCoordinator shutdown,
     SafeguardJournalService safeguard,
     MonitoringActivity activity,
-    MobileAccessService? mobileAccess = null) : BackgroundService
+    MobileAccessService? mobileAccess = null,
+    WarningPowerService? power = null,
+    DebugPowerSimulation? simulation = null) : BackgroundService
 {
-    private readonly DeviceWarningEvaluator _profileWarnings = new(hardware);
+    private readonly DeviceWarningEvaluator _profileWarnings = new(hardware.Find);
     private readonly AsyncSignal _wake = new();
     private readonly WarningEngine _warnings = new(runtime.WarningRegistry);
 
@@ -62,18 +64,20 @@ internal sealed class SnapshotBroadcastService(
                 {
                     var evaluated = _profileWarnings.Evaluate(snapshot, current.Configuration, activeProfiles, profiles.Automatic);
 
-                    var warnings = _warnings.Evaluate(evaluated.Snapshot, current.Configuration, now, evaluated.Warnings,
+                    var observations = simulation?.Include(snapshot, current.Configuration, activeProfiles, profiles.Automatic, evaluated.Warnings) ?? evaluated.Warnings;
+                    var warnings = _warnings.Evaluate(evaluated.Snapshot, current.Configuration, now, observations,
                         observation => hardware.UsePluginWarning(observation.PluginId, observation.TypeId));
 
                     snapshot = evaluated.Snapshot with { Warnings = warnings };
 
                     shutdown.Evaluate(evaluated.Shutdowns);
+                    power?.Observe(activeProfiles, observations, warnings);
                 });
 
                 TelemetryMetrics.SnapshotDuration.Record(Stopwatch.GetElapsedTime(started).TotalMilliseconds);
 
                 activity.Observe(snapshot, settings.ConnectorProfiles);
-                mobileAccess?.ObserveWarnings(snapshot);
+                mobileAccess?.ObserveWarnings(snapshot, simulation?.GetHistory());
 
                 if (publishedWarnings != _warnings.Revision && snapshot.Warnings is { } feed)
                 {

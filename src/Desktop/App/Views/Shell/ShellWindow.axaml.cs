@@ -103,6 +103,9 @@ internal sealed partial class ShellWindow : LensWindow
 
         switch (_preferredPanelId)
         {
+            case "warnings":
+                Navigate(Page.Warnings);
+                break;
             case "performance":
                 Navigate(Page.Performance);
                 break;
@@ -227,6 +230,7 @@ internal sealed partial class ShellWindow : LensWindow
         _model.WarningShutdownAvailable -= ShowWarningShutdown;
 
         _localPopup?.Close();
+        _safeguardPopup?.Close();
         _tray?.Dispose();
         _model.Dispose();
     }
@@ -267,7 +271,7 @@ internal sealed partial class ShellWindow : LensWindow
 
     private void OpenCurrentWarnings(object? sender, RoutedEventArgs args) => ShowCurrentWarnings();
 
-    internal void ShowCurrentWarnings() => Navigate(Page.Configuration, currentWarnings: true);
+    internal void ShowCurrentWarnings() => Navigate(Page.Warnings);
 
     private void OpenSettings(object? sender, RoutedEventArgs args) => Navigate(Page.Settings);
 
@@ -317,12 +321,13 @@ internal sealed partial class ShellWindow : LensWindow
         }
     }
 
-    private void Navigate(Page page, HardwarePanelViewModel? panel = null, bool currentWarnings = false)
+    private void Navigate(Page page, HardwarePanelViewModel? panel = null)
     {
         _page = page;
         _model.ShowHardware = page == Page.Hardware;
         _model.ShowConfiguration = page == Page.Configuration;
         _model.Dashboard.SelectedPanel = panel;
+        WarningsTab.IsChecked = page == Page.Warnings;
         PerformanceTab.IsChecked = page == Page.Performance;
         EventLogTab.IsChecked = page == Page.EventLog;
 
@@ -330,7 +335,8 @@ internal sealed partial class ShellWindow : LensWindow
 
         PageHost.Content = page switch
         {
-            Page.Configuration => new ConfigurationPage(_model, currentWarnings),
+            Page.Configuration => new ConfigurationPage(_model),
+            Page.Warnings => new WarningsPage(_model),
             Page.Settings => new SettingsPage(_model),
             Page.Performance => new PerformancePage(_model.Recorder),
             Page.EventLog => new EventLogPage(_model.Logs, _model.StopToken, _model.LocalEvents),
@@ -348,6 +354,7 @@ internal sealed partial class ShellWindow : LensWindow
     private enum Page
     {
         Hardware,
+        Warnings,
         Performance,
         EventLog,
         Configuration,

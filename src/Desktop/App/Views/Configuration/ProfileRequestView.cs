@@ -10,6 +10,7 @@ internal abstract class ProfileRequestView(ShellViewModel shell) : UserControl
 {
     protected ShellViewModel Shell { get; } = shell;
     protected ContentControl Status { get; } = Alert();
+    protected virtual IMonitoringApi ProfileApi => Shell.Api;
     protected bool IsBusy { get; private set; }
 
     protected void Report(string? message, string tone = "info") => SetAlert(Status, message, tone);
@@ -23,9 +24,10 @@ internal abstract class ProfileRequestView(ShellViewModel shell) : UserControl
 
         IsBusy = true;
         UpdateAvailability();
+
         try
         {
-            await operation(Shell.Api);
+            await operation(ProfileApi);
         }
         catch (Exception error) when (error is ArgumentException or MonitoringApiException or HttpRequestException
             or IOException or InvalidDataException or NotSupportedException or OperationCanceledException or JsonException)

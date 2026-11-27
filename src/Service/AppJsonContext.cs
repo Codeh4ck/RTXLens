@@ -7,6 +7,8 @@ using RTXLens.Contracts.Discovery;
 namespace RTXLens.Service;
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, UseStringEnumConverter = true)]
+[JsonSerializable(typeof(RTXLens.Contracts.Configuration.DebugPowerFrame))]
+[JsonSerializable(typeof(Services.PowerJournal))]
 [JsonSerializable(typeof(SensorSnapshot))]
 [JsonSerializable(typeof(ServiceLogEntry))]
 [JsonSerializable(typeof(ServiceLogPage))]

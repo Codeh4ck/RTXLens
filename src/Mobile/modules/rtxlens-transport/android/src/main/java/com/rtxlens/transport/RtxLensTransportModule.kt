@@ -38,6 +38,14 @@ class RtxLensTransportModule : Module() {
             request(address, pin, path, null, token, promise)
         }
 
+        AsyncFunction("postWarningAction") { address: String, pin: String, token: String, path: String, json: String, promise: Promise ->
+            if (path == MobileRoutes.warningActions || path == MobileRoutes.runWarningAction) {
+                request(address, pin, path, json, token, promise)
+            } else {
+                promise.reject("REQUEST_FAILED", "Invalid warning action endpoint.", null)
+            }
+        }
+
         AsyncFunction("registerNotifications") { address: String, pin: String, token: String, json: String, promise: Promise ->
             request(address, pin, MobileRoutes.registrationV2, json, token, promise)
         }
@@ -66,14 +74,16 @@ class RtxLensTransportModule : Module() {
             val url = endpoint.newBuilder().encodedPath(path.substringBefore('?'))
             val builder = Request.Builder()
             val registration = path == MobileRoutes.registrationV2
+            val authenticatedPost = registration || path == MobileRoutes.runWarningAction ||
+                (path == MobileRoutes.warningActions && json != null)
             if (token == null) {
                 require((path == MobileRoutes.pairing || path == MobileRoutes.completePairing) && json != null)
             } else {
                 require(tokenPattern.matches(token))
-                if (registration) {
+                if (authenticatedPost) {
                     require(json != null)
                 } else {
-                    require(json == null && (path == MobileRoutes.session || path == MobileRoutes.incidents
+                    require(json == null && (path == MobileRoutes.session || path == MobileRoutes.incidents || path == MobileRoutes.warningActions
                         || historyPage.matches(path) || historyDetail.matches(path)))
                 }
                 if ('?' in path) {

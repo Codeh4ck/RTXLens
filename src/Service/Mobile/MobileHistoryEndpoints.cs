@@ -1,23 +1,12 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using RTXLens.Contracts.Sensors;
-using RTXLens.Plugins.Msi.Contracts.Safeguard;
+using RTXLens.Contracts.Warnings;
+using RTXLens.Contracts.Errors;
+using RTXLens.Contracts.Monitoring;
+using RTXLens.Service.Endpoints;
 using RTXLens.Service.Services;
 
 namespace RTXLens.Service.Mobile;
-
-internal sealed record MobileIncident(Guid Id, string Kind, string Title, string Source, DateTimeOffset StartedAt,
-    DateTimeOffset? EndedAt, string Status)
-{
-    public string? Detail { get; init; }
-    public string? DeviceId { get; init; }
-    public int? Connector { get; init; }
-    public int? DelayMs { get; init; }
-    public string? DeliveryStatus { get; init; }
-    public DateTimeOffset? CapturedAt { get; init; }
-    public SensorReading[] Readings { get; init; } = [];
-    public SafeguardStep[] Steps { get; init; } = [];
-}
 
 internal sealed class MobileHistoryEndpoints(MobileWarningHistory warnings, SafeguardJournalService safeguard, TimeProvider clock, Func<int> warningRetention)
 {
@@ -28,6 +17,39 @@ internal sealed class MobileHistoryEndpoints(MobileWarningHistory warnings, Safe
     {
         Converters = { new JsonStringEnumConverter() }
     };
+
+    public static void MapDesktop(IEndpointRouteBuilder endpoints)
+    {
+        var history = endpoints.MapGroup("/" + ServiceRoutes.WarningHistory)
+            .WithMetadata(new Microsoft.AspNetCore.Cors.DisableCorsAttribute());
+        history.AddEndpointFilter(async (context, next) =>
+        {
+            if (!ServiceLogEndpoints.IsLocalClient(context.HttpContext))
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+
+            context.HttpContext.Response.Headers.CacheControl = "no-store";
+            return await next(context);
+        });
+        history.MapGet("", (MobileHistoryEndpoints incidents) => Results.Json(incidents.Summaries(), Json));
+        history.MapDelete("", (MobileHistoryEndpoints incidents) => incidents.ClearCompleted());
+        history.MapGet("/{kind}/{id:guid}", (string kind, Guid id, MobileHistoryEndpoints incidents) => incidents.Detail(kind, id));
+    }
+
+    private IResult ClearCompleted()
+    {
+        try
+        {
+            warnings.ClearCompleted();
+            return Results.Json(Summaries(), Json);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return Results.Json(new ErrorResponse("The service could not delete all completed warning records. Refresh to see the remaining records."),
+                Json, statusCode: StatusCodes.Status500InternalServerError);
+        }
+    }
 
     public IResult List(string? before)
     {
@@ -50,13 +72,7 @@ internal sealed class MobileHistoryEndpoints(MobileWarningHistory warnings, Safe
             kind = parts[2];
         }
 
-        var incidents = warnings.Summaries(Cutoff()).Concat((safeguard.Notices ?? []).Select(notice =>
-            new MobileIncident(notice.Id, "safeguard", notice.Script, "Safeguard+", notice.StartedAt, null, notice.Status)
-            {
-                Connector = notice.Connector
-            }));
-
-        var page = incidents
+        var page = Summaries()
             .Where(record => timestamp is null || record.StartedAt < timestamp
                                                || (record.StartedAt == timestamp && (record.Id.CompareTo(id) < 0 || (record.Id == id && StringComparer.Ordinal.Compare(record.Kind, kind) < 0))))
             .OrderByDescending(record => record.StartedAt)
@@ -65,6 +81,12 @@ internal sealed class MobileHistoryEndpoints(MobileWarningHistory warnings, Safe
 
         return Results.Json(new { items = page.Take(PageSize), next = page.Length > PageSize ? Cursor(page[PageSize - 1]) : null }, Json);
     }
+
+    public IEnumerable<WarningIncident> Summaries() => warnings.Summaries(Cutoff()).Concat((safeguard.Notices ?? []).Select(notice =>
+        new WarningIncident(notice.Id, "safeguard", notice.Script, "Safeguard+", notice.StartedAt, null, notice.Status)
+        {
+            Connector = notice.Connector
+        }));
 
     public IResult Detail(string kind, Guid id)
     {
@@ -86,5 +108,5 @@ internal sealed class MobileHistoryEndpoints(MobileWarningHistory warnings, Safe
 
     private DateTimeOffset Cutoff() => clock.GetUtcNow().AddDays(-warningRetention());
 
-    private static string Cursor(MobileIncident incident) => FormattableString.Invariant($"{incident.StartedAt.UtcTicks}.{incident.Id:N}.{incident.Kind}");
+    private static string Cursor(WarningIncident incident) => FormattableString.Invariant($"{incident.StartedAt.UtcTicks}.{incident.Id:N}.{incident.Kind}");
 }

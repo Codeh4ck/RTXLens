@@ -23,7 +23,7 @@ namespace RTXLens.UI.Tests.Controls;
 
 internal static class AvaloniaControlsTests
 {
-    public static int Run(string? screenshotDirectory)
+    public static int Run(string? screenshotDirectory, bool warningsOnly = false)
     {
         AppBuilder.Configure<RTXLens.App.App>()
             .UseSkia()
@@ -31,6 +31,11 @@ internal static class AvaloniaControlsTests
             .SetupWithoutStarting();
 
         var runner = new TestRunner();
+        runner.Run(() => AvaloniaDashboardTests.OpensWarningHistory(screenshotDirectory));
+#if TELEMETRY_DEBUG
+        runner.Run(AvaloniaDashboardTests.SimulationUsesSavedMsiConnectorProfile);
+#endif
+        if (warningsOnly) { runner.PrintSummary(); return runner.FailedCount == 0 ? 0 : 1; }
         runner.Run(() => RunPreviewChecks(screenshotDirectory));
         runner.Run(SavedAppearanceRoundTrips);
         runner.Run(() => DiagnosticPickersFollowPalette(screenshotDirectory));
@@ -93,7 +98,7 @@ internal static class AvaloniaControlsTests
     {
         var completion = new TaskCompletionSource();
         var calls = 0;
-        var button = RTXLens.App.Views.Shell.DesktopControls.CommitButton("Apply", () =>
+        var button = App.Views.Shell.DesktopControls.CommitButton("Apply", () =>
         {
             calls++;
             return completion.Task;
@@ -122,13 +127,13 @@ internal static class AvaloniaControlsTests
         try
         {
             var error = new InvalidOperationException("fixture failure");
-            var crash = RTXLens.App.DesktopErrorReports.Write(error, "startup", crash: true, directory: directory.FullName);
-            for (var i = 0; i < RTXLens.App.DesktopErrorReports.RetainedPerKind + 2; i++)
+            var crash = App.DesktopErrorReports.Write(error, "startup", crash: true, directory: directory.FullName);
+            for (var i = 0; i < App.DesktopErrorReports.RetainedPerKind + 2; i++)
             {
-                RTXLens.App.DesktopErrorReports.Write(error, $"action {i}", directory: directory.FullName);
+                App.DesktopErrorReports.Write(error, $"action {i}", directory: directory.FullName);
             }
             var actions = directory.GetFiles("action-*.txt").OrderBy(item => item.Name, StringComparer.Ordinal).ToArray();
-            TestAssert.Equal(RTXLens.App.DesktopErrorReports.RetainedPerKind, actions.Length);
+            TestAssert.Equal(App.DesktopErrorReports.RetainedPerKind, actions.Length);
             TestAssert.True(File.Exists(crash) && File.ReadAllText(crash!).Contains("startup"), "Action reports must preserve the crash report.");
             var latest = File.ReadAllText(actions[^1].FullName);
             TestAssert.True(latest.Contains("fixture failure") && latest.Contains("RTX Lens"), "Reports must identify the build and error.");
@@ -447,7 +452,7 @@ internal static class AvaloniaControlsTests
         var app = Application.Current!;
         var previousTheme = app.RequestedThemeVariant;
         var palette = new PaletteResources(app);
-        var dialog = new RTXLens.App.Views.Diagnostics.DiagnosticReportWindow("http://localhost:59273/", CancellationToken.None);
+        var dialog = new App.Views.Diagnostics.DiagnosticReportWindow("http://localhost:59273/", CancellationToken.None);
         dialog.Show();
         try
         {

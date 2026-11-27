@@ -72,6 +72,8 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+                            <RadioButton x:Name="WarningsTab" Content="Warnings" GroupName="MainTabs"
+                                         Theme="{StaticResource NavigationTabTheme}" Click="OpenCurrentWarnings" />
                             <RadioButton x:Name="PerformanceTab" Content="Performance Chart" GroupName="MainTabs"
                                          Theme="{StaticResource NavigationTabTheme}" Click="OpenPerformance" />
                             <RadioButton x:Name="EventLogTab" Content="Event Log" GroupName="MainTabs"

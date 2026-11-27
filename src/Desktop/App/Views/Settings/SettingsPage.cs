@@ -26,7 +26,7 @@ internal sealed class SettingsPage : UserControl
     private static readonly (string Id, string Label)[] StartupTabs =
     [
         ("", "First reporting plugin"), (WireViewIdentity.Id, "WireView Pro II"), (AsusIdentity.Id, "ROG Astral"),
-        (NvidiaIdentity.Id, "GPU Status"), (MsiIdentity.Id, "MSI PSU"), ("performance", "Performance Chart"), ("event-log", "Event Log")
+        (NvidiaIdentity.Id, "GPU Status"), (MsiIdentity.Id, "MSI PSU"), ("warnings", "Warnings"), ("performance", "Performance Chart"), ("event-log", "Event Log")
     ];
 
     private readonly ShellViewModel _shell;

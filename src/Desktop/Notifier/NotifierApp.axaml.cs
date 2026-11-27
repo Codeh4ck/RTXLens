@@ -262,10 +262,7 @@ internal sealed partial class NotifierApp : Application
             popup.Close(); return;
         }
 
-        popup.Update(rows.Length == 1 ? rows[0].Title : $"{rows.Length} warning conditions",
-            string.Join(Environment.NewLine,
-                rows.Take(3)
-                .Select(s => (rows.Length > 1 ? s.Title + " · " : "") + s.Detail + (s.Phase == WarningPhase.Active ? "" : $" · {s.Phase}"))));
+        popup.Update(rows);
 
         if (!popup.IsVisible)
         {
@@ -289,7 +286,7 @@ internal sealed partial class NotifierApp : Application
         if (_prefs.WarningNotifications)
         {
             var preview = _preview = CreatePopup();
-            preview.Update("Test warning", "ROG Astral · Pin 1 overcurrent · 9.2 A (example)");
+            preview.Update("Test warning", "P1: 9.2 A", "ROG Astral · Preview");
 
             preview.Closed += (_, _) => { _preview = null; StopPreviewSound(); };
             preview.Show();

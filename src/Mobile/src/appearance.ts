@@ -15,16 +15,20 @@ function unpack(hex: string): Palette {
   const [primary, secondary, tertiary, background] = hex.split(' ');
   return { primary, secondary, tertiary, background };
 }
+
 export const defaultAppearance: Appearance = { scheme: 'Default', light: false, custom: unpack(schemes[0][1]), panelGlow: false };
 export function validColor(value: unknown): value is string {
   return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
 }
+
 export function decodeAppearance(raw: string): Appearance {
   const value = JSON.parse(raw);
   if (typeof value?.light !== 'boolean' || !(value.scheme === 'Custom' || schemes.some(([name]) => name === value.scheme))
     || !Object.keys(defaultAppearance.custom).every(key => validColor(value.custom?.[key]))) return defaultAppearance;
+
   return { scheme: value.scheme, light: value.light, custom: value.custom, panelGlow: value.panelGlow === true };
 }
+
 export function selectedPalette(value: Appearance) {
   const preset = schemes.find(([name]) => name === value.scheme);
   return preset ? unpack(preset[value.light ? 2 : 1]) : value.custom;
@@ -42,6 +46,7 @@ function luminance(hex: string) {
     const v = channel / 255;
     return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
   });
+
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 export function isLight(hex: string) { return luminance(hex) > 0.179; }
@@ -51,16 +56,22 @@ export function themeColors(value: Appearance) {
   const light = isLight(background);
   const text = light ? '#000000' : '#FFFFFF';
   const surface = mix(background, text, 0.05);
+
   function readable(color: string) {
     const base = luminance(surface) + 0.05;
+
     for (let step = 0; step < 20; step++) {
       const candidate = mix(color, text, step / 20);
       const l = luminance(candidate) + 0.05;
+      
       if (Math.max(l, base) / Math.min(l, base) >= 4.5) return candidate;
     }
+
     return text;
   }
+
   const accent = readable(primary);
+
   return { background, surface, text, accent, panelGlow: value.panelGlow, panelHeader: mix(surface, accent, 0.075), secondary: readable(secondary), tertiary: readable(tertiary),
     onAccent: isLight(accent) ? '#000000' : '#FFFFFF', raised: mix(background, text, 0.09), line: mix(background, text, 0.24),
     muted: mix(surface, text, 0.7), accentSurface: mix(background, accent, 0.14),
@@ -68,9 +79,11 @@ export function themeColors(value: Appearance) {
     warning: light ? '#794500' : '#FFD08B', warningSurface: light ? '#FFF0D6' : '#392C20',
     danger: light ? '#981E42' : '#FF9AB0', dangerSurface: light ? '#FCE4EB' : '#391F2C' };
 }
+
 export type Colors = ReturnType<typeof themeColors>;
 export const ThemeContext = createContext(themeColors(defaultAppearance));
 export function useColors() { return useContext(ThemeContext); }
+
 export function useThemeStyles<T>(create: (colors: Colors) => T) {
   const colors = useColors();
   return useMemo(() => create(colors), [create, colors]);

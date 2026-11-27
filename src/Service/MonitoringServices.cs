@@ -26,7 +26,7 @@ public static class MonitoringServices
         services.AddSingleton(new MonitoringServiceLifetime(TimeProvider.System));
         services.AddSingleton(_ => new SensorStateStore([]));
         services.AddSingleton<SensorStreamHub>();
-        services.AddKeyedSingleton<SensorStreamHub>(RTXLens.Contracts.Monitoring.ServiceRoutes.WarningStream);
+        services.AddKeyedSingleton<SensorStreamHub>(Contracts.Monitoring.ServiceRoutes.WarningStream);
         services.AddSingleton<PluginRuntimeManager>();
         services.AddSingleton<HardwareCatalog>();
         services.AddSingleton<ActivityLoggerProvider>();
@@ -48,6 +48,9 @@ public static class MonitoringServices
         services.AddSingleton<DeviceWarningProfileStore>();
         services.AddSingleton<IWarningShutdown, WindowsWarningShutdown>();
         services.AddSingleton<WarningShutdownCoordinator>();
+        services.AddSingleton<DebugPowerSimulation>();
+        services.AddSingleton<WarningPowerService>();
+        services.AddHostedService(provider => provider.GetRequiredService<WarningPowerService>());
         services.AddSingleton<SafeguardJournalService>();
 
         if (!debugInstance)

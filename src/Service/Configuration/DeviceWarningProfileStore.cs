@@ -33,16 +33,26 @@ internal sealed class DeviceWarningProfileStore(HardwareCatalog hardware, Settin
         }
     }
 
+    public DeviceWarningProfile[] PowerReactionProfiles()
+    {
+        lock (_gate)
+        {
+            return [.. Load().Where(profile => profile is { Enabled: true, PowerReduction: not null })];
+        }
+    }
+
     public void Evaluate(SensorSnapshot snapshot, Action<DeviceWarningProfile[]> evaluate)
     {
         lock (_gate)
         {
             _targets =
             [
-                .. snapshot.Sensors.Select(sensor => sensor.Identity)
+                .. snapshot.Sensors
+                    .Select(sensor => sensor.Identity)
                     .Where(identity => hardware.Find(identity.PluginId)?.PinProfiles?.Component == identity.Component)
                     .Select(identity => new WarningProfileTarget(identity.PluginId, identity.DeviceId, identity.DeviceId))
-                    .Distinct().OrderBy(target => target.DeviceId, StringComparer.Ordinal)
+                    .Distinct()
+                    .OrderBy(target => target.DeviceId, StringComparer.Ordinal)
             ];
 
             evaluate(Load());
@@ -159,7 +169,7 @@ internal sealed class DeviceWarningProfileStore(HardwareCatalog hardware, Settin
     {
         Directory.CreateDirectory(settings.DirectoryPath);
         SettingsProfileStore.WriteAtomically(PathOnDisk, JsonSerializer.Serialize(profiles, AppJsonContext.Default.DeviceWarningProfileArray));
-        
+
         _profiles = profiles;
     }
 }

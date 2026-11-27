@@ -10,6 +10,7 @@ public sealed class ReleaseNotesClient(HttpClient http)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, ReleaseNotes.FeedUrl);
         request.Headers.CacheControl = new System.Net.Http.Headers.CacheControlHeaderValue { NoCache = true };
+
         using var response = await http.SendAsync(request, token);
         response.EnsureSuccessStatusCode();
 

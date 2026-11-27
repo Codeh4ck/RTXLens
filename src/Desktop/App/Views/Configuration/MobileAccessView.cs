@@ -61,7 +61,9 @@ internal sealed class MobileAccessView : UserControl
     private MobileAccessStatus? _status;
     private MobileDevice[]? _shownDevices;
     private MobilePairingWindow? _pairingWindow;
-    private bool _busy;
+    private MobileWarningActionsWindow? _warningActionsWindow;
+    private TaskCompletionSource? _pendingRequest;
+    private bool _busy => _pendingRequest is not null;
 
     public MobileAccessView(ShellViewModel shell) : this(CreateClient(shell), shell.StopToken)
     {
@@ -160,6 +162,7 @@ internal sealed class MobileAccessView : UserControl
 
         var pairingInfo = IconButton("Pairing and remote access information", DesktopIcons.Info, ShowPairingInfoAsync);
         _review = ActionButton("Review pairing request", "qr-code-action", () => OpenPairingWindowAsync(code: null));
+
         RenderDevices([]);
 
         var pairing = Section("Pairing & devices", new StackPanel { Spacing = 12, Children = { _review, _devices } });
@@ -201,6 +204,7 @@ internal sealed class MobileAccessView : UserControl
             _visible = null;
 
             _pairingWindow?.Close();
+            _warningActionsWindow?.Close();
 
             _keyPassword.Text = string.Empty;
         };
@@ -220,8 +224,7 @@ internal sealed class MobileAccessView : UserControl
         }
 
         var opensPort = settings.Enabled && (settings.OpenFirewall || settings.PortForwarding is not null)
-            && (!status.Enabled || settings.Port != status.Port || settings.OpenFirewall != status.OpenFirewall
-                || settings.PortForwarding != status.PortForwarding);
+            && (!status.Enabled || settings.Port != status.Port || settings.OpenFirewall != status.OpenFirewall || settings.PortForwarding != status.PortForwarding);
 
         if (opensPort)
         {
@@ -433,17 +436,52 @@ internal sealed class MobileAccessView : UserControl
         }
     }
 
-    private async Task<MobileAccessResponse?> SendAsync(MobileAccessRequest request, bool reloadSettings = false)
+    private async Task ConfigureWarningActionsAsync(MobileDevice device)
+    {
+        if (_warningActionsWindow is not null || TopLevel.GetTopLevel(this) is not Window owner)
+        {
+            return;
+        }
+
+        _refresh.Stop();
+        var window = new MobileWarningActionsWindow(device, SendWarningActionRequestAsync);
+        _warningActionsWindow = window;
+        try
+        {
+            await window.ShowDialog(owner);
+        }
+        finally
+        {
+            _warningActionsWindow = null;
+            if (_visible is not null)
+            {
+                _refresh.Start();
+            }
+        }
+    }
+
+    private async Task<MobileAccessResponse?> SendWarningActionRequestAsync(MobileAccessRequest request)
+    {
+        while (_pendingRequest is { } pending)
+        {
+            await pending.Task;
+        }
+
+        return await SendAsync(request, reportErrors: false);
+    }
+
+    private async Task<MobileAccessResponse?> SendAsync(MobileAccessRequest request, bool reloadSettings = false, bool reportErrors = true)
     {
         if (_send is null || _visible is not { } visible || _busy)
         {
             return null;
         }
 
-        _busy = true;
+        var pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _pendingRequest = pending;
         UpdateButtons();
-        var cancellationToken = visible.Token;
 
+        var cancellationToken = visible.Token;
         try
         {
             var response = await _send(request, cancellationToken);
@@ -460,7 +498,7 @@ internal sealed class MobileAccessView : UserControl
                 RenderStatus(status, refreshForm);
             }
 
-            if (!response.Success)
+            if (!response.Success && reportErrors)
             {
                 var message = response.Error ?? "The service could not complete the request.";
 
@@ -481,11 +519,14 @@ internal sealed class MobileAccessView : UserControl
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or SecurityException
             or JsonException or OperationCanceledException or InvalidOperationException or ArgumentException)
         {
+            var message = error is OperationCanceledException ? "The local service did not respond in time." : error.Message;
+            if (!reportErrors)
+            {
+                return new(false, Error: message);
+            }
+
             _status = null;
             _listenerStatus.IsVisible = false;
-
-            var message = error is OperationCanceledException ? "The local service did not respond in time." : error.Message;
-
             SetAlert(_notice, message, "warning");
             _pairingWindow?.ReportError(message);
 
@@ -493,7 +534,8 @@ internal sealed class MobileAccessView : UserControl
         }
         finally
         {
-            _busy = false;
+            _pendingRequest = null;
+            pending.SetResult();
             UpdateButtons();
         }
     }
@@ -568,16 +610,18 @@ internal sealed class MobileAccessView : UserControl
             var name = new StackPanel { Spacing = 3, VerticalAlignment = VerticalAlignment.Center, Children = { title, Caption(details) } };
             var revoke = ActionButton("Revoke", "cancel-action", () => RevokeAsync(device));
 
-            Control actions = revoke;
+            var actions = Actions();
 
             if (device.LockScreenNotifications)
             {
                 name.Children.Add(Caption("Lock-screen notifications enabled"));
 
                 var test = ActionButton("Send test", "mail-action", () => SendTestNotificationAsync(device));
-                actions = Actions(test, revoke);
+                actions.Children.Add(test);
             }
 
+            actions.Children.Add(ActionButton("Configure warning actions", "settings-action", () => ConfigureWarningActionsAsync(device)));
+            actions.Children.Add(revoke);
             actions.VerticalAlignment = VerticalAlignment.Center;
             actions.HorizontalAlignment = HorizontalAlignment.Right;
 

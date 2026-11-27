@@ -26,8 +26,7 @@ public sealed record MobileAccessSettings(
 
     public static bool TryGetLocalIpv4(string? text, out IPAddress address)
     {
-        if (IPAddress.TryParse(text, out var parsed) && parsed.AddressFamily == AddressFamily.InterNetwork
-            && !IPAddress.IsLoopback(parsed) && !parsed.Equals(IPAddress.Any))
+        if (IPAddress.TryParse(text, out var parsed) && parsed.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(parsed) && !parsed.Equals(IPAddress.Any))
         {
             address = parsed;
             return true;

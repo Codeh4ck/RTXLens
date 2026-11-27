@@ -38,6 +38,7 @@ internal static class MobileAccessRegistration
         }).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
 
         services.AddSingleton<MobilePushDelivery>();
+        services.AddSingleton<MobileWarningActions>();
         services.AddHostedService(provider => provider.GetRequiredService<MobilePushDelivery>());
 
         services.AddSingleton(provider => new MobileAccessService(
@@ -45,7 +46,8 @@ internal static class MobileAccessRegistration
             provider.GetRequiredService<TimeProvider>(), provider.GetRequiredService<NoIpUpdater>(),
             provider.GetRequiredService<IMobileNetworkAccess>(), provider.GetRequiredService<ILogger<MobileAccessService>>(),
             IPAddress.Any, debugInstance, provider.GetRequiredService<MobileWarningHistory>(),
-            provider.GetRequiredService<MobileHistoryEndpoints>(), provider.GetRequiredService<MobilePushDelivery>()));
+            provider.GetRequiredService<MobileHistoryEndpoints>(), provider.GetRequiredService<MobilePushDelivery>(),
+            provider.GetRequiredService<MobileWarningActions>()));
 
         services.AddHostedService(provider => provider.GetRequiredService<MobileAccessService>());
         services.AddHostedService<MobileNoIpService>();
@@ -53,7 +55,7 @@ internal static class MobileAccessRegistration
         var pipeName = MobileAccessProtocol.GetPipeName(debugInstance);
         services.AddHostedService(provider => new MobileAccessAdminPipe(
             pipeName, provider.GetRequiredService<MobileAccessService>(), provider.GetRequiredService<MobilePairing>(),
-            provider.GetRequiredService<ILogger<MobileAccessAdminPipe>>()));
+            provider.GetRequiredService<MobileWarningActions>(), provider.GetRequiredService<ILogger<MobileAccessAdminPipe>>()));
     }
 
     private sealed class MobileNoIpService(MobilePairing pairing, NoIpUpdater updater) : BackgroundService

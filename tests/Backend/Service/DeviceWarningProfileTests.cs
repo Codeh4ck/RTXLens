@@ -112,7 +112,7 @@ internal static class DeviceWarningProfileTests
         TestAssert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
         TestAssert.Equal(profile, (await api.GetDeviceWarningProfilesAsync(CancellationToken.None)).Profiles.Single());
 
-        var evaluator = new DeviceWarningEvaluator(new HardwareCatalog([factory]));
+        var evaluator = new DeviceWarningEvaluator(new HardwareCatalog([factory]).Find);
         var configuration = Configuration();
         configuration.Plugins[id] = new PluginSettings();
         TestAssert.False(EvaluateAt(0).Warnings.Any(warning => warning.Observation.Active), "The first sample starts the timer.");
@@ -135,7 +135,7 @@ internal static class DeviceWarningProfileTests
 
     private static void ProfilesUseIndependentSourcesAndReminderPolicies()
     {
-        var evaluator = new DeviceWarningEvaluator(TestHardwareCatalog.Installed);
+        var evaluator = new DeviceWarningEvaluator(TestHardwareCatalog.Installed.Find);
         var warnings = new WarningEngine(WarningTestData.Registry());
         var configuration = Configuration();
         var wireView = new DeviceWarningProfile
@@ -153,6 +153,14 @@ internal static class DeviceWarningProfileTests
         var active = Evaluate(3);
         TestAssert.Equal(4, active.States.Count(state => state.Phase == WarningPhase.Active));
         TestAssert.True(active.States.Any(state => state.ProfileId == Astral.Id && state.Title.StartsWith("ROG Astral")), "Astral warning source");
+        var astralThresholds = active.States.First(state => state.ProfileId == Astral.Id).Thresholds;
+        var overcurrent = astralThresholds.Single(threshold => threshold.Title == "Pin overcurrent");
+        TestAssert.Equal(6d, overcurrent.Limit);
+        TestAssert.Equal<double?>(6.5, overcurrent.Measured);
+        TestAssert.Equal<bool?>(true, overcurrent.OutsideLimit);
+        var imbalance = astralThresholds.Single(threshold => threshold.Title == "Imbalance");
+        TestAssert.Equal(20d, imbalance.Limit);
+        TestAssert.Equal<double?>(5, imbalance.MinimumCurrent);
         TestAssert.True(active.States.Any(state => state.ProfileId == Msi.Id && state.Title.StartsWith("MSI PSU connector 2")), "PSU connector warning source");
         TestAssert.True(active.States.Any(state => state.ProfileId == wireView.Id && state.Title.StartsWith("WireView Pro II")), "WireView warning source");
 
@@ -161,6 +169,18 @@ internal static class DeviceWarningProfileTests
         var reminder = Evaluate(8, psu: 1);
         TestAssert.False(reminder.States.Any(state => state.ProfileId == Msi.Id), "The other PSU connector must not keep the profile active.");
         TestAssert.Equal(wireView.Id, reminder.States.Single(state => state.NotificationSequence == reminder.Sequence).ProfileId);
+
+        var normal = Frame(9, 5, 1, 1);
+        var voltageFrame = normal with { Sensors = [.. normal.Sensors.Select(reading => reading.Identity is
+            { PluginId: "asus-astral", Metric: SensorMetric.Voltage, Channel: 2 or 4 } ? reading with { Value = 12.9 } : reading)] };
+        var voltageChecks = evaluator.Evaluate(voltageFrame, configuration, [Astral], SettingsProfile.Rtx5080).Warnings;
+        var highVoltage = voltageChecks.Single(item => item.Definition.Id.EndsWith(PinWarningKind.HighVoltage, StringComparison.Ordinal)).Observation;
+        TestAssert.True(highVoltage.Active, "A high pin voltage should trigger immediately.");
+        TestAssert.True(highVoltage.Threshold!.OffendingPins.SequenceEqual([new WarningThresholdPin(2, 12.9), new WarningThresholdPin(4, 12.9)]),
+            "The threshold must record every offending pin and exclude readings within range.");
+        var lowVoltage = voltageChecks.Single(item => item.Definition.Id.EndsWith(PinWarningKind.LowVoltage, StringComparison.Ordinal)).Observation;
+        TestAssert.Equal<bool?>(false, lowVoltage.Threshold!.OutsideLimit);
+        TestAssert.Equal(0, lowVoltage.Threshold.OffendingPins.Length);
         return;
 
         WarningSnapshot Evaluate(int seconds, double astral = 6.5, double psu = 6.4, double wire = 6.2)
@@ -177,7 +197,7 @@ internal static class DeviceWarningProfileTests
 
     private static void Uses5080ActivationAndRequiresFreshSustainedSamples()
     {
-        var evaluator = new DeviceWarningEvaluator(TestHardwareCatalog.Installed);
+        var evaluator = new DeviceWarningEvaluator(TestHardwareCatalog.Installed.Find);
         var configuration = Configuration();
         var start = Frame(0, 5, 0, 0, lowAstral: 4);
 
@@ -202,7 +222,7 @@ internal static class DeviceWarningProfileTests
         var clock = new TestTimeProvider();
         var action = new FakeShutdown(reasonPath);
         var coordinator = new WarningShutdownCoordinator(configurationFile, clock, action, NullLogger<WarningShutdownCoordinator>.Instance);
-        var evaluator = new DeviceWarningEvaluator(TestHardwareCatalog.Installed);
+        var evaluator = new DeviceWarningEvaluator(TestHardwareCatalog.Installed.Find);
         var configuration = Configuration();
         var profile = Msi with { ShutdownAfterSeconds = 2 };
 
@@ -269,7 +289,7 @@ internal static class DeviceWarningProfileTests
                 var action = new FakeShutdown(reason, outcome);
                 var coordinator = new WarningShutdownCoordinator(new RuntimeConfigurationFile(Path.Combine(root.FullName, "settings.json")),
                     new TestTimeProvider(), action, NullLogger<WarningShutdownCoordinator>.Instance);
-                var evaluator = new DeviceWarningEvaluator(TestHardwareCatalog.Installed);
+                var evaluator = new DeviceWarningEvaluator(TestHardwareCatalog.Installed.Find);
                 var profile = Msi with { ShutdownAfterSeconds = 2 };
                 var configuration = Configuration();
 

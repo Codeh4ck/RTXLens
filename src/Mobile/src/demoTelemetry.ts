@@ -15,14 +15,14 @@ export function demoFrame(now: number, incidents: Incident[]): SensorFrame {
   const active = incidents.filter(item => item.endedAt === null);
   const triggered = (source: string) => active.some(item => item.source === source);
   const wave = Math.sin(now / 9000);
-  const currents = Array.from({ length: 6 }, (_, i) =>
-    i === 2 && triggered(MsiId) ? 10.2 : 5.4 + i * 0.14 + wave * 0.85);
+  const currents = Array.from({ length: 6 }, (_, i) => i === 2 && triggered(MsiId) ? 10.2 : 5.4 + i * 0.14 + wave * 0.85);
   const amps = currents.reduce((sum, value) => sum + value, 0);
   const volts = 12.06;
-  function add(pluginId: string, component: string, metric: string, unit: string, value: number,
-    channel: number | null = null, connectorId: string | null = null) {
+
+  function add(pluginId: string, component: string, metric: string, unit: string, value: number, channel: number | null = null, connectorId: string | null = null) {
     const deviceId = 'demo-' + pluginId;
     const key = [pluginId, deviceId, connectorId, component, metric, channel].join('/');
+
     sensors.push({ identity: { key, pluginId, deviceId, component, metric, channel, connectorId }, unit, value, quality: 'Valid' });
     return key;
   }
@@ -31,17 +31,21 @@ export function demoFrame(now: number, incidents: Incident[]): SensorFrame {
     add(source, 'GpuConnector', 'Current', 'Amperes', amps);
     add(source, 'GpuConnector', 'Voltage', 'Volts', volts);
     add(source, 'GpuConnector', 'Power', 'Watts', amps * volts);
+
     currents.forEach((current, i) => {
       add(source, 'GpuPin', 'Current', 'Amperes', current, i + 1);
       add(source, 'GpuPin', 'Voltage', 'Volts', volts, i + 1);
       add(source, 'GpuPin', 'Power', 'Watts', volts * current, i + 1);
     });
   }
+
   for (const connector of ['1', '2']) {
     const powered = connector === '1';
+
     add(MsiId, 'PsuConnector', 'Current', 'Amperes', powered ? amps : 0, null, connector);
     currents.forEach((current, i) => add(MsiId, 'PsuPin', 'Current', 'Amperes', powered ? current : 0, i + 1, connector));
   }
+
   add(WireViewId, 'MonitorBoard', 'Temperature', 'Celsius', triggered(WireViewId) ? 82 : 43 + wave, 1);
   add(WireViewId, 'MonitorBoard', 'Temperature', 'Celsius', 41 + wave, 2);
   add(WireViewId, 'ExternalProbe', 'Temperature', 'Celsius', 36 + wave, 1);
@@ -58,10 +62,12 @@ export function demoFrame(now: number, incidents: Incident[]): SensorFrame {
   add(AsusId, 'GpuSystem', 'Clock', 'Megahertz', 2820);
   add(AsusId, 'GpuMemory', 'MemoryUsed', 'Megabytes', Math.round(13500 + wave * 950));
   add(AsusId, 'GpuMemory', 'MemoryTotal', 'Megabytes', 32768);
+
   for (const fan of [1, 2]) {
     add(AsusId, 'GpuFan', 'FanSpeed', 'Rpm', Math.round(1280 + wave * 90 + fan * 25), fan);
     add(AsusId, 'GpuFan', 'FanDuty', 'Percent', Math.round(44 + wave * 3), fan);
   }
+
   add(AsusId, 'GpuBoard', 'Power', 'Watts', amps * volts + 12);
   add(AsusId, 'GpuPowerLimits', 'EnforcedPowerLimit', 'Watts', 575);
   add(AsusId, 'GpuPerformance', 'PerformanceState', 'Count', 0);
@@ -86,14 +92,18 @@ export function demoFrame(now: number, incidents: Incident[]): SensorFrame {
 
 export function triggerDemoAlert(incidents: Incident[], alert: DemoAlert, now: number): Incident[] {
   if (incidents.some(item => item.source === alert.source && !item.endedAt)) return incidents;
+
   const startedAt = new Date(now).toISOString();
+
   const incident: Incident = {
     id: alert.source + '-' + now, kind: 'warning', title: alert.title, detail: alert.detail, source: alert.source,
     status: 'Active', startedAt, endedAt: null, capturedAt: startedAt, deviceId: 'demo-' + alert.source,
     connector: alert.source === MsiId ? 1 : null, delayMs: null, deliveryStatus: null, readings: [], steps: [],
   };
+
   const next = [incident, ...incidents];
   incident.readings = demoFrame(now, next).sensors.filter(reading => reading.identity.pluginId === alert.source);
+  
   return next;
 }
 

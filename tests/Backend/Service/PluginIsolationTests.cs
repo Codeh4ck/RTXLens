@@ -109,8 +109,15 @@ internal static class PluginIsolationTests
             BeforeClocks = () =>
             {
                 var poll = Interlocked.Increment(ref attempts);
-                if (poll <= 3) Thread.Sleep(120);
-                if (poll == 4) NvidiaDriverStatus.NvApi(-10);
+                if (poll <= 3)
+                {
+                    Thread.Sleep(120);
+                }
+
+                if (poll == 4)
+                {
+                    NvidiaDriverStatus.NvApi(-10);
+                }
             }
         };
         using var reader = new NvidiaTelemetryReader(source, TimeProvider.System);

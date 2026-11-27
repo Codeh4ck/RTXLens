@@ -42,8 +42,25 @@ public sealed class MonitoringApiClient(HttpClient http) : IMonitoringApi
             && Contracts.Updates.SemanticVersion.TryParse(value.Version, out _) ? value : null;
     }
 
+    public Task<Contracts.Warnings.WarningIncident[]> GetWarningHistoryAsync(CancellationToken token) =>
+        GetAsync(ServiceRoutes.WarningHistory, ClientJsonContext.Default.WarningIncidentArray, token);
+
+    public async Task<Contracts.Warnings.WarningIncident[]> ClearWarningHistoryAsync(CancellationToken token)
+    {
+        using var response = await http.DeleteAsync(ServiceRoutes.WarningHistory, token);
+
+        await EnsureSuccessAsync(response, token);
+
+        return await response.Content.ReadFromJsonAsync(ClientJsonContext.Default.WarningIncidentArray, token)
+            ?? throw new InvalidDataException("The service returned an empty warning history response.");
+    }
+
+    public Task<Contracts.Warnings.WarningIncident> GetWarningIncidentAsync(string kind, Guid id, CancellationToken token) =>
+        GetAsync($"{ServiceRoutes.WarningHistory}/{Uri.EscapeDataString(kind)}/{id:D}", ClientJsonContext.Default.WarningIncident, token);
+
     public Task<HealthResponse> GetHealthAsync(CancellationToken token) => GetAsync(ServiceRoutes.Health, ClientJsonContext.Default.HealthResponse, token);
     public Task<PluginCatalog> GetPluginsAsync(CancellationToken token) => GetAsync(ServiceRoutes.Plugins, ClientJsonContext.Default.PluginCatalog, token);
+
     public Task<SettingsProfileCatalog> GetSettingsProfilesAsync(CancellationToken token) =>
         GetAsync(ServiceRoutes.SettingsProfiles, ClientJsonContext.Default.SettingsProfileCatalog, token);
 
@@ -55,8 +72,9 @@ public sealed class MonitoringApiClient(HttpClient http) : IMonitoringApi
 
     public async Task<SettingsProfileCatalog> UpdateSettingsProfileAsync(SettingsProfile profile, CancellationToken token)
     {
-        using var response = await http.PutAsJsonAsync($"{ServiceRoutes.SettingsProfiles}/{Uri.EscapeDataString(profile.Id)}", profile,
-            ClientJsonContext.Default.SettingsProfile, token);
+        using var response = await http.PutAsJsonAsync($"{ServiceRoutes.SettingsProfiles}/{Uri.EscapeDataString(profile.Id)}",
+            profile, ClientJsonContext.Default.SettingsProfile, token);
+
         return await ReadSettingsProfilesAsync(response, token);
     }
 
@@ -69,12 +87,30 @@ public sealed class MonitoringApiClient(HttpClient http) : IMonitoringApi
     private static async Task<SettingsProfileCatalog> ReadSettingsProfilesAsync(HttpResponseMessage response, CancellationToken token)
     {
         await EnsureSuccessAsync(response, token);
+
         return await response.Content.ReadFromJsonAsync(ClientJsonContext.Default.SettingsProfileCatalog, token)
             ?? throw new InvalidDataException("The service returned an empty GPU settings profile response.");
     }
 
     public Task<DeviceWarningProfileCatalog> GetDeviceWarningProfilesAsync(CancellationToken token) =>
         GetAsync(ServiceRoutes.WarningProfiles, ClientJsonContext.Default.DeviceWarningProfileCatalog, token);
+
+    public async Task PublishDebugPowerFrameAsync(DebugPowerFrame frame, CancellationToken token)
+    {
+        using var response = await http.PostAsJsonAsync($"{ServiceRoutes.WarningProfiles}/debug-power",
+            frame, ClientJsonContext.Default.DebugPowerFrame, token);
+
+        await EnsureSuccessAsync(response, token);
+    }
+
+    public Task RestoreGpuPowerAsync(string gpuId, CancellationToken token) =>
+        PostPowerActionAsync($"{ServiceRoutes.WarningProfiles}/restore-power?gpuId={Uri.EscapeDataString(gpuId)}", token);
+
+    private async Task PostPowerActionAsync(string path, CancellationToken token)
+    {
+        using var response = await http.PostAsync(path, null, token);
+        await EnsureSuccessAsync(response, token);
+    }
 
     public async Task SaveDeviceWarningProfileAsync(DeviceWarningProfile profile, CancellationToken token)
     {
@@ -108,20 +144,24 @@ public sealed class MonitoringApiClient(HttpClient http) : IMonitoringApi
 
     public async Task<ConfigurationSnapshot> GetConfigurationAsync(CancellationToken token) =>
         NormalizeConfiguration(await GetAsync(ServiceRoutes.Configuration, ClientJsonContext.Default.ConfigurationSnapshot, token));
+
     public Task<DeviceConfig> GetWireViewConfigurationAsync(CancellationToken token) =>
         GetAsync(WireViewIdentity.Route + WireViewIdentity.DeviceConfigPath, ClientJsonContext.Default.DeviceConfig, token);
+
     public async Task<DeviceConfig> ApplyWireViewConfigurationAsync(DeviceConfig changes, CancellationToken token)
     {
         using var response = await http.PutAsJsonAsync(WireViewIdentity.Route + WireViewIdentity.DeviceConfigPath, changes,
             ClientJsonContext.Default.DeviceConfig, token);
 
         await EnsureSuccessAsync(response, token);
+
         return await response.Content.ReadFromJsonAsync(ClientJsonContext.Default.DeviceConfig, token)
             ?? throw new InvalidDataException("The service returned empty WireView settings.");
     }
 
     public Task<AsusDeviceInfo[]> GetAsusDevicesAsync(CancellationToken token) =>
         GetAsync(AsusIdentity.Route + "/devices", ClientJsonContext.Default.AsusDeviceInfoArray, token);
+
     public Task<NvidiaDeviceInfo[]> GetNvidiaDevicesAsync(CancellationToken token) => GetNvidiaDevicesAsync(true, token);
 
     public Task<NvidiaDeviceInfo[]> GetNvidiaDevicesAsync(bool refresh, CancellationToken token) =>
@@ -141,15 +181,16 @@ public sealed class MonitoringApiClient(HttpClient http) : IMonitoringApi
             throw new ArgumentException("Reload configuration before applying changes: its version is missing.");
         }
 
-        using var request = new HttpRequestMessage(HttpMethod.Put, "configuration")
-        {
-            Content = JsonContent.Create(configuration, ClientJsonContext.Default.ServiceConfiguration)
-        };
+        using var request = new HttpRequestMessage(HttpMethod.Put, "configuration");
+
+        request.Content = JsonContent.Create(configuration, ClientJsonContext.Default.ServiceConfiguration);
         request.Headers.IfMatch.Add(new System.Net.Http.Headers.EntityTagHeaderValue($"\"{version}\""));
+
         using var response = await http.SendAsync(request, token);
         await EnsureSuccessAsync(response, token);
+
         return NormalizeConfiguration(await response.Content.ReadFromJsonAsync(ClientJsonContext.Default.ConfigurationSnapshot, token)
-            ?? throw new InvalidDataException("The service returned empty configuration."));
+                                      ?? throw new InvalidDataException("The service returned empty configuration."));
     }
 
     private static ConfigurationSnapshot NormalizeConfiguration(ConfigurationSnapshot snapshot)
@@ -157,10 +198,12 @@ public sealed class MonitoringApiClient(HttpClient http) : IMonitoringApi
         // Older services omit warnings. Source-generated record deserialization can assign null
         // to an absent init property instead of retaining its initializer.
         var warnings = snapshot.Configuration.Warnings ?? new Contracts.Warnings.WarningOptions();
+
         if (!warnings.IsValid())
         {
             throw new InvalidDataException("The service returned invalid warning settings.");
         }
+
         return snapshot with { Configuration = snapshot.Configuration with { Warnings = warnings } };
     }
 
@@ -177,8 +220,10 @@ public sealed class MonitoringApiClient(HttpClient http) : IMonitoringApi
     {
         using var socket = new ClientWebSocket();
         socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
+
         var address = new UriBuilder(new Uri(Address, ServiceRoutes.Sensors)) { Scheme = Address.Scheme == "https" ? "wss" : "ws" }.Uri;
         await socket.ConnectAsync(address, token);
+
         await foreach (var frame in SensorFrameReader.ReadAsync(socket, token))
         {
             yield return frame;
@@ -189,6 +234,7 @@ public sealed class MonitoringApiClient(HttpClient http) : IMonitoringApi
     {
         using var response = await http.GetAsync(path, token);
         await EnsureSuccessAsync(response, token);
+
         return await response.Content.ReadFromJsonAsync(type, token) ?? throw new InvalidDataException("The service returned an empty response.");
     }
 
@@ -216,7 +262,6 @@ public sealed class MonitoringApiClient(HttpClient http) : IMonitoringApi
         }
         catch (JsonException)
         {
-            // Older servers/proxies may return an HTML error page.
         }
 
         throw new MonitoringApiException(response.StatusCode, message);

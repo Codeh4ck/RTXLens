@@ -16,6 +16,7 @@ using RTXLens.App.ViewModels.Shell;
 using RTXLens.App.Views.Diagnostics;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using RTXLens.Presentation.Configuration;
+using RTXLens.Contracts.Configuration;
 using RTXLens.Presentation.Telemetry;
 using static RTXLens.App.Views.Shell.DesktopControls;
 
@@ -33,14 +34,11 @@ internal sealed class ConfigurationPage : UserControl
         ItemsPanel = new FuncTemplate<Panel?>(() => new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 })
     };
 
-    private bool _openCurrentWarnings;
-
-    public ConfigurationPage(ShellViewModel shell, bool currentWarnings = false)
+    public ConfigurationPage(ShellViewModel shell)
     {
         // Keep the scrollbar in the shell's right margin so the content stays aligned with the navigation
         Margin = new Thickness(0, 0, -PageScrollbarGutter, 0);
 
-        _openCurrentWarnings = currentWarnings;
         _shell = shell;
         _editor = shell.Configuration;
 
@@ -227,10 +225,7 @@ internal sealed class ConfigurationPage : UserControl
 
     private void PopulateTabs()
     {
-        var openWarnings = _openCurrentWarnings;
-        _openCurrentWarnings = false;
-
-        var previous = openWarnings ? "Warnings" : (_tabs.SelectedItem as TabItem)?.Header as string;
+        var previous = (_tabs.SelectedItem as TabItem)?.Header as string;
 
         var tabs = (from plugin in _editor.Plugins.OrderBy(plugin => plugin.IsNvidia ? 0 : plugin.IsWireView ? 1 : plugin.IsAsus ? 2 : 3)
             let label = plugin.IsNvidia ? "Nvidia"
@@ -245,7 +240,7 @@ internal sealed class ConfigurationPage : UserControl
         tabs.Add(widget ?? Tab("iCUE Widget", () => new IcueWidgetSettingsView(_shell)));
 
         var warnings = _tabs.Items.OfType<TabItem>().FirstOrDefault(tab => Equals(tab.Header, "Warnings"));
-        tabs.Add(warnings ?? Tab("Warnings", () => new WarningsConfigurationView(_shell, openWarnings)));
+        tabs.Add(warnings ?? Tab("Warnings", () => new WarningsConfigurationView(_shell)));
 
         tabs.Add(Tab("GPU chart profiles", () => new GpuChartProfilesView(_shell)));
         tabs.Add(Tab("Source selections", CreateSources));
@@ -603,8 +598,9 @@ internal sealed class ConfigurationPage : UserControl
         var profileContent = new ContentControl
         {
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            ContentTemplate = new FuncDataTemplate<ConnectorProfileEditorViewModel>((profile, _) =>
-                profile is null ? null : AdaptiveCards(width => width >= 1100 ? 3 : 1, [.. profile.Metrics.Select(CreatePriorityEditor)]))
+            ContentTemplate = new FuncDataTemplate<ConnectorProfileEditorViewModel>((profile, _) => profile is null
+                ? null
+                : AdaptiveCards(width => width >= 1100 ? 3 : 1, [.. profile.Metrics.Select(CreatePriorityEditor)]))
         };
 
         BindTo(profileContent, ContentProperty, profiles, nameof(profiles.SelectedProfile));
@@ -813,6 +809,16 @@ internal sealed class ConfigurationPage : UserControl
         return input;
     }
 
+    internal static Slider CreatePowerLimitSlider() => new() { TickFrequency = 1, IsSnapToTickEnabled = true };
+
+    internal static void SetPowerLimitSlider(Slider slider, PowerTarget? gpu, uint? milliwatts)
+    {
+        slider.Minimum = 0;
+        slider.Maximum = (gpu?.Maximum > 0 ? gpu.Maximum : milliwatts ?? 0) / 1000d;
+        slider.Minimum = (gpu?.Minimum ?? 0) / 1000d;
+        slider.Value = milliwatts is { } saved ? saved / 1000d : slider.Minimum;
+    }
+
     internal static StackPanel Field(string label, Control input)
     {
         input.HorizontalAlignment = HorizontalAlignment.Stretch;
@@ -844,7 +850,7 @@ internal sealed class ConfigurationPage : UserControl
             ItemsSource = values,
             ItemTemplate = new FuncDataTemplate<T>((value, _) => new TextBlock
             {
-                Text = value is null ? string.Empty : label(value),
+                Text = value is null ? null : label(value),
                 TextTrimming = TextTrimming.CharacterEllipsis
             })
         };

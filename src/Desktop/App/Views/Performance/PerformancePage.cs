@@ -595,7 +595,7 @@ internal sealed class PerformancePage : UserControl
             var duration = Math.Max(10, frame.DurationSeconds);
 
             chart.XAxis = new XyAxis(new XyRange(0, duration), Formatter: FormatTime, ReadoutFormatter: FormatHoverTime, TickGranularity: 1);
-            chart.YAxis = new XyAxis(new XyRange(minimum - padding, maximum + padding), Formatter: value => trace.Identity.Metric == RTXLens.Contracts.Enums.SensorMetric.LinkGeneration ? $"Gen {value:0}" : trace.FormatValue(value),
+            chart.YAxis = new XyAxis(new XyRange(minimum - padding, maximum + padding), Formatter: value => trace.Identity.Metric == Contracts.Enums.SensorMetric.LinkGeneration ? $"Gen {value:0}" : trace.FormatValue(value),
                 TickGranularity: trace.Stepped ? 1 : null);
 
             chart.HoverLookup = CreateHoverLookup(frame.SessionId, [.. group.Select(series => series.Trace.Key)]);

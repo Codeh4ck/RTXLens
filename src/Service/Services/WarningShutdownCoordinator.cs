@@ -2,8 +2,11 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Text.Json;
 using RTXLens.Contracts.Configuration;
+using RTXLens.Contracts.Warnings;
 using RTXLens.Core.Diagnostics;
 using RTXLens.Service.Configuration;
+
+using RTXLens.Warnings;
 
 namespace RTXLens.Service.Services;
 
@@ -52,7 +55,7 @@ internal sealed class WarningShutdownCoordinator(RuntimeConfigurationFile config
     private readonly Lock _gate = new();
     private readonly Dictionary<string, Countdown> _countdowns = new(StringComparer.Ordinal);
     private readonly DateTimeOffset _boot = clock.GetUtcNow() - TimeSpan.FromMilliseconds(Environment.TickCount64);
-    private bool _requested;
+    private volatile bool _requested;
     private bool _rejected;
     private DateTimeOffset _retryAfter;
     private int _retryDelaySeconds;
@@ -166,8 +169,22 @@ internal sealed class WarningShutdownCoordinator(RuntimeConfigurationFile config
         var reason = new WarningShutdownReason(Guid.NewGuid().ToString("N"), clock.GetUtcNow(), _boot,
             warning.Source, warning.Profile.Name, warning.Definition.Title, warning.Observation.Detail);
 
+        return Request(reason, () => true)!.Value;
+    }
+
+    public ShutdownOutcome? RequestMobile(WarningState warning, Func<bool> isCurrent) =>
+        Request(new WarningShutdownReason(Guid.NewGuid().ToString("N"), clock.GetUtcNow(), _boot, warning.PluginId,
+            "Mobile warning action", warning.Title, warning.Detail), isCurrent);
+
+    private ShutdownOutcome? Request(WarningShutdownReason reason, Func<bool> isCurrent)
+    {
         lock (_gate)
         {
+            if (!isCurrent())
+                return null;
+            if (_requested)
+                return ShutdownOutcome.Accepted;
+
             var recorded = false;
 
             try
@@ -181,6 +198,7 @@ internal sealed class WarningShutdownCoordinator(RuntimeConfigurationFile config
                     $"Requesting Windows shutdown for {reason.Warning}.", reason.ProfileName, eventViewer: true);
 
                 var outcome = shutdown.Request();
+                _requested = outcome is ShutdownOutcome.Accepted or ShutdownOutcome.Unconfirmed;
                 if (outcome == ShutdownOutcome.Unconfirmed)
                 {
                     logger.LogActivity(LogLevel.Error, "protection.shutdown-unconfirmed", reason.Source,

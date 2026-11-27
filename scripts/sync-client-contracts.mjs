@@ -79,7 +79,7 @@ emit('src/Widget/src/updates/releaseLinks.ts', tsObject('releaseLinks', releaseF
 
 const mobile = literals(monitoring + 'MobileProtocol.cs');
 emit('src/Mobile/src/mobileProtocol.ts', tsObject('mobileProtocol', mobile));
-const native = ['Session', 'Incidents', 'RegistrationV2', 'Pairing', 'CompletePairing'].map(key => [key[0].toLowerCase() + key.slice(1), required(mobile, key)]);
+const native = ['Session', 'Incidents', 'RegistrationV2', 'Pairing', 'CompletePairing', 'WarningActions', 'RunWarningAction'].map(key => [key[0].toLowerCase() + key.slice(1), required(mobile, key)]);
 const transport = 'src/Mobile/modules/rtxlens-transport/';
 emit(transport + 'ios/MobileRoutes.swift', ['enum MobileRoutes {', ...native.map(([key, value]) => '    static let ' + key + ' = ' + JSON.stringify(value)), '}']);
 emit(transport + 'android/src/main/java/com/rtxlens/transport/MobileRoutes.kt', ['package com.rtxlens.transport', '', 'internal object MobileRoutes {', ...native.map(([key, value]) => '    const val ' + key + ' = ' + JSON.stringify(value)), '}']);

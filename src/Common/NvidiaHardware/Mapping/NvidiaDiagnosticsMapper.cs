@@ -51,7 +51,7 @@ public static class NvidiaDiagnosticsMapper
 
         void Add(SensorComponent component, SensorMetric metric, double? value, int? channel = null)
         {
-            readings.Add(new SensorReading(new SensorIdentity(RTXLens.Plugins.GenericNvidia.Contracts.NvidiaIdentity.Id, sample.DeviceId, component, metric, channel),
+            readings.Add(new SensorReading(new SensorIdentity(Plugins.GenericNvidia.Contracts.NvidiaIdentity.Id, sample.DeviceId, component, metric, channel),
                 SensorUnits.For(metric), value, sample.ObservedAt, value.HasValue ? ReadingQuality.Valid : ReadingQuality.Unavailable));
         }
     }

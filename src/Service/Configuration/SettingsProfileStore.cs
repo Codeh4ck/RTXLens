@@ -107,8 +107,10 @@ internal sealed class SettingsProfileStore
             {
                 Id = Guid.NewGuid().ToString("N")
             };
+
             Directory.CreateDirectory(_directory);
             var path = Path.Combine(_directory, saved.Id + ".profile.json");
+
             WriteAtomically(path, JsonSerializer.Serialize(saved, AppJsonContext.Default.SettingsProfile));
 
             try

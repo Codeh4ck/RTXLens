@@ -1,4 +1,5 @@
 using RTXLens.Contracts.Monitoring;
+using RTXLens.Contracts.Mobile;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Threading.RateLimiting;
@@ -16,7 +17,7 @@ internal static class MobileAccessListener
 
     public static async Task<WebApplication> StartAsync(IPAddress address, int port, MobileAccessCertificate certificate,
         MobilePairing pairing, SensorStreamHub hub, CancellationToken cancellationToken, Func<byte[], byte[]>? formatFrame = null,
-        MobileHistoryEndpoints? history = null)
+        MobileHistoryEndpoints? history = null, MobileWarningActions? warningActions = null)
     {
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
         {
@@ -25,6 +26,7 @@ internal static class MobileAccessListener
 
         builder.Configuration.Sources.Clear();
         builder.Logging.ClearProviders();
+
         builder.Services.Configure<HostOptions>(options => options.ShutdownTimeout = TimeSpan.FromSeconds(3));
 
         builder.WebHost.ConfigureKestrel(options =>
@@ -34,17 +36,21 @@ internal static class MobileAccessListener
             options.Limits.MaxConcurrentUpgradedConnections = 16;
             options.Limits.MaxRequestBodySize = 1024;
             options.Limits.RequestHeadersTimeout = TimeSpan.FromSeconds(10);
+
             options.Listen(address, port, endpoint => endpoint.UseHttps(https => https.ServerCertificateSelector = (_, _) => certificate.GetCertificate()));
         });
 
         builder.Services.AddSingleton(hub);
+
         builder.Services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
             options.AddFixedWindowLimiter("invite", limiter => ConfigureLimiter(limiter, 8));
             options.AddFixedWindowLimiter("claim", limiter => ConfigureLimiter(limiter, 60));
             options.AddFixedWindowLimiter("mobile-read", limiter => ConfigureLimiter(limiter, 240));
             options.AddFixedWindowLimiter("mobile-registration", limiter => ConfigureLimiter(limiter, 30));
+            options.AddFixedWindowLimiter("mobile-warning-actions", limiter => ConfigureLimiter(limiter, 90));
         });
 
         var app = builder.Build();
@@ -55,6 +61,7 @@ internal static class MobileAccessListener
         });
 
         app.UseRateLimiter();
+
         var paired = app.MapGroup("").AddEndpointFilter(async (context, next) =>
         {
             var httpContext = context.HttpContext;
@@ -111,6 +118,18 @@ internal static class MobileAccessListener
                 ? Results.NoContent()
                 : Results.Unauthorized();
         }).RequireRateLimiting("mobile-registration");
+
+        if (warningActions is not null)
+        {
+            paired.MapGet(MobileProtocol.WarningActions, (HttpContext context) =>
+                warningActions.GetAvailability((Guid)context.Items[DeviceIdentity]!)).RequireRateLimiting("mobile-read");
+
+            paired.MapPost(MobileProtocol.WarningActions, () => Results.StatusCode(StatusCodes.Status403Forbidden))
+                .RequireRateLimiting("mobile-registration");
+
+            paired.MapPost(MobileProtocol.RunWarningAction, (HttpContext context, MobileWarningActionRequest request) =>
+                warningActions.Execute((Guid)context.Items[DeviceIdentity]!, request)).RequireRateLimiting("mobile-warning-actions");
+        }
 
         if (history is not null)
         {

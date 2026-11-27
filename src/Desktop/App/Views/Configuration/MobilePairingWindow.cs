@@ -266,7 +266,7 @@ internal sealed class MobilePairingWindow : LensWindow
 
     private static Button CreateDecisionButton(string label, Geometry geometry, string tone, Func<Task> action)
     {
-        var icon = new PathIcon { Data = geometry, Width = 15, Height = 15, [!TemplatedControl.ForegroundProperty] = new DynamicResourceExtension(tone == "success" ? "SuccessBrush" : "ErrorBrush") };
+        var icon = new PathIcon { Data = geometry, Width = 15, Height = 15, [!ForegroundProperty] = new DynamicResourceExtension(tone == "success" ? "SuccessBrush" : "ErrorBrush") };
         var button = ActionButton(label, icon, action);
         button.Classes.Add($"{tone}-action");
         return button;

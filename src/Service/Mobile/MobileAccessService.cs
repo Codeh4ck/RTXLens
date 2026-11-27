@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using RTXLens.Core.Diagnostics;
 using RTXLens.Core.Streaming;
+using RTXLens.Contracts.Configuration;
 using RTXLens.Contracts.Mobile;
 using RTXLens.Contracts.Sensors;
 using Microsoft.AspNetCore.Connections;
@@ -21,7 +22,8 @@ internal sealed class MobileAccessService(
     bool debugInstance = false,
     MobileWarningHistory? warningHistory = null,
     MobileHistoryEndpoints? historyEndpoints = null,
-    MobilePushDelivery? push = null) : IHostedService, IDisposable
+    MobilePushDelivery? push = null,
+    MobileWarningActions? warningActions = null) : IHostedService, IDisposable
 {
     private readonly SemaphoreSlim _gate = new(1);
     private readonly MobileSimulationWarnings? _simulationWarnings = debugInstance ? new(clock) : null;
@@ -30,15 +32,17 @@ internal sealed class MobileAccessService(
     private string? _error;
     private volatile bool _stateLoaded;
 
-    public void ObserveWarnings(SensorSnapshot snapshot)
+    public void ObserveWarnings(SensorSnapshot snapshot, DebugWarningHistoryFrame? debugHistory = null)
     {
-        if (_stateLoaded)
+        if (!_stateLoaded)
         {
-            warningHistory?.Observe(snapshot, pairing.Data.Settings.WarningHistoryDays);
-            if (snapshot.Warnings is { } warnings)
-            {
-                push?.Observe(warnings);
-            }
+            return;
+        }
+
+        warningHistory?.Observe(snapshot, pairing.Data.Settings.WarningHistoryDays, debugHistory);
+        if (snapshot.Warnings is { } warnings)
+        {
+            push?.Observe(warnings);
         }
     }
 
@@ -243,7 +247,6 @@ internal sealed class MobileAccessService(
             if (rules is null)
             {
                 rules = new MobileNetworkRules(Guid.NewGuid(), settings.Port, settings.OpenFirewall, settings.PortForwarding);
-                // Persist ownership before applying either rule so cleanup can recover from a partial setup.
                 pairing.SaveSettings(settings, pairing.Data.PrivateKey, rules);
             }
 
@@ -266,7 +269,7 @@ internal sealed class MobileAccessService(
         {
             Func<byte[], byte[]>? formatFrame = _simulationWarnings != null ? _simulationWarnings.AddToFrame : null;
 
-            _listener = await MobileAccessListener.StartAsync(listenAddress, port, certificate, pairing, hub, cancellationToken, formatFrame, historyEndpoints);
+            _listener = await MobileAccessListener.StartAsync(listenAddress, port, certificate, pairing, hub, cancellationToken, formatFrame, historyEndpoints, warningActions);
             _certificate = certificate;
 
             pairing.SetListening(true);

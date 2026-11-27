@@ -8,7 +8,7 @@ public static class MobileAccessProtocol
     public const int DefaultPort = 59275;
     public const int DefaultWarningHistoryDays = 30;
     public const int MaxRequestSize = 4096;
-    public const int MaxResponseSize = 16384;
+    public const int MaxResponseSize = 65536;
 
     public static string GetPipeName(bool debug) => debug ? "RTXLens.Debug.MobileAccess" : "RTXLens.MobileAccess";
 
@@ -27,7 +27,9 @@ public enum MobileAccessOperation
     Reject,
     Revoke,
     PublishSimulationWarning,
-    SendTestNotification
+    SendTestNotification,
+    GetWarningActions,
+    ConfigureWarningActions
 }
 
 public sealed record MobileAccessRequest(
@@ -35,20 +37,21 @@ public sealed record MobileAccessRequest(
     MobileAccessSettings? Settings = null,
     Guid? Id = null,
     bool KeepNoIpCredentials = false,
-    MobileSimulationWarning? SimulationWarning = null);
+    MobileSimulationWarning? SimulationWarning = null,
+    MobileWarningActionSettings? WarningActions = null);
 
 public sealed record MobileSimulationWarning(string Title, string Detail)
 {
     [JsonIgnore]
-    public bool IsValid => !string.IsNullOrWhiteSpace(Title) && Title.Length <= 160
-        && Detail is { Length: <= 480 };
+    public bool IsValid => !string.IsNullOrWhiteSpace(Title) && Title.Length <= 160 && Detail is { Length: <= 480 };
 }
 
 public sealed record MobileAccessResponse(
     bool Success,
     MobileAccessStatus? Status = null,
     MobilePairingInvite? Invite = null,
-    string? Error = null);
+    string? Error = null,
+    MobileWarningActionOptions? WarningActions = null);
 
 public sealed record MobileAccessStatus(
     bool Enabled,

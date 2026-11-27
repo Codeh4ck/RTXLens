@@ -25,12 +25,14 @@ export function ColorPicker({ title, value, close, select }: {
 
   function selectTone(event: GestureResponderEvent) {
     if (fieldWidth === 0) return;
+
     const { locationX, locationY } = event.nativeEvent;
     setColor(previous => ({ ...previous, saturation: clamp(locationX / fieldWidth), brightness: 1 - clamp(locationY / fieldHeight) }));
   }
 
   function selectHue(event: GestureResponderEvent) {
     if (hueWidth === 0) return;
+    
     const hue = 360 * clamp(event.nativeEvent.locationX / hueWidth);
     setColor(previous => ({ ...previous, hue }));
   }

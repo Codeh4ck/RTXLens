@@ -5,5 +5,8 @@ public sealed record WarningState(string Id, string PluginId, string DeviceId, s
     DateTimeOffset? LastNotificationAt)
 {
     public string? ProfileId { get; init; }
+    public string? ConnectorId { get; init; }
+    // ReSharper disable once TypeWithSuspiciousEqualityIsUsedInRecord.Global
+    public WarningThreshold[] Thresholds { get; init; } = [];
     public string Icon { get; init; } = "warning";
 }

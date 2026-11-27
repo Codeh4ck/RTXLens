@@ -36,26 +36,32 @@ public sealed class GenericNvidiaWarningSource : IWarningSource
         }
 
         var options = settings.Options?.Deserialize(GenericNvidiaWarningJsonContext.Default.GenericNvidiaOptions) ?? new GenericNvidiaOptions();
-        var readings = snapshot.Sensors.Where(reading => reading.Identity.PluginId == PluginId
-            && reading is { Quality: ReadingQuality.Valid, Value: { } value } && double.IsFinite(value)
-            && snapshot.Timestamp - reading.ObservedAt <= TimeSpan.FromMilliseconds(settings.StaleAfterMs)).ToArray();
+
+        var readings = snapshot.Sensors
+            .Where(reading => reading.Identity.PluginId == PluginId && reading is { Quality: ReadingQuality.Valid, Value: { } value } &&
+                              double.IsFinite(value) && snapshot.Timestamp - reading.ObservedAt <= TimeSpan.FromMilliseconds(settings.StaleAfterMs))
+            .ToArray();
+
         var observations = new List<WarningObservation>();
 
         foreach (var device in readings.GroupBy(reading => reading.Identity.DeviceId))
         {
-            Add(GenericNvidiaWarningIds.CoreTemperature, SensorComponent.GpuCore, options.CoreTemperatureWarningC);
-            Add(GenericNvidiaWarningIds.MemoryTemperature, SensorComponent.GpuMemory, options.MemoryTemperatureWarningC);
+            Add(GenericNvidiaWarningIds.CoreTemperature, "Core temperature", SensorComponent.GpuCore, options.CoreTemperatureWarningC);
+            Add(GenericNvidiaWarningIds.MemoryTemperature, "VRAM temperature", SensorComponent.GpuMemory, options.MemoryTemperatureWarningC);
+
             continue;
 
-            void Add(string typeId, SensorComponent component, double? threshold)
+            void Add(string typeId, string title, SensorComponent component, double? threshold)
             {
-                var temperature = device.FirstOrDefault(reading => reading.Identity.Component == component
-                    && reading.Identity.Metric == SensorMetric.Temperature)?.Value;
-                var detail = temperature is { } value && threshold is { } limit
-                    ? $"{Number(value)} °C - threshold {Number(limit)} °C" : string.Empty;
+                var temperature = device.FirstOrDefault(reading => reading.Identity.Component == component && reading.Identity.Metric == SensorMetric.Temperature)?.Value;
+                var detail = temperature is { } value && threshold is { } limit ? $"{Number(value)} °C - threshold {Number(limit)} °C" : string.Empty;
 
-                observations.Add(new WarningObservation(PluginId, device.Key, typeId,
-                    threshold is null || temperature is not null, threshold is not null && temperature >= threshold, detail));
+                observations.Add(new WarningObservation(PluginId, device.Key, typeId, threshold is null || temperature is not null, temperature >= threshold, detail)
+                {
+                    Threshold = threshold is { } configured
+                        ? new(title, SensorUnit.Celsius, configured, temperature, temperature.HasValue ? temperature >= configured : null)
+                        : null
+                });
             }
         }
 

@@ -72,36 +72,45 @@ export function HomeLayout({ panels, options, titleFor, renderPanel, save, enabl
   function updatePreview() {
     const active = drag.current;
     const touch = finger.current;
+
     if (!active || !touch) return;
 
     const { bounds } = active;
     const x = bounds.x + touch.lastX - touch.x;
     const y = bounds.y + touch.lastY - touch.y + offset.current - active.startOffset;
+
     active.target = homeDropIndex(active.slots, x + bounds.width / 2, y + bounds.height / 2, active.target);
+
     setPreview({ key: active.key, target: active.target, x, y, slot: layout.current.get(active.key) ?? bounds });
   }
 
   function lift() {
     const key = finger.current?.key;
     const bounds = key && layout.current.get(key);
+
     if (!key || !bounds) return;
 
     const keys = current.map(homePanelKey);
     drag.current = { key, bounds, slots: keys.map(id => layout.current.get(id)), startOffset: offset.current, target: keys.indexOf(key) };
+
     measureViewport();
     updatePreview();
+
     autoScroll.current = setInterval(() => {
       const touch = finger.current;
       const { top, height } = viewportBounds.current;
+
       if (!touch || height === 0) return;
 
       const y = touch.lastY - top;
       const delta = y < edge ? -12 : y > height - edge ? 12 : 0;
       const max = Math.max(0, contentHeight.current - height);
       const next = Math.max(0, Math.min(max, offset.current + delta));
+
       if (next !== offset.current) {
         offset.current = next;
         scroll.current?.scrollTo({ y: next, animated: false });
+
         updatePreview();
       }
     }, 24);
@@ -112,8 +121,10 @@ export function HomeLayout({ panels, options, titleFor, renderPanel, save, enabl
 
     const { pageX: x, pageY: y } = event.nativeEvent;
     finger.current = { key, x, y, lastX: x, lastY: y };
+
     if (handle) {
       lift();
+
       return;
     }
 
@@ -129,19 +140,24 @@ export function HomeLayout({ panels, options, titleFor, renderPanel, save, enabl
 
     touch.lastX = event.nativeEvent.pageX;
     touch.lastY = event.nativeEvent.pageY;
+
     if (!drag.current && Math.hypot(touch.lastX - touch.x, touch.lastY - touch.y) > 8) clearTimeout(hold.current);
+
     updatePreview();
   }
 
   function finish(cancelled: boolean) {
     clearTimeout(hold.current);
     clearInterval(autoScroll.current);
+
     const active = drag.current;
     if (active && !cancelled) {
       setDraft(previous => previous && moveHomePanel(previous, previous.findIndex(panel => homePanelKey(panel) === active.key), active.target));
     }
+
     finger.current = null;
     drag.current = null;
+
     setPreview(null);
   }
 
@@ -157,6 +173,7 @@ export function HomeLayout({ panels, options, titleFor, renderPanel, save, enabl
 
     setSaving(true);
     setError('');
+    
     try {
       if (draft !== panels) await save(draft);
       setDraft(null);

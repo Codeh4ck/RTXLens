@@ -407,6 +407,8 @@ internal static class GenericNvidiaTests
     {
         var clock = new TestTimeProvider();
         var source = Source();
+        source.Sensors = [.. source.Sensors, new("GPU Fan 1", SensorType.Fan, 1, 0), new("GPU Fan 1", SensorType.Control, 1, 30),
+            new("GPU Fan 2", SensorType.Fan, 2, 900), new("GPU Fan 2", SensorType.Control, 2, 40)];
         source.Devices = [source.Devices[0] with { SubsystemId = 0x89E31043 },
             new("pci-other", "/gpu-nvidia/1", "GeForce RTX 4080")];
         using var reader = new NvidiaTelemetryReader(source, clock);
@@ -429,6 +431,12 @@ internal static class GenericNvidiaTests
             var fast = asus.PollAsync(default).Result;
             TestAssert.Equal(clock.GetUtcNow(), fast.Sensors.First(sensor => sensor.Identity.Component == SensorComponent.GpuPin).ObservedAt);
             TestAssert.Equal(start, fast.Sensors.Single(sensor => sensor.Identity.Metric == SensorMetric.Clock).ObservedAt);
+            var duty = fast.Sensors.Where(sensor => sensor.Identity is { Component: SensorComponent.GpuFan, Metric: SensorMetric.FanDuty })
+                .OrderBy(sensor => sensor.Identity.Channel).ToArray();
+            TestAssert.Equal(2, duty.Length);
+            TestAssert.Equal<double?>(30, duty[0].Value);
+            TestAssert.Equal<double?>(40, duty[1].Value);
+            TestAssert.True(duty.All(sensor => sensor.ObservedAt == start), "Astral uses the cached fan duty and its original capture time.");
         }
         TestAssert.Equal(6, source.PinReads);
         TestAssert.Equal(1, source.Reads);

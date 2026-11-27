@@ -27,13 +27,19 @@ public sealed class ConnectorProfileResolver(IEnumerable<IConnectorSourceProvide
     {
         Id = id,
         Name = name,
-        Metrics = [.. new[] { SensorMetric.Power, SensorMetric.Current, SensorMetric.Voltage }.Select(metric => new ConnectorMetricSelection
-        {
-            Metric = metric,
-            AllowFallback = fallback,
-            PreferredPlugins = [.. providers.Where(provider => provider.Priority(metric) is not null)
-                .OrderBy(provider => provider.Priority(metric)).Select(provider => provider.Id)]
-        })]
+        Metrics =
+        [
+            .. new[] { SensorMetric.Power, SensorMetric.Current, SensorMetric.Voltage }.Select(metric => new ConnectorMetricSelection
+            {
+                Metric = metric,
+                AllowFallback = fallback,
+                PreferredPlugins =
+                [
+                    .. providers.Where(provider => provider.Priority(metric) is not null)
+                        .OrderBy(provider => provider.Priority(metric)).Select(provider => provider.Id)
+                ]
+            })
+        ]
     };
 
     public SensorSnapshot Resolve(SensorSnapshot snapshot, ServiceConfiguration configuration)

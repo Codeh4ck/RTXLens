@@ -41,24 +41,29 @@ export function useMobilePreferences() {
 
   useEffect(() => {
     let current = true;
-    const savedValues = [
-      SecureStore.getItemAsync(notificationKey), SecureStore.getItemAsync(temperatureKey), SecureStore.getItemAsync(displayKey),
-    ];
+
+    const savedValues = [SecureStore.getItemAsync(notificationKey), SecureStore.getItemAsync(temperatureKey), SecureStore.getItemAsync(displayKey)];
+
     void Promise.allSettled(savedValues).then(([alerts, units, layout]) => {
       if (!current) return;
+
       try {
         if (alerts.status === 'rejected') throw alerts.reason;
+
         if (alerts.value) {
           const options = decodeNotificationPreferences(alerts.value);
           notificationRef.current = options;
+
           setNotifications(options);
         }
       } catch {
         const fallback = { ...defaultNotificationPreferences, showTitle: false };
         notificationRef.current = fallback;
+
         setNotifications(fallback);
         setError('Saved notification preferences could not be read.');
       }
+
       if (units.status === 'fulfilled' && units.value === 'fahrenheit') setTemperature('fahrenheit');
       if (layout.status === 'fulfilled' && layout.value) {
         try {
@@ -67,8 +72,10 @@ export function useMobilePreferences() {
           setDisplay(defaultDisplayPreferences);
         }
       }
+
       setLoaded(true);
     });
+
     return () => { current = false; };
   }, []);
 
@@ -76,10 +83,12 @@ export function useMobilePreferences() {
     try {
       await SecureStore.setItemAsync(notificationKey, JSON.stringify(value));
       notificationRef.current = value;
+
       setNotifications(value);
       setError(null);
     } catch {
       setError('Notification preferences could not be saved on this phone.');
+
       throw new Error('Could not save notification preferences on this phone.');
     }
   }
@@ -91,8 +100,10 @@ export function useMobilePreferences() {
 
   async function saveDisplay(value: DisplayPreferences) {
     if (displayWritePending.current) return;
+
     displayWritePending.current = true;
     setSavingDisplay(true);
+
     try {
       await SecureStore.setItemAsync(displayKey, JSON.stringify({ ...value, layoutVersion: 2 }));
       setDisplay(value);
@@ -106,7 +117,7 @@ export function useMobilePreferences() {
 }
 
 export function ConnectionAddresses({ computer, save }: {
-  computer: PairedComputer; save: (computer: PairedComputer) => Promise<void>;
+computer: PairedComputer; save: (computer: PairedComputer) => Promise<void>;
 }) {
   const styles = useStyles();
   const [local, setLocal] = useState(computer.localAddress);
@@ -117,13 +128,17 @@ export function ConnectionAddresses({ computer, save }: {
   async function apply() {
     const localAddress = readAddress(local.trim(), true);
     const remoteAddress = readAddress(remote.trim(), false);
+
     if (!localAddress || !remoteAddress) {
       setError('Enter HTTPS addresses with a port from 1024 to 65535. Use an IPv4 address for the local connection.');
       return;
     }
+
     setBusy(true);
+
     try {
       await save({ ...computer, localAddress, remoteAddress });
+
       setLocal(localAddress);
       setRemote(remoteAddress);
       setError('');
@@ -156,6 +171,7 @@ export function TestRemoteAccess({ computer, wifi }: { computer: PairedComputer;
 
   async function test() {
     if (!transport) return;
+
     setBusy(true);
     setResult(null);
 
@@ -163,6 +179,7 @@ export function TestRemoteAccess({ computer, wifi }: { computer: PairedComputer;
       const { remoteAddress, publicKeyFingerprint, token } = computer;
       const reply = await transport.get(remoteAddress, publicKeyFingerprint, mobileProtocol.Session, token);
       const status = sessionResult(reply);
+
       const message = {
         connect: reply.status === 204 ? 'The PC accepted this pairing through its remote address.'
           : 'The remote address responded. Connect to check the readings stream.',
@@ -171,6 +188,7 @@ export function TestRemoteAccess({ computer, wifi }: { computer: PairedComputer;
         'local-network-denied': 'Allow Local Network access for RTX Lens in iPhone Settings and try again.',
         retry: 'Could not reach the PC through its remote address.',
       }[status];
+
       setResult({ success: reply.status === 204 && status === 'connect', message });
     } catch {
       setResult({ success: false, message: 'Could not reach the PC through its remote address.' });
@@ -220,6 +238,7 @@ export function NotificationSettings({ permission, permissionError, onEnable, on
   async function apply(next: NotificationPreferences) {
     if (pending.current) return;
     pending.current = true;
+
     setSaving(true);
     setError(null);
     try {
@@ -233,8 +252,7 @@ export function NotificationSettings({ permission, permissionError, onEnable, on
   }
 
   const systemStatus = permission === 'granted' ? 'Allowed' : permission === 'blocked' ? 'Blocked' : 'Off';
-  const lockScreenStatus = push.busy ? 'Updating…' : !push.enabled ? 'Off' : permission === 'blocked' ? 'Blocked by system'
-    : push.ready ? 'Registered with PC' : live ? 'Waiting for registration' : 'Waiting for connection';
+  const lockScreenStatus = push.busy ? 'Updating…' : !push.enabled ? 'Off' : permission === 'blocked' ? 'Blocked by system' : push.ready ? 'Registered with PC' : live ? 'Waiting for registration' : 'Waiting for connection';
 
   return (
     <Card title="Notifications" icon="warnings">
@@ -295,6 +313,7 @@ export function TemperatureSettings({ unit, save }: { unit: TemperatureUnit; sav
 
   async function change(value: TemperatureUnit) {
     if (busy || value === unit) return;
+
     setBusy(true);
     setError(null);
     try {
@@ -321,8 +340,10 @@ export function DisplaySettings({ value, busy, save }: {
   const styles = useStyles();
   const colors = useColors();
   const [error, setError] = useState<string | null>(null);
+
   async function change(next: DisplayPreferences) {
     setError(null);
+    
     try {
       await save(next);
     } catch {

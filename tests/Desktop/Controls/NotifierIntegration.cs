@@ -8,7 +8,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Headless;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -23,7 +25,7 @@ namespace RTXLens.UI.Tests.Controls;
 internal static class NotifierIntegration
 {
     // Start the real helper without a dashboard, startup registration, audible output or user preferences.
-    public static int Run()
+    public static int Run(string? screenshotPath)
     {
         var root = Directory.CreateTempSubdirectory("rtxlens-notifier-");
         using var preview = new EventWaitHandle(false, EventResetMode.AutoReset);
@@ -56,7 +58,7 @@ internal static class NotifierIntegration
                 try
                 {
                     var now = DateTimeOffset.UtcNow;
-                    var warning = new WarningState("pin", "asus-astral", "gpu", "current", "Pin overcurrent", "P1 · 9.2 A",
+                    var warning = new WarningState("pin", "asus-astral", "gpu", "current", "Pin overcurrent", "P3: 9.2 A",
                         WarningPhase.Active, "episode", now, new(), 1, now);
                     var feed = new WarningSnapshot("service", 1, true, [warning]);
                     frames.Writer.TryWrite(feed);
@@ -64,14 +66,38 @@ internal static class NotifierIntegration
                     var popup = lifetime.Windows.OfType<WarningPopup>().Single();
                     TestAssert.False(popup.ShowActivated || popup.ShowInTaskbar, "A warning must open without taking focus or adding a taskbar entry.");
                     TestAssert.Equal(Avalonia.Styling.ThemeVariant.Light, popup.ActualThemeVariant);
-                    var detail = popup.FindControl<TextBlock>("Details")!;
-                    frames.Writer.TryWrite(feed with { States = [warning with { Detail = "P1 · 9.6 A" }] });
-                    await Until(() => detail.Text == "P1 · 9.6 A");
+                    static bool Shows(WarningPopup window, string text) => window.GetVisualDescendants().OfType<TextBlock>().Any(t => t.IsEffectivelyVisible && t.Text == text);
+                    frames.Writer.TryWrite(feed with { States = [warning with { Detail = "P3: 9.6 A" }] });
+                    await Until(() => Shows(popup, "9.6 A"));
+
+                    var imbalance = warning with { Id = "spread", EpisodeId = "second", NotificationSequence = 2,
+                        Title = "Debug · ROG Astral · Current imbalance", StartedAt = now.AddSeconds(1),
+                        Detail = "P1: 6 A / P5: 0.52 A - 168.1% difference (Profile: Astral)" };
+                    frames.Writer.TryWrite(feed with { Sequence = 2, States = [warning, imbalance] });
+                    await Until(() => Shows(popup, "2 warnings") && Shows(popup, "168.1%"));
+                    foreach (var text in new[] { "Debug · ROG Astral", "Current imbalance", "P1", "6 A", "P5", "0.52 A", "Profile: Astral", "Pin overcurrent" })
+                    {
+                        TestAssert.True(Shows(popup, text), text);
+                    }
+
                     TestAssert.Equal(1, lifetime.Windows.Count);
-                    frames.Writer.TryWrite(feed with { States = [] });
-                    await Until(() => !popup.IsVisible);
+
+                    if (screenshotPath is not null)
+                    {
+                        popup.RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Dark;
+                        using var image = popup.CaptureRenderedFrame() ?? throw new InvalidOperationException("Warning popup did not render.");
+                        image.Save(screenshotPath, PngBitmapEncoderOptions.Default);
+                    }
+
                     preview.Set();
-                    await Until(() => lifetime.Windows.OfType<WarningPopup>().Any(w => w.FindControl<TextBlock>("Heading")?.Text == "Test warning"));
+                    await Until(() => lifetime.Windows.OfType<WarningPopup>().Any(w => Shows(w, "Test warning")));
+                    var example = lifetime.Windows.OfType<WarningPopup>().Single(w => w != popup);
+                    TestAssert.True(example.Position != popup.Position, "A preview must not cover the live popup.");
+                    example.Close();
+                    frames.Writer.TryWrite(feed with { Sequence = 2, States = [imbalance] });
+                    await Until(() => Shows(popup, "Current imbalance") && !Shows(popup, "Pin overcurrent"));
+                    frames.Writer.TryWrite(feed with { Sequence = 2, States = [] });
+                    await Until(() => !popup.IsVisible);
                     Console.WriteLine("PASS: Standalone notifier opened, updated, cleared and previewed a themed warning without a dashboard.");
                     result = 0;
                 }

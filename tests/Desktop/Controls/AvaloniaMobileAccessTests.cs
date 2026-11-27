@@ -46,6 +46,7 @@ internal static class AvaloniaMobileAccessTests
     public static void SavesSettingsAndGeneratesPairingCode(string? screenshots)
     {
         MobileAccessRequest? applied = null;
+        MobileAccessRequest? savedWarningActions = null;
         var status = new MobileAccessStatus(true, true, MobileAccessProtocol.DefaultPort, "example.ddns.net", null,
             false, null, null, [], null, "192.168.1.20");
         MobileAccessRequest? decision = null;
@@ -149,8 +150,42 @@ internal static class AvaloniaMobileAccessTests
             var revokes = pairing.GetVisualDescendants().OfType<Button>()
                 .Where(button => AutomationProperties.GetName(button) == "Revoke").ToArray();
             TestAssert.Equal(2, revokes.Length);
-            TestAssert.Equal(1, Grid.GetColumn(revokes[0]));
-            TestAssert.Equal(1, Grid.GetColumn((Control)revokes[1].Parent!));
+            TestAssert.True(revokes.All(button => button.Parent is StackPanel panel && Grid.GetColumn(panel) == 1),
+                "Both paired-device action rows should align to the right.");
+            var notificationRow = (StackPanel)revokes[1].Parent!;
+            TestAssert.True(notificationRow.Children.OfType<Button>().Select(AutomationProperties.GetName)
+                    .SequenceEqual(["Send test", "Configure warning actions", "Revoke"]),
+                "The phone with lock-screen notifications should render all three actions in one panel.");
+            TestAssert.False(pairing.GetVisualDescendants().OfType<ContentControl>()
+                .Any(alert => alert.Classes.Contains("warning") && alert.Content is string message && message.Contains("StackPanel")),
+                "Rendering paired-device buttons must not show a logical-parent error.");
+
+            Click(notificationRow, "Configure warning actions");
+            var actionWindow = (MobileWarningActionsWindow)window.OwnedWindows.Single();
+            var slider = actionWindow.GetVisualDescendants().OfType<Slider>()
+                .Single(control => AutomationProperties.GetName(control) == "Remote GPU power limit (watts)");
+            TestAssert.True(slider.IsEffectivelyVisible && !slider.IsEffectivelyEnabled,
+                "Show the slider as disabled while remote power reduction is off.");
+            TestAssert.True(slider.Minimum == 400 && slider.Maximum == 825.125 && slider.IsSnapToTickEnabled,
+                "Use the warning profile slider’s bounds and tick behavior, including XOC ranges.");
+            var lowPower = actionWindow.GetVisualDescendants().OfType<ToggleSwitch>()
+                .Single(control => AutomationProperties.GetName(control) == "Allow remote GPU power reduction");
+            lowPower.IsChecked = true;
+            TestAssert.True(slider.IsEffectivelyEnabled, "Enabling remote power reduction unlocks the slider.");
+
+            slider.Value = 500;
+            var mismatch = actionWindow.GetVisualDescendants().OfType<ContentControl>().Single(control =>
+                control.IsVisible && control.Content is string text && text.Contains("• Lower limit", StringComparison.Ordinal));
+            TestAssert.True(mismatch.Content is string warnings && warnings.Contains("• Higher limit", StringComparison.Ordinal)
+                && !warnings.Contains("• Matching limit", StringComparison.Ordinal) && !warnings.Contains("• Other GPU", StringComparison.Ordinal),
+                "List higher and lower limits on the chosen GPU, skipping matching limits and other GPUs.");
+            var shutdown = actionWindow.GetVisualDescendants().OfType<ToggleSwitch>()
+                .Single(control => AutomationProperties.GetName(control) == "Allow remote shutdown");
+            TestAssert.False(shutdown.IsChecked == true, "Enabling low power leaves shutdown off.");
+            Click(actionWindow, "Save");
+            TestAssert.True(savedWarningActions?.Id == status.Devices[1].Id
+                && savedWarningActions?.WarningActions is { EnableShutdown: false, EnableLowPower: true, GpuId: "test-gpu", PowerMilliwatts: 500000 },
+                "Save only the selected phone’s settings.");
 
             Click(view, "Create pairing code");
             dialog = window.OwnedWindows.Single();
@@ -177,6 +212,20 @@ internal static class AvaloniaMobileAccessTests
                     applied = request;
                     status = status with { Port = request.Settings!.Port };
                     break;
+
+                case MobileAccessOperation.GetWarningActions:
+                    return Task.FromResult(new MobileAccessResponse(true, WarningActions: new(new(),
+                        [new("test-gpu", "Test GPU", 400000, 825125)],
+                        [
+                            new("Lower limit", "test-gpu", 425000),
+                            new("Higher limit", "test-gpu", 575000),
+                            new("Matching limit", "test-gpu", 500000),
+                            new("Other GPU", "another-gpu", 600000)
+                        ])));
+
+                case MobileAccessOperation.ConfigureWarningActions:
+                    savedWarningActions = request;
+                    return Task.FromResult(new MobileAccessResponse(true));
 
                 case MobileAccessOperation.CreateInvite:
                     status = status with { PendingApproval = new MobilePairingApproval(requestId, "Test iPhone", code.ExpiresAt) };

@@ -14,6 +14,7 @@ internal static class DebugReadingBuilder
     {
         var simulated = plugin.Mode == DebugSourceMode.Simulated;
         var readings = simulated ? new List<SensorReading>() : live.ToList();
+
         foreach (var metric in plugin.Metrics)
         {
             var definition = metric.Definition;
@@ -48,19 +49,19 @@ internal static class DebugReadingBuilder
 
     private static void Derive(DebugPluginViewModel plugin, List<SensorReading> readings, DateTimeOffset now)
     {
-        if (plugin.Id == NvidiaIdentity.Id)
+        switch (plugin.Id)
         {
-            return;
-        }
+            case NvidiaIdentity.Id:
+                return;
+            case MsiIdentity.Id:
+                {
+                    foreach (var connector in new[] { "1", "2" })
+                    {
+                        Set(SensorComponent.PsuConnector, SensorMetric.Current, Sum(SensorComponent.PsuPin, SensorMetric.Current, connector), connector: connector);
+                    }
 
-        if (plugin.Id == MsiIdentity.Id)
-        {
-            foreach (var connector in new[] { "1", "2" })
-            {
-                Set(SensorComponent.PsuConnector, SensorMetric.Current, Sum(SensorComponent.PsuPin, SensorMetric.Current, connector), connector: connector);
-            }
-
-            return;
+                    return;
+                }
         }
 
         for (var pin = 1; pin <= 6; pin++)

@@ -37,28 +37,36 @@ export function IncidentHistory({ computer, destination, live, target, onNotific
     }
 
     const response = await transport.get(address, computer.publicKeyFingerprint, path, computer.token);
+
     if (response.keyMismatch || response.status === 401) {
       throw new Error('Pair with your PC again to load history.');
     }
+
     if (response.status === 404) {
       throw new Error(path === mobileProtocol.Incidents ? 'Update the RTX Lens service to view history.' : 'This report is no longer available.');
     }
+
     if (response.status !== 200) {
       throw new Error('The PC could not load this report. Try again.');
     }
+
     return response.body;
   }, [address, computer, live]);
 
   const loadPage = useCallback(async (cursor: string | null) => {
     if (inFlight.current) return;
+
     const current = ++generation.current;
     inFlight.current = true;
+
     setBusy(true);
     setError(null);
 
     try {
       const page = decodeIncidentPage(await request(cursor ? `${mobileProtocol.Incidents}?before=${cursor}` : mobileProtocol.Incidents));
+     
       if (generation.current !== current) return;
+     
       setItems(previous => cursor ? [...new Map([...previous, ...page.items].map(item => [entryKey(item), item])).values()] : page.items);
       setNext(page.next);
     } catch (failure) {
@@ -73,6 +81,7 @@ export function IncidentHistory({ computer, destination, live, target, onNotific
 
   useEffect(() => {
     if (!demoIncidents && live && selected === null) void loadPage(null);
+   
     return () => {
       generation.current++;
       inFlight.current = false;
@@ -81,10 +90,13 @@ export function IncidentHistory({ computer, destination, live, target, onNotific
 
   useEffect(() => {
     if (demoIncidents || !selected || !live) return;
+   
     const current = ++generation.current;
     inFlight.current = true;
+    
     setBusy(true);
     setError(null);
+   
     void request(`${mobileProtocol.Incidents}/${selected.kind}/${selected.id}`).then(body => {
       if (generation.current === current) setDetail(decodeIncident(body, selected));
     }).catch(failure => {
@@ -106,6 +118,7 @@ export function IncidentHistory({ computer, destination, live, target, onNotific
   function closeReport() {
     setSelected(null);
     setDetail(null);
+
     if (target) onNotificationClosed?.();
   }
 
@@ -147,12 +160,15 @@ function IncidentDetail({ incident }: { incident: Incident }) {
   const local = localStyles;
   const { number, formatReading } = useContext(ReadingFormatContext);
   const groups = new Map<string, { name: string; readings: SensorReading[] }>();
+
   for (const reading of incident.readings) {
     const { pluginId, deviceId, connectorId } = reading.identity;
     const key = JSON.stringify([pluginId, deviceId, connectorId]);
+
     const group = groups.get(key) ?? {
       name: sourceName(pluginId) + (connectorId ? ` · Connector ${connectorId}` : ''), readings: [],
     };
+    
     group.readings.push(reading);
     groups.set(key, group);
   }

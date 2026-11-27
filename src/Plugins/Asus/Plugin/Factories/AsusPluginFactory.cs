@@ -73,7 +73,7 @@ public sealed class AsusPluginFactory(TimeProvider clock, AsusStream stream, Nvi
             .ToHashSet();
 
         if (gpus.Count != 1 || snapshot.Sensors.Any(reading =>
-                reading.Identity.PluginId == RTXLens.Plugins.GenericNvidia.Contracts.NvidiaIdentity.Id && !gpus.Contains(reading.Identity.DeviceId)))
+                reading.Identity.PluginId == GenericNvidia.Contracts.NvidiaIdentity.Id && !gpus.Contains(reading.Identity.DeviceId)))
         {
             return [];
         }

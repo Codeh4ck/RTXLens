@@ -21,7 +21,7 @@ env:
 jobs:
   ios:
     name: iPhone IPA for AltStore
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 40
     concurrency:
       group: mobile-preview-ios-${{ github.ref }}
@@ -33,6 +33,17 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+
+      - name: Verify the iOS SDK
+        shell: bash
+        run: |
+          xcodebuild -version
+          sdk_version="$(xcrun --sdk iphoneos --show-sdk-version)"
+          echo "iPhoneOS SDK: $sdk_version"
+          if [[ "$sdk_version" != 27.* ]]; then
+            echo "Expected the iOS 27 SDK on the xcode-27 runner." >&2
+            exit 1
+          fi
 
       - uses: actions/setup-node@v6
         with:
@@ -311,7 +322,7 @@ jobs:
   app-store-connect:
     name: Signed iOS archive for TestFlight
     if: inputs.publish_app_store
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 40
     environment: app-store-connect
     concurrency:
@@ -329,6 +340,17 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+
+      - name: Verify the iOS SDK
+        shell: bash
+        run: |
+          xcodebuild -version
+          sdk_version="$(xcrun --sdk iphoneos --show-sdk-version)"
+          echo "iPhoneOS SDK: $sdk_version"
+          if [[ "$sdk_version" != 27.* ]]; then
+            echo "Expected the iOS 27 SDK on the xcode-27 runner." >&2
+            exit 1
+          fi
 
       - uses: actions/setup-node@v6
         with:

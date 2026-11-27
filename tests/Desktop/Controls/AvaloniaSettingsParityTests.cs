@@ -34,7 +34,15 @@ internal static class AvaloniaSettingsParityTests
     {
         var directory = Path.Combine(Path.GetTempPath(), $"rtxlens-{Guid.NewGuid():N}");
         var store = new PreferencesStore(Path.Combine(directory, "preferences.json"));
-        var fixture = new SettingsService();
+        var fixture = new SettingsService
+        {
+            WarningTargets =
+            [
+                new("asus-astral", "astral", "Test Astral"),
+                new("wireview-pro2", "wireview", "Test WireView"),
+                new("msi-psu", "msi", "Test MSI PSU")
+            ]
+        };
         var appearanceStore = new AppearanceStore(Path.Combine(directory, "appearance.json"));
         var appearance = new AppearanceViewModel(Application.Current!, appearanceStore);
         using var shell = new ShellViewModel(store, appearance, address => new HttpClient(fixture, false) { BaseAddress = address });
@@ -85,7 +93,7 @@ internal static class AvaloniaSettingsParityTests
             var savedTheme = appearanceStore.LoadAsync();
             Wait(savedTheme);
             TestAssert.Equal(ultraviolet.Id, savedTheme.Result!.PresetId);
-            AvaloniaControlsTests.Capture(window, screenshots, "settings-ultraviolet.png");
+            Capture(window, screenshots, "settings-ultraviolet.png");
 
             colorMode.SelectedItem = "Light";
             TestAssert.Equal(ultraviolet.Light.Primary, primary.Color);
@@ -130,7 +138,7 @@ internal static class AvaloniaSettingsParityTests
             scale.SetCurrentValue(NumericUpDown.ValueProperty, 1m);
             Click("Reset colors");
             TestAssert.Equal(newColor, appearance.Primary);
-            AvaloniaControlsTests.Capture(window, screenshots, "settings-parity.png");
+            Capture(window, screenshots, "settings-parity.png");
 
             OpenTab("Desktop behavior", settingsTabs);
             SetToggle("Close to system tray", false);
@@ -203,7 +211,7 @@ internal static class AvaloniaSettingsParityTests
             TestAssert.True(widgetHeader.Children[0] is ComboBox && widgetHeader.Children[1] is Button, "Profile picker precedes help.");
             TestAssert.True(!widgetHeader.Children[2].IsEnabled, "Default cannot be deleted.");
             TestAssert.False(widgetTabs.GetVisualAncestors().OfType<RTXLens.App.Controls.SectionPanel>().Any(), "Tabs use the page background.");
-            AvaloniaControlsTests.Capture(window, screenshots, "widget-panel-editors.png");
+            Capture(window, screenshots, "widget-panel-editors.png");
             NameProfile("Add widget profile", "Recording");
             PumpUntil(() => shell.Configuration.Widget.ProfileNames.Contains("Recording"));
             var widgetPicker = window.GetVisualDescendants().OfType<ComboBox>().Single(box => AutomationProperties.GetName(box) == "Widget profile");
@@ -274,7 +282,7 @@ internal static class AvaloniaSettingsParityTests
             opacity.Value = opacity.Minimum;
             TestAssert.Equal("20", shell.Configuration.Widget.Value("Default", WidgetSettingDefinition.ById["panelOpacity"]));
             opacity.Value = oldOpacity;
-            AvaloniaControlsTests.Capture(window, screenshots, "widget-appearance-sliders.png");
+            Capture(window, screenshots, "widget-appearance-sliders.png");
 
             OpenTab("Warnings");
             var profilePanel = window.GetVisualDescendants().OfType<RTXLens.App.Controls.SectionPanel>()
@@ -291,14 +299,15 @@ internal static class AvaloniaSettingsParityTests
             TestAssert.True(!enabled.IsEnabled, "The checkbox should be disabled until a profile is selected.");
             var profileSections = window.GetVisualDescendants().OfType<RTXLens.App.Controls.SectionPanel>().ToArray();
             TestAssert.True(profileSections.Any(panel => Equals(panel.Header, "Warning thresholds"))
-                && profileSections.Any(panel => Equals(panel.Header, "Notifications and shutdown")),
-                "Profile thresholds and notification settings should have their own panels.");
+                && profileSections.Any(panel => Equals(panel.Header, "Notifications"))
+                && profileSections.Any(panel => Equals(panel.Header, "Warning reactions")),
+                "Profile thresholds, notifications, and reactions should have dedicated panels.");
             Click("How warning profiles work");
             var warningGuide = window.OwnedWindows.Single();
             TestAssert.True(warningGuide.GetVisualDescendants().OfType<TextBlock>().Any(text => text.Text?.Contains("RTX 5090 preset") == true),
                 "The usage guide should show the detected preset.");
             TestAssert.Equal(4, warningGuide.GetVisualDescendants().OfType<TextBlock>().Count(text => text.Classes.Contains("guide-step")));
-            AvaloniaControlsTests.Capture(warningGuide, screenshots, "warning-profiles-guide.png");
+            Capture(warningGuide, screenshots, "warning-profiles-guide.png");
             Click("Close", warningGuide);
             NameProfile("Add warning profile", "PSU protection");
             TestAssert.True(enabled is { IsEnabled: true, IsChecked: true }, "The header checkbox should reflect the active draft.");
@@ -332,7 +341,7 @@ internal static class AvaloniaSettingsParityTests
             TestAssert.True(saveProfile.IsEnabled && saveProfile.Classes.Contains("unsaved-profile"), "Changing Enabled should start the cue.");
             enabled.IsChecked = true;
             TestAssert.True(!saveProfile.IsEnabled && !saveProfile.Classes.Contains("unsaved-profile"), "Reverting the edit should stop the cue.");
-            AvaloniaControlsTests.Capture(window, screenshots, "warning-profiles.png");
+            Capture(window, screenshots, "warning-profiles.png");
 
             window.Width = 720;
             Dispatcher.UIThread.RunJobs();
@@ -378,7 +387,7 @@ internal static class AvaloniaSettingsParityTests
             var tabStrip = tabs.GetVisualDescendants().OfType<Border>().Single(border => border.Name == "TabStripFrame");
             TestAssert.Equal(tabStrip.TranslatePoint(new Point(tabStrip.Bounds.Width, 0), window)!.Value.X,
                 confirmation.TranslatePoint(new Point(confirmation.Bounds.Width, 0), window)!.Value.X);
-            AvaloniaControlsTests.Capture(window, screenshots, "warning-notifications.png");
+            Capture(window, screenshots, "warning-notifications.png");
             Click("Dismiss alert");
             PumpUntil(() => !ApplyAlertVisible());
 
@@ -429,7 +438,7 @@ internal static class AvaloniaSettingsParityTests
             PumpUntil(() => fixture.CustomChart?.CurrentCeiling == 8);
             TestAssert.Equal(customId, fixture.CustomChart!.Id);
             PumpUntil(() => window.GetVisualDescendants().OfType<TextBlock>().Any(text => text.Text == "Saved My chart."));
-            AvaloniaControlsTests.Capture(window, screenshots, "gpu-chart-profiles.png");
+            Capture(window, screenshots, "gpu-chart-profiles.png");
 
             fixture.LegacyChartEndpoints = true;
             current.Value = 9;
@@ -466,7 +475,7 @@ internal static class AvaloniaSettingsParityTests
                 Click(action);
                 var prompt = window.OwnedWindows.Single();
                 var input = prompt.GetVisualDescendants().OfType<TextBox>().Single();
-                AvaloniaControlsTests.Capture(prompt, screenshots, "profile-name.png");
+                Capture(prompt, screenshots, "profile-name.png");
                 input.Text = name;
                 Dispatcher.UIThread.RunJobs();
                 Click("Create profile", prompt);
@@ -491,7 +500,7 @@ internal static class AvaloniaSettingsParityTests
                 var button = (target ?? window).GetVisualDescendants().OfType<Button>()
                     .Single(item => AutomationProperties.GetName(item) == title);
                 TestAssert.True(button.IsEffectivelyEnabled, $"{title} should be enabled.");
-                AvaloniaControlsTests.InvokeButton(button);
+                InvokeButton(button);
             }
         }
         finally

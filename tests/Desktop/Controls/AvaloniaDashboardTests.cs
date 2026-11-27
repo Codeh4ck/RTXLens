@@ -37,6 +37,7 @@ using RTXLens.Presentation.Configuration;
 using RTXLens.Presentation.Msi.Afterburner;
 using RTXLens.Presentation.Performance;
 using RTXLens.Presentation.Settings;
+using RTXLens.Presentation.Telemetry;
 using RTXLens.SafeguardReporting;
 using RTXLens.Tests.Infrastructure;
 using RTXLens.UI.Tests.TestDoubles;
@@ -45,6 +46,301 @@ namespace RTXLens.UI.Tests.Controls;
 
 internal static class AvaloniaDashboardTests
 {
+    public static void OpensWarningHistory(string? screenshots)
+    {
+        var now = DateTimeOffset.Now;
+        const string detail = "P1: 11.4 A / P2: 7.87 A / P3: 7.91 A";
+        var readings = Enumerable.Range(1, 6).SelectMany(pin => new SensorReading[]
+        {
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuPin, SensorMetric.Current, pin),
+                SensorUnit.Amperes, pin switch { 1 => 11.399999618530273, 4 => 7.2, 5 => 0.52, 6 => 6.8, _ => 7.889999866485596 }, now),
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuPin, SensorMetric.Voltage, pin),
+                SensorUnit.Volts, pin switch { 2 => 12.71, 4 => 12.9, _ => 11.91 }, now),
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuPin, SensorMetric.Power, pin), SensorUnit.Watts, 93.04, now),
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuPin, SensorMetric.OvercurrentDetected, pin), SensorUnit.Boolean, pin == 1 ? 1 : 0, now)
+        }).Concat(new SensorReading[]
+        {
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuConnector, SensorMetric.Current, 1), SensorUnit.Amperes, 43.48, now),
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuConnector, SensorMetric.Power, 1), SensorUnit.Watts, 517.84, now),
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuConnector, SensorMetric.Voltage, 1), SensorUnit.Volts, 11.91, now),
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuCore, SensorMetric.Utilization), SensorUnit.Percent, 96, now),
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuCore, SensorMetric.Clock), SensorUnit.Megahertz, 2842, now),
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuCore, SensorMetric.Temperature), SensorUnit.Celsius, 56, now),
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuMemory, SensorMetric.Clock), SensorUnit.Megahertz, 15001, now),
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuMemory, SensorMetric.Temperature), SensorUnit.Celsius, 54, now),
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuFan, SensorMetric.FanSpeed, 1), SensorUnit.Rpm, 0, now),
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuFan, SensorMetric.FanDuty, 1), SensorUnit.Percent, 30, now),
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuFan, SensorMetric.FanSpeed, 2), SensorUnit.Rpm, 900, now),
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuConnector, SensorMetric.ImbalanceDetected, 1), SensorUnit.Boolean, 1, now),
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuCore, SensorMetric.Voltage), SensorUnit.Volts, 0.912, now),
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuMemory, SensorMetric.MemoryUsed), SensorUnit.Megabytes, 4096, now),
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuMemory, SensorMetric.MemoryTotal), SensorUnit.Megabytes, 32768, now),
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuMemory, SensorMetric.MemoryFree), SensorUnit.Megabytes, 28672, now),
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuPowerLimits, SensorMetric.EnforcedPowerLimit), SensorUnit.Watts, 600, now),
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuPowerLimits, SensorMetric.DefaultPowerLimit), SensorUnit.Watts, 600, now),
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuPowerLimits, SensorMetric.MinimumPowerLimit), SensorUnit.Watts, 400, now),
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuPowerLimits, SensorMetric.MaximumPowerLimit), SensorUnit.Watts, 600, now),
+            Pcie(SensorMetric.LinkGeneration, SensorUnit.Count, 5),
+            Pcie(SensorMetric.LinkWidth, SensorUnit.Count, 8),
+            Pcie(SensorMetric.MaximumSystemLinkGeneration, SensorUnit.Count, 5),
+            Pcie(SensorMetric.MaximumGpuLinkGeneration, SensorUnit.Count, 5),
+            Pcie(SensorMetric.ReplayCount, SensorUnit.Count, 0),
+            Pcie(SensorMetric.ReplayRolloverCount, SensorUnit.Count, 0),
+            Pcie(SensorMetric.MaximumLinkWidth, SensorUnit.Count, 16),
+            Pcie(SensorMetric.MaximumLinkSpeed, SensorUnit.MegabitsPerSecond, 5),
+            Pcie(SensorMetric.ReceiveThroughput, SensorUnit.BytesPerSecond, 52 * 1024 * 1024),
+            Pcie(SensorMetric.TransmitThroughput, SensorUnit.BytesPerSecond, 669 * 1024)
+        }).ToArray();
+
+        SensorReading Pcie(SensorMetric metric, SensorUnit unit, double value) =>
+            new(new("asus-astral", "test-gpu", SensorComponent.GpuPcie, metric), unit, value, now);
+        var incident = new RTXLens.Contracts.Warnings.WarningIncident(Guid.NewGuid(), "warning", "Pin overcurrent", "asus-astral",
+            now.AddMinutes(-3), null, "Interrupted")
+        {
+            Detail = detail, DeviceId = "test-gpu", CapturedAt = now, Readings = readings,
+            Thresholds =
+            [
+                new("Pin overcurrent", SensorUnit.Amperes, 7.5, 11.4, true) { Pin = 1, DurationMs = 3000, Detected = true },
+                new("Imbalance", SensorUnit.Percent, 30, 182.6, true) { MinimumCurrent = 6, DurationMs = 3000, Detected = true },
+                new("Low pin voltage", SensorUnit.Volts, 11.5, null, false) { IsMinimum = true },
+                new("High pin voltage", SensorUnit.Volts, 12.5, null, true)
+                {
+                    Detected = true, OffendingPins = [new(2, 12.71), new(4, 12.9)]
+                }
+            ]
+        };
+        var second = incident with
+        {
+            Id = Guid.NewGuid(), Source = "generic-nvidia", Title = "Core temperature", Status = "Active",
+            Detail = "84.2 °C - threshold 81.0 °C", Thresholds = [], Readings = []
+        };
+        var clearRequests = 0;
+        using var shell = CreateShell(address => new HttpClient(new JsonResponseHandler(request =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/history"))
+            {
+                if (request.Method == HttpMethod.Delete)
+                    clearRequests++;
+
+                return System.Text.Json.JsonSerializer.Serialize(clearRequests == 0 ? [incident, second] : [second],
+                    ClientJsonContext.Default.WarningIncidentArray);
+            }
+
+            return System.Text.Json.JsonSerializer.Serialize(
+                request.RequestUri.AbsolutePath.EndsWith(second.Id.ToString(), StringComparison.Ordinal) ? second : incident,
+                ClientJsonContext.Default.WarningIncident);
+        })) { BaseAddress = address });
+        var frame = DashboardFixture(shell) with { Warnings = new("fixture", 1, true,
+            [new("pin", "asus-astral", "test-gpu", "overcurrent", incident.Title, incident.Detail,
+                Contracts.Warnings.WarningPhase.Active, incident.Id.ToString("N"), now, new(), 1, now)]) };
+        shell.Dashboard.Apply(frame, shell.Preferences, now);
+        var window = new ShellWindow(shell) { Width = 1180, Height = 700 };
+        window.Show();
+        try
+        {
+            window.ShowCurrentWarnings();
+            var warningValue = 11.4.ToString("0.0", System.Globalization.CultureInfo.CurrentCulture) + " A";
+            AvaloniaControlsTests.PumpUntil(() => window.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == warningValue));
+            AvaloniaControlsTests.Capture(window, screenshots, "active-warnings.png");
+            shell.Dashboard.Apply(frame with { Warnings = frame.Warnings! with { States = [] } }, shell.Preferences, now);
+            AvaloniaControlsTests.PumpUntil(() => window.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "No active warnings"));
+            AvaloniaControlsTests.Capture(window, screenshots, "warnings-clear.png");
+            ClickShellAction(window, "Open history");
+            AvaloniaControlsTests.PumpUntil(() => window.GetVisualDescendants().OfType<ListBox>().Any(l => l.ItemCount == 2));
+            var list = window.GetVisualDescendants().OfType<ListBox>().Single();
+            list.SelectedIndex = 0;
+            AvaloniaControlsTests.Capture(window, screenshots, "warning-history.png");
+            if (screenshots is not null)
+            {
+                window.SetRenderScaling(1.25);
+                AvaloniaControlsTests.Capture(window, screenshots, "warning-history-125.png");
+                window.SetRenderScaling(1.5);
+                AvaloniaControlsTests.Capture(window, screenshots, "warning-history-150.png");
+                window.SetRenderScaling(1);
+            }
+            var source = window.GetVisualDescendants().OfType<ComboBox>().Single(b => AutomationProperties.GetName(b) == "Filter by source");
+            source.SelectedItem = "ROG Astral";
+            TestAssert.Equal(1, list.ItemCount);
+            list.SelectedIndex = 0;
+            AvaloniaControlsTests.PumpUntil(() => list.GetVisualDescendants().OfType<ListBoxItem>().Any(item => item.IsSelected));
+            var row = list.GetVisualDescendants().OfType<ListBoxItem>().Single(item => item.IsSelected);
+            var position = row.TranslatePoint(new Point(row.Bounds.Width / 2, row.Bounds.Height / 2), window)!.Value;
+            for (var click = 0; click < 2; click++)
+            {
+                window.MouseDown(position, MouseButton.Left, RawInputModifiers.None);
+                window.MouseUp(position, MouseButton.Left, RawInputModifiers.None);
+            }
+            AvaloniaControlsTests.PumpUntil(() => window.OwnedWindows.Count == 1);
+            var info = window.OwnedWindows.Single();
+            var formatted = 11.4.ToString("0.00", System.Globalization.CultureInfo.CurrentCulture) + " A";
+            AvaloniaControlsTests.PumpUntil(() => info.GetVisualDescendants().OfType<ReadingText>().Any(t => t.Reading == formatted));
+            TestAssert.True(info.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "GPU pins"), "Pin readings must be grouped by connector.");
+            var labels = info.GetVisualDescendants().OfType<TextBlock>().Select(text => text.Text).ToArray();
+            var values = info.GetVisualDescendants().OfType<ReadingText>().Select(text => text.Reading).ToArray();
+            TestAssert.True(labels.Contains("Current") && labels.Contains("Pin 1") && labels.Contains("Pin 6")
+                && labels.Contains("Fan 1") && labels.Contains("Fan 2"), "Captured cards must show user-facing labels.");
+            TestAssert.True(labels.Contains("Overcurrent + Imbalance") && labels.Contains("Imbalance") && labels.Contains("No issue"),
+                "Pins must display combined, individual, and clear statuses.");
+            TestAssert.True(labels.Contains(WarningVisuals.InterruptedExplanation), "Interrupted incidents must explain the missing end.");
+            TestAssert.True(labels.Contains("Warning thresholds") && !labels.Contains("Detected") && !labels.Contains("Not detected")
+                && labels.Contains("≤ " + GpuStatusViewModel.Format(11.5, "V", 2)),
+                "Thresholds must show the comparisons and use highlights for triggered rules.");
+            var sections = info.GetVisualDescendants().OfType<SectionPanel>().ToArray();
+            var thresholdsPanel = sections.Single(panel => Equals(panel.Header, "Warning thresholds"));
+            TestAssert.False(thresholdsPanel.GetVisualDescendants().OfType<TextBlock>().Any(text => text.Text == "Imbalance"),
+                "Imbalance belongs above the pins.");
+            var pinPanel = sections.Single(panel => Equals(panel.Header, "GPU pins"));
+            var imbalanceRow = pinPanel.GetVisualDescendants().OfType<TextBlock>().First(label => label.Text == "Imbalance")
+                .GetVisualAncestors().OfType<Border>().First();
+            Application.Current!.TryGetResource("ErrorSurfaceBrush", info.ActualThemeVariant, out var dangerSurface);
+            TestAssert.Equal(((ISolidColorBrush)dangerSurface!).Color, ((ISolidColorBrush)imbalanceRow.Background!).Color);
+            Border PinCard(string name) => pinPanel.GetVisualDescendants().OfType<TextBlock>().Single(text => text.Text == name)
+                .GetVisualAncestors().OfType<Border>().First();
+            Color ThemeColor(string key)
+            {
+                Application.Current!.TryGetResource(key, info.ActualThemeVariant, out var resource);
+                return ((ISolidColorBrush)resource!).Color;
+            }
+            var voltageFault = PinCard("Pin 4");
+            TestAssert.Equal(ThemeColor("InsetBrush"), ((ISolidColorBrush)voltageFault.Background!).Color);
+            TestAssert.Equal(ThemeColor("ErrorBrush"), ((ISolidColorBrush)voltageFault.BorderBrush!).Color);
+            TestAssert.Equal(ThemeColor("SuccessBrush"), ((ISolidColorBrush)voltageFault.GetVisualDescendants().OfType<ReadingText>().Single().Foreground!).Color);
+            var highVoltage = voltageFault.GetVisualDescendants().OfType<TextBlock>().Single(text =>
+                text.Text == GpuStatusViewModel.Format(12.9, "V", 2));
+            TestAssert.Equal(ThemeColor("ErrorBrush"), ((ISolidColorBrush)highVoltage.Foreground!).Color);
+            TestAssert.Equal(ThemeColor("SuccessBrush"), ((ISolidColorBrush)PinCard("Pin 6").BorderBrush!).Color);
+            TestAssert.False(thresholdsPanel.GetVisualDescendants().OfType<TextBlock>().Any(text =>
+                text.Text == GpuStatusViewModel.Format(12.9, "V", 2)), "Actual pin voltages belong in the pin card.");
+            TestAssert.True(labels.Contains("Clocks") && labels.Contains("Temperatures") && labels.Contains("Fans")
+                && !labels.Contains("Imbalance Detected"), "The snapshot must use the shared GPU layout and keep imbalance in the thresholds section.");
+            TestAssert.True(Array.IndexOf(labels, "VRAM usage") < Array.IndexOf(labels, "VRAM free")
+                && Array.IndexOf(labels, "VRAM free") < Array.IndexOf(labels, "Temperatures"), "VRAM free belongs directly below usage.");
+            TestAssert.True(values.Contains("0 RPM (30%)") && values.Contains("900 RPM"), "Fan duty belongs with the saved RPM.");
+            TestAssert.True(values.Contains("Gen 5 ×8 · 32 GT/s per lane") && values.Contains("Gen 5 ×16 · 32 GT/s per lane")
+                && values.Contains("52 MiB/s") && values.Contains("669 KiB/s"), "PCIe readings must match the GPU Status display.");
+            TestAssert.True(values.Contains(912d.ToString("0.0", System.Globalization.CultureInfo.CurrentCulture) + " mV"),
+                "Core voltage must use the same units as GPU Status.");
+            TestAssert.False(labels.Any(label => label?.Contains("Channel", StringComparison.Ordinal) == true),
+                "Captured cards must hide channel identifiers.");
+            AvaloniaControlsTests.Capture(info, screenshots, "warning-info.png");
+            if (screenshots is not null)
+            {
+                var scroll = info.GetVisualDescendants().OfType<ScrollViewer>().Single();
+                var pinTop = pinPanel.TranslatePoint(default, scroll)!.Value.Y;
+                scroll.Offset = new Vector(0, Math.Max(0, pinTop - 8));
+                AvaloniaControlsTests.Capture(info, screenshots, "warning-info-pins.png");
+                foreach (var (heading, filename) in new[] { ("Warning thresholds", "warning-info-thresholds.png"), ("GPU status", "warning-info-gpu.png") })
+                {
+                    var panel = info.GetVisualDescendants().OfType<SectionPanel>().Single(item => Equals(item.Header, heading));
+                    var top = panel.TranslatePoint(default, scroll)!.Value.Y;
+                    scroll.Offset = new Vector(0, Math.Max(0, scroll.Offset.Y + top - 8));
+                    AvaloniaControlsTests.Capture(info, screenshots, filename);
+                }
+                scroll.Offset = new Vector(0, Math.Max(0, scroll.Extent.Height - scroll.Viewport.Height));
+                AvaloniaControlsTests.Capture(info, screenshots, "warning-info-sensors.png");
+                scroll.Offset = default;
+            }
+            if (screenshots is not null)
+            {
+                info.SetRenderScaling(1.25);
+                AvaloniaControlsTests.Capture(info, screenshots, "warning-info-125.png");
+                info.SetRenderScaling(1.5);
+                AvaloniaControlsTests.Capture(info, screenshots, "warning-info-150.png");
+            }
+            info.Close();
+            source.SelectedItem = "NVIDIA";
+            TestAssert.Equal(1, list.ItemCount);
+            list.SelectedIndex = 0;
+            ClickShellAction(window, "View warning info");
+            AvaloniaControlsTests.PumpUntil(() => window.OwnedWindows.Count == 1);
+            var earlier = window.OwnedWindows.Single();
+            var savedLimit = "≥ " + GpuStatusViewModel.FormatTemperature(81, shell.Preferences.Fahrenheit);
+            AvaloniaControlsTests.PumpUntil(() => earlier.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == savedLimit));
+            earlier.Close();
+
+            source.SelectedItem = "ROG Astral";
+            var clear = window.GetVisualDescendants().OfType<Button>()
+                .Single(button => AutomationProperties.GetName(button) == "Clear warning history");
+            TestAssert.Equal(RightEdge((Control)clear.Parent!, window), RightEdge(clear, window));
+            AvaloniaControlsTests.InvokeButton(clear);
+            AvaloniaControlsTests.PumpUntil(() => window.OwnedWindows.Count == 1);
+            ClickShellAction(window.OwnedWindows.Single(), "Cancel");
+            AvaloniaControlsTests.PumpUntil(() => clear.IsEnabled);
+            TestAssert.Equal(0, clearRequests);
+            AvaloniaControlsTests.InvokeButton(clear);
+            AvaloniaControlsTests.PumpUntil(() => window.OwnedWindows.Count == 1);
+            ClickShellAction(window.OwnedWindows.Single(), "Clear warning history");
+            AvaloniaControlsTests.PumpUntil(() => window.GetVisualDescendants().OfType<ContentControl>()
+                .Any(control => Equals(control.Content, "Completed warning history cleared.")));
+            TestAssert.Equal(1, clearRequests);
+            TestAssert.Equal(1, list.ItemCount);
+            TestAssert.Equal("All sources", source.SelectedItem as string);
+            TestAssert.False(clear.IsEnabled, "An active incident alone cannot be cleared.");
+
+            var wireView = incident with
+            {
+                Source = "wireview-pro2", Title = "WireView firmware fault", Detail = "", DeviceId = "test-wireview",
+                GpuReadings = readings.Where(r => r.Identity.IsGpuStatus() || r.Identity.IsGpuDiagnostic()).ToArray(),
+                Readings =
+                [
+                    new(new("wireview-pro2", "test-wireview", SensorComponent.MonitorBoard, SensorMetric.Temperature, 1), SensorUnit.Celsius, 40, now),
+                    new(new("wireview-pro2", "test-wireview", SensorComponent.MonitorBoard, SensorMetric.Temperature, 2), SensorUnit.Celsius, 42, now),
+                    new(new("wireview-pro2", "test-wireview", SensorComponent.ExternalProbe, SensorMetric.Temperature, 1), SensorUnit.Celsius, 35, now),
+                    new(new("wireview-pro2", "test-wireview", SensorComponent.MonitorBoard, SensorMetric.FaultStatus), SensorUnit.Bitmask, 0x24, now),
+                    new(new("wireview-pro2", "test-wireview", SensorComponent.MonitorBoard, SensorMetric.FaultLog), SensorUnit.Bitmask, 0, now)
+                ]
+            };
+            foreach (var active in new[] { true, false })
+            {
+                var report = wireView with { Readings = wireView.Readings.Select(r => r.Identity.Metric switch
+                {
+                    SensorMetric.FaultStatus => r with { Value = active ? 0x24 : 0 },
+                    SensorMetric.FaultLog => r with { Value = active ? 0 : 0x24 },
+                    _ => r
+                }).ToArray() };
+                var wireViewInfo = new WarningIncidentWindow("WireView Pro II", report.Title, report, shell.Preferences.Fahrenheit);
+                wireViewInfo.Show();
+                try
+                {
+                    var panels = wireViewInfo.GetVisualDescendants().OfType<SectionPanel>().ToArray();
+                    var headings = panels.Select(panel => panel.Header).ToArray();
+                    TestAssert.True(headings.Contains("GPU status") && headings.Contains("GPU Power Status") && headings.Contains("GPU PCIe Status"),
+                        "WireView details show all GPU panels when contextual readings are saved.");
+                    TestAssert.False(headings.Contains("External temperatures"), "WireView temperatures share the device readings panel.");
+
+                    var readingsPanel = panels.Single(panel => Equals(panel.Header, "Device readings"));
+                    var layout = new[]
+                    {
+                        "Board In temperature", "Ext. 1 temperature", "Fault Status",
+                        "Board Out temperature", "Ext. 2 temperature", "Fault Log"
+                    };
+                    for (var i = 0; i < layout.Length; i++)
+                    {
+                        var card = Card(layout[i]);
+                        TestAssert.Equal((i / 3, i % 3), (Grid.GetRow(card), Grid.GetColumn(card)));
+                    }
+                    TestAssert.Equal("Unavailable", Card("Ext. 2 temperature").GetVisualDescendants().OfType<ReadingText>().Single().Reading);
+                    AssertFault("Fault Status", active);
+                    AssertFault("Fault Log", !active);
+
+                    Border Card(string label) => readingsPanel.GetVisualDescendants().OfType<TextBlock>()
+                        .Single(text => text.Text == label).GetVisualAncestors().OfType<Border>().First();
+
+                    void AssertFault(string label, bool expectedFault)
+                    {
+                        var card = Card(label);
+                        var reading = card.GetVisualDescendants().OfType<ReadingText>().Single();
+                        TestAssert.Equal(expectedFault ? "Overcurrent, Current imbalance" : "Clear", reading.Reading);
+                        TestAssert.Equal(ThemeColor(expectedFault ? "ErrorBrush" : "PanelBorderBrush"),
+                            ((ISolidColorBrush)card.BorderBrush!).Color);
+                    }
+                }
+                finally { wireViewInfo.Close(); }
+            }
+        }
+        finally { window.Close(); }
+    }
+
     public static void WarningBannerKeepsDangerColors()
     {
         using var shell = CreateShell();
@@ -143,6 +439,8 @@ internal static class AvaloniaDashboardTests
                 TestAssert.Equal($"Selected {kind}", AutomationProperties.GetName(picker));
                 if (tab == "Nvidia")
                 {
+                    TestAssert.True(picker.ItemTemplate!.Build(null) is TextBlock { Text: null },
+                        "A missing GPU selection must render without dereferencing the item.");
                     shell.Configuration.SetNvidiaDevices([new("test-gpu", "GeForce RTX 5090", "/gpu-nvidia/0")]);
                     Dispatcher.UIThread.RunJobs();
                     TestAssert.Equal(0, picker.SelectedIndex);
@@ -207,6 +505,8 @@ internal static class AvaloniaDashboardTests
             var addSource = window.GetVisualDescendants().OfType<ComboBox>()
                 .Single(box => AutomationProperties.GetName(box) == "Power source to add");
             TestAssert.True(addSource.SelectedItem is null, "Opening Source selections should show an unselected source dropdown.");
+            TestAssert.True(addSource.ItemTemplate!.Build(null) is TextBlock { Text: null },
+                "Rendering an empty source selection must preserve the placeholder.");
             TestAssert.Equal("Choose a source", addSource.PlaceholderText);
 
             addSource.SelectedItem = addSource.Items.OfType<ConnectorPluginChoice>()
@@ -575,7 +875,7 @@ internal static class AvaloniaDashboardTests
             Dispatcher.UIThread.RunJobs();
             var tabs = window.GetVisualDescendants().OfType<RadioButton>().Where(button => button.GroupName == "MainTabs");
             TestAssert.True(tabs.Select(button => button.Content as string).SequenceEqual(
-                ["WireView Pro II", "ROG Astral", "MSI PSU", "GPU Status", "Performance Chart", "Event Log"]),
+                ["WireView Pro II", "ROG Astral", "MSI PSU", "GPU Status", "Warnings", "Performance Chart", "Event Log"]),
                 "Main tabs should follow the hardware and tools order.");
 
             var maximize = window.GetVisualDescendants().OfType<Button>().Single(button => button.Name == "MaximizeButton");
@@ -1104,7 +1404,7 @@ internal static class AvaloniaDashboardTests
         wireView.ModeIndex = (int)RTXLens.Debugging.Models.DebugSourceMode.Simulated;
         session.Enabled = true;
 
-        var console = new App.Views.Simulation.DebugConsoleWindow(session) { Width = 880, Height = 630 };
+        var console = new App.Views.Simulation.DebugConsoleWindow(session, () => Task.CompletedTask) { Width = 880, Height = 630 };
         console.Show();
         try
         {
@@ -1213,6 +1513,101 @@ internal static class AvaloniaDashboardTests
         {
             console.Close();
         }
+    }
+
+    public static void SimulationUsesSavedMsiConnectorProfile()
+    {
+        const string pluginId = "msi-psu";
+        var limits = ConnectorWarningLimits.From(SettingsProfile.Rtx5090) with { OvercurrentAmperes = 7, OvercurrentMilliseconds = 1500 };
+        var policy = new RTXLens.Contracts.Warnings.WarningPolicy { ClearAfterSeconds = 2 };
+        var profile = new DeviceWarningProfile
+        {
+            Id = "msi-connector-2", Name = "Test Connector 2", PluginId = pluginId, ConnectorId = "2",
+            DeviceId = "test-physical-msi", Limits = limits, NotificationPolicy = policy
+        };
+        var offline = new DeviceWarningProfile
+        {
+            Id = "offline-wireview", Name = "Offline WireView", PluginId = "wireview-pro2", Enabled = false
+        };
+        var catalog = new DeviceWarningProfileCatalog([profile, offline], [new(pluginId, profile.DeviceId!, "Test MSI")],
+            ConnectorWarningLimits.From(SettingsProfile.Rtx5090), ConnectorWarningLimits.From(SettingsProfile.Rtx5080), "5090", new());
+        using var shell = CreateShell(address => new HttpClient(new JsonResponseHandler(request =>
+            request.RequestUri!.AbsolutePath.EndsWith("/warning-profiles", StringComparison.Ordinal)
+                ? System.Text.Json.JsonSerializer.Serialize(catalog, ClientJsonContext.Default.DeviceWarningProfileCatalog)
+                : "{}")) { BaseAddress = address });
+
+        var editor = new DeviceWarningProfilesView(shell);
+        var owner = new Window();
+        owner.Show();
+        try
+        {
+            var session = shell.Simulation;
+            var plugin = session.Plugins.Single(item => item.Id == pluginId);
+            plugin.ModeIndex = (int)RTXLens.Debugging.Models.DebugSourceMode.Simulated;
+            session.Enabled = true;
+            AvaloniaControlsTests.PumpUntil(() => session.SavedWarningProfilesStatus == "1 enabled saved warning profile loaded.");
+            owner.Content = editor;
+            AvaloniaControlsTests.PumpUntil(() => editor.GetVisualDescendants().OfType<ComboBox>()
+                .Any(input => AutomationProperties.GetName(input) == "Warning profile" && input.ItemCount == 2));
+
+            var selector = editor.GetVisualDescendants().OfType<ComboBox>()
+                .Single(input => AutomationProperties.GetName(input) == "Warning profile");
+            AvaloniaControlsTests.PumpUntil(() => selector.ItemCount == 2 && selector.SelectedItem?.ToString() == profile.Name);
+            TestAssert.True(editor.GetVisualDescendants().OfType<ContentControl>().Any(control =>
+                control.IsVisible && Equals(control.Content, "Simulation uses saved warning profiles. Saving changes updates live monitoring too.")),
+                "The editor must keep showing service profiles while simulation is enabled.");
+
+            ComboBox Picker(string name) => editor.GetVisualDescendants().OfType<ComboBox>()
+                .Single(input => AutomationProperties.GetName(input) == name);
+            var source = Picker("Reading source");
+            var connector = Picker("PSU connector");
+            TestAssert.Equal("MSI PSU", (string)source.SelectedItem!);
+            TestAssert.Equal("Connector 2", (string)connector.SelectedItem!);
+            TestAssert.Equal(1, source.ItemCount);
+            var wireView = session.Plugins.Single(item => item.Id == "wireview-pro2");
+            wireView.ModeIndex = (int)RTXLens.Debugging.Models.DebugSourceMode.Simulated;
+            TestAssert.True(source.Items.Contains("WireView Pro II (simulated)"), "Only explicit simulation makes absent hardware selectable.");
+            source.SelectedItem = "WireView Pro II (simulated)";
+            TestAssert.Equal(-1, connector.SelectedIndex);
+            TestAssert.Equal(0, connector.ItemCount);
+
+            wireView.Installed = false;
+            TestAssert.Equal(1, source.ItemCount);
+            TestAssert.Equal("MSI PSU", (string)source.SelectedItem!);
+            TestAssert.Equal("Connector 2", (string)connector.SelectedItem!);
+            selector.SelectedIndex = 1;
+            TestAssert.Equal("WireView Pro II (unavailable)", (string)source.SelectedItem!);
+            selector.SelectedIndex = 0;
+            TestAssert.Equal(1, source.ItemCount);
+
+            var simulated = new RTXLens.Debugging.DebugSession { Enabled = true };
+            simulated.SetWarningProfiles(catalog, null);
+            var msi = simulated.Plugins.Single(item => item.Id == pluginId);
+            msi.ModeIndex = (int)RTXLens.Debugging.Models.DebugSourceMode.Simulated;
+            var now = DateTimeOffset.UtcNow;
+            var first = msi.Metrics.Single(metric => metric.Definition is { ConnectorId: "1", Channel: 1, Metric: SensorMetric.Current });
+            var second = msi.Metrics.Single(metric => metric.Definition is { ConnectorId: "2", Channel: 1, Metric: SensorMetric.Current });
+            first.ModeIndex = (int)RTXLens.Debugging.Models.DebugMetricMode.Fixed;
+            first.Value = 9;
+            TestAssert.False(simulated.Compose(now).Snapshot.Warnings!.States.Any(state => state.ProfileId == profile.Id),
+                "Connector 1 must not trigger the saved Connector 2 profile.");
+            second.ModeIndex = (int)RTXLens.Debugging.Models.DebugMetricMode.Fixed;
+            second.Value = 8;
+            TestAssert.False(simulated.Compose(now.AddMilliseconds(1000)).Snapshot.Warnings!.States
+                .Any(state => state.TypeId.EndsWith("/monitor-overcurrent", StringComparison.Ordinal)), "The saved delay must elapse first.");
+            var fired = simulated.Compose(now.AddMilliseconds(2500)).Snapshot.Warnings!.States
+                .Single(state => state.ProfileId == profile.Id && state.TypeId.EndsWith("/monitor-overcurrent", StringComparison.Ordinal));
+            TestAssert.Equal("2", fired.ConnectorId);
+            TestAssert.Equal(policy, fired.Policy);
+            TestAssert.Equal(7d, fired.Thresholds.Single(threshold => threshold.Title == "Pin overcurrent").Limit);
+
+            second.Value = 0;
+            var recovering = simulated.Compose(now.AddMilliseconds(2600)).Snapshot.Warnings!.States.Single(state => state.Id == fired.Id);
+            TestAssert.Equal(Contracts.Warnings.WarningPhase.Recovering, recovering.Phase);
+            TestAssert.False(simulated.Compose(now.AddMilliseconds(4700)).Snapshot.Warnings!.States.Any(state => state.Id == fired.Id),
+                "The simulated warning must honor the saved clear duration.");
+        }
+        finally { owner.Close(); }
     }
 
     public static void SimulationCanEditWireViewAndReturnsToLiveOnClose()

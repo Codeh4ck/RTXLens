@@ -53,6 +53,26 @@ public final class RtxLensTransportModule: Module {
             }
         }
 
+        AsyncFunction("postWarningAction") { (address: String, pin: String, token: String, path: String, json: String, promise: Promise) in
+            self.queue.async {
+                do {
+                    guard [MobileRoutes.warningActions, MobileRoutes.runWarningAction].contains(path) else {
+                        throw TransportError.invalidEndpoint
+                    }
+                    let endpoint = try PinnedEndpoint(address, fingerprint: pin)
+                    let request = try PinnedHttpRequest(endpoint: endpoint, path: path, json: json, token: token, queue: self.queue)
+                    request.start { result in
+                        switch result {
+                        case .success(let reply): promise.resolve(reply)
+                        case .failure(let error): promise.reject("REQUEST_FAILED", error.localizedDescription)
+                        }
+                    }
+                } catch {
+                    promise.reject("REQUEST_FAILED", error.localizedDescription)
+                }
+            }
+        }
+
         AsyncFunction("registerNotifications") { (address: String, pin: String, token: String, json: String, promise: Promise) in
             self.queue.async {
                 do {

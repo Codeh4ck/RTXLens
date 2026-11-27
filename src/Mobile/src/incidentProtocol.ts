@@ -37,11 +37,13 @@ function integer(value: unknown) {
 function summary(value: unknown): IncidentSummary | null {
   const record = asObject(value);
   const startedAt = date(record?.startedAt);
+
   if (!record || typeof record.id !== 'string' || !idPattern.test(record.id) || !startedAt
     || (record.kind !== 'warning' && record.kind !== 'safeguard') || typeof record.title !== 'string'
     || typeof record.source !== 'string' || typeof record.status !== 'string') {
     return null;
   }
+
   return {
     id: record.id, kind: record.kind, title: record.title, source: record.source, status: record.status,
     startedAt, endedAt: date(record.endedAt), connector: integer(record.connector),
@@ -50,15 +52,17 @@ function summary(value: unknown): IncidentSummary | null {
 
 export function decodeIncidentPage(json: string) {
   const page = asObject(JSON.parse(json));
-  if (!Array.isArray(page?.items) || page.items.length > 25
-    || (page.next !== null && (typeof page.next !== 'string' || !cursorPattern.test(page.next)))) {
+
+  if (!Array.isArray(page?.items) || page.items.length > 25 || (page.next !== null && (typeof page.next !== 'string' || !cursorPattern.test(page.next)))) {
     throw new Error('The PC returned an invalid history page.');
   }
+
   return { items: page.items.map(summary).filter(item => item !== null), next: page.next };
 }
 
 export function warningNotificationIncident(data: unknown): IncidentRef | null {
   const record = asObject(data);
+
   return record?.screen === 'warnings' && (record.kind === 'warning' || record.kind === 'safeguard')
     && typeof record.incidentId === 'string' && idPattern.test(record.incidentId)
     ? { id: record.incidentId.toLowerCase(), kind: record.kind } : null;
@@ -67,15 +71,18 @@ export function warningNotificationIncident(data: unknown): IncidentRef | null {
 export function decodeIncident(json: string, expected: IncidentRef): Incident {
   const record = asObject(JSON.parse(json));
   const base = summary(record);
+
   if (!record || !base || base.id !== expected.id || base.kind !== expected.kind) {
     throw new Error('The PC returned an invalid incident.');
   }
 
   const steps = Array.isArray(record.steps) ? record.steps.slice(0, 128).flatMap(value => {
     const step = asObject(value);
+
     return typeof step?.name === 'string' && typeof step.result === 'string'
       ? [{ name: step.name, result: step.result, timestamp: date(step.timestamp), exitCode: integer(step.exitCode) }] : [];
   }) : [];
+  
   return {
     ...base,
     detail: typeof record.detail === 'string' ? record.detail : '',

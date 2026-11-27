@@ -81,10 +81,10 @@ internal static class EditorTests
         TestAssert.False(editor.Widget.WithValue("Default", "currentMax", "100").IsValid(), "Reject invalid slider values.");
         await editor.ApplyAsync(CancellationToken.None);
         await editor.ReloadAsync(CancellationToken.None);
-        var catalog = RTXLens.Contracts.Configuration.WidgetSettingDefinition.ById;
+        var catalog = Contracts.Configuration.WidgetSettingDefinition.ById;
         var migrated = System.Text.Json.JsonSerializer.Deserialize(
             """{"profiles":{"Desk":{"connectedColor":"#123456","precision":"2"}}}""",
-            RTXLens.Client.Serialization.ClientJsonContext.Default.WidgetConfiguration)!;
+            Client.Serialization.ClientJsonContext.Default.WidgetConfiguration)!;
         TestAssert.True(migrated.IsValid() && !migrated.Profiles["Desk"].ContainsKey("connectedColor"),
             "Retired colors are discarded when loading a saved profile.");
         TestAssert.Equal("2", migrated.Value("Desk", catalog["precision"]));

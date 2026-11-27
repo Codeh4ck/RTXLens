@@ -15,6 +15,7 @@ import { BottomNavigation, Button, Card, Page, useStyles, type Tab } from './ui'
 export function DemoSession({ appearance, active, exit }: { appearance: Appearance; active: boolean; exit: () => void }) {
   const [theme, setTheme] = useState(appearance);
   const palette = useMemo(() => themeColors(theme), [theme]);
+
   return <ThemeContext.Provider value={palette}>
     <StatusBar style={isLight(palette.background) ? 'dark' : 'light'} />
     <DemoScreens active={active} exit={exit} appearance={theme} saveAppearance={async value => setTheme(value)} />
@@ -25,15 +26,19 @@ function DemoScreens({ active, exit, appearance, saveAppearance }: {
   active: boolean; exit: () => void; appearance: Appearance; saveAppearance: (value: Appearance) => Promise<void>;
 }) {
   const styles = useStyles();
+
   const [tab, setTab] = useState<Tab>('home');
   const [now, setNow] = useState(Date.now);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [display, setDisplay] = useState(defaultDisplayPreferences);
   const [temperature, setTemperature] = useState<TemperatureUnit>('celsius');
   const [editing, setEditing] = useState(false);
+
   useEffect(() => {
     if (!active) return;
+
     setNow(Date.now());
+
     const timer = setInterval(() => setNow(Date.now()), 2000);
     return () => clearInterval(timer);
   }, [active]);
@@ -41,6 +46,7 @@ function DemoScreens({ active, exit, appearance, saveAppearance }: {
 
   function trigger(alert: DemoAlert) {
     const at = Date.now();
+
     setNow(at);
     setIncidents(previous => triggerDemoAlert(previous, alert, at));
     setTab('warnings');
@@ -60,8 +66,7 @@ function DemoScreens({ active, exit, appearance, saveAppearance }: {
       content = <Gpu frame={frame} live />;
       break;
     case 'warnings':
-      content = <Warnings frame={frame} live simulations={[]} history={<IncidentHistory computer={null}
-        destination={null} live demoIncidents={incidents} />} />;
+      content = <Warnings frame={frame} live simulations={[]} history={<IncidentHistory computer={null} destination={null} live demoIncidents={incidents} />} />;
       break;
     case 'settings':
       content = <Page title="Settings">
@@ -71,6 +76,7 @@ function DemoScreens({ active, exit, appearance, saveAppearance }: {
             disabled={incidents.some(item => item.source === alert.source && !item.endedAt)} onPress={() => trigger(alert)} />)}
           <Button icon="check" label="Clear sample alerts" disabled={frame.warnings.length === 0} onPress={() => {
             const at = Date.now();
+
             setIncidents(previous => clearDemoAlerts(previous, at));
             setTab('warnings');
           }} />
