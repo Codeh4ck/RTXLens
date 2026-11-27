@@ -197,7 +197,7 @@ public sealed class MonitoringApiClient(HttpClient http) : IMonitoringApi
     {
         // Older services omit warnings. Source-generated record deserialization can assign null
         // to an absent init property instead of retaining its initializer.
-        var warnings = snapshot.Configuration.Warnings;
+        var warnings = snapshot.Configuration.Warnings ?? new Contracts.Warnings.WarningOptions();
 
         if (!warnings.IsValid())
         {

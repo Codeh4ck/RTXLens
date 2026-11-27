@@ -598,8 +598,9 @@ internal sealed class ConfigurationPage : UserControl
         var profileContent = new ContentControl
         {
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            ContentTemplate = new FuncDataTemplate<ConnectorProfileEditorViewModel>((profile, _) =>
-                AdaptiveCards(width => width >= 1100 ? 3 : 1, [.. profile.Metrics.Select(CreatePriorityEditor)]))
+            ContentTemplate = new FuncDataTemplate<ConnectorProfileEditorViewModel>((profile, _) => profile is null
+                ? null
+                : AdaptiveCards(width => width >= 1100 ? 3 : 1, [.. profile.Metrics.Select(CreatePriorityEditor)]))
         };
 
         BindTo(profileContent, ContentProperty, profiles, nameof(profiles.SelectedProfile));
@@ -849,7 +850,7 @@ internal sealed class ConfigurationPage : UserControl
             ItemsSource = values,
             ItemTemplate = new FuncDataTemplate<T>((value, _) => new TextBlock
             {
-                Text = label(value),
+                Text = value is null ? null : label(value),
                 TextTrimming = TextTrimming.CharacterEllipsis
             })
         };

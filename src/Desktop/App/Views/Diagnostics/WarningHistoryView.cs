@@ -68,7 +68,7 @@ internal sealed class WarningHistoryView : UserControl
         Options(_source, "All sources", []);
         Options(_status, "All statuses", []);
 
-        _list.ItemTemplate = new FuncDataTemplate<Row>((row, _) => IncidentRow(row));
+        _list.ItemTemplate = new FuncDataTemplate<Row>((row, _) => row is null ? null : IncidentRow(row));
 
         _list.AddHandler(DoubleTappedEvent, async void (_, args) =>
         {
