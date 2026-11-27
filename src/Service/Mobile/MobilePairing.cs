@@ -176,7 +176,6 @@ internal sealed class MobilePairing(IMobileAccessStore store, TimeProvider clock
 
             logger.LogActivity(LogLevel.Information, "mobile.paired", "Mobile access", "A phone was paired.");
 
-            // Permit the same claim to recover its response until the invite expires.
             return (true, claim.Credential);
         }
     }
@@ -257,9 +256,63 @@ internal sealed class MobilePairing(IMobileAccessStore store, TimeProvider clock
             return
             [
                 .. _devices.Values.Select(device =>
-                    new MobileDevice(device.Credential.Id, device.Credential.Name, device.LastConnectedAt, device.LastExternalConnectionAt, device.Credential.PushToken is not null))
+                    new MobileDevice(device.Credential.Id, device.Credential.Name, device.LastConnectedAt, device.LastExternalConnectionAt, device.Credential.PushToken is not null, device.Credential.WarningActionsAllowed))
             ];
         }
+    }
+
+    public (bool Allowed, MobileWarningActionSettings Settings) GetWarningActions(Guid id)
+    {
+        lock (_gate)
+        {
+            return _listening && _devices.TryGetValue(id, out var device) && device.Credential.WarningActionsAllowed
+                ? (true, device.Credential.WarningActions ?? new())
+                : (false, new());
+        }
+    }
+
+    public bool SetWarningActions(Guid id, MobileWarningActionSettings settings)
+    {
+        lock (_gate)
+        {
+            if (!_listening || !_devices.TryGetValue(id, out var device) || !device.Credential.WarningActionsAllowed)
+            {
+                return false;
+            }
+
+            SaveWarningActions(device, device.Credential with { WarningActions = settings });
+            return true;
+        }
+    }
+
+    public bool SetWarningActionAccess(Guid id, bool allowed)
+    {
+        lock (_gate)
+        {
+            if (!_devices.TryGetValue(id, out var device))
+            {
+                return false;
+            }
+
+            SaveWarningActions(device, device.Credential with
+            {
+                WarningActionsAllowed = allowed,
+                WarningActions = allowed ? device.Credential.WarningActions : null
+            });
+
+            return true;
+        }
+    }
+
+    private void SaveWarningActions(PairedDevice device, MobileDeviceCredential updated)
+    {
+        if (updated == device.Credential)
+        {
+            return;
+        }
+
+        Save(_data with { Devices = [.. _data.Devices.Select(value => value.Id == updated.Id ? updated : value)] });
+        device.Credential = updated;
     }
 
     public bool SetPushToken(Guid id, string? token, string? expected = null, MobileNotificationPreferences? preferences = null)

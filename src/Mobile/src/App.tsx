@@ -27,6 +27,7 @@ import { transport } from './transport';
 import { BottomNavigation, Button, Card, Notice, Page, useStyles, type Tab } from './ui';
 import { usePcConnection } from './usePcConnection';
 import { WarningEvents } from './warningEvents';
+import { useWarningActions, WarningActionSettings } from './warningActions';
 
 const computerKey = 'rtxlens.paired-computer';
 const localProbeInterval = 30_000;
@@ -105,6 +106,7 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
     computer, active, network.type, preferencesLoaded, receiveFrame,
   );
 
+  const warningActions = useWarningActions(computer, live ? destination?.address : null, tab === 'settings');
   const localAddress = live && wifi && computer ? localSwitchAddress(computer, destination) : null;
   const push = useLockScreenNotifications(computer, destination?.address, live, notificationRef, preferencesLoaded && !preferences.error);
   const canStartPairing = !scanning && pairing === null && !openingCamera && !push.busy;
@@ -463,6 +465,7 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
           onSystemSettings={() => void Linking.openSettings()} push={push} paired={computer !== null} live={live}
           value={preferencesLoaded ? preferences.notifications : undefined} preferencesError={preferences.error}
           save={saveNotificationPreferences} />
+        {computer && <WarningActionSettings actions={warningActions} />}
         <AppearanceSettings value={appearance} save={saveAppearance} canEditHome={preferencesLoaded && !preferences.savingDisplay} editHome={() => {
           setEditingHome(true);
           navigate('home');
@@ -473,6 +476,7 @@ function MobilePreview({ appearance, saveAppearance }: { appearance: Appearance;
     );
   } else if (tab === 'warnings') {
     content = <Warnings key={notificationLink?.index} frame={showTelemetry ? frame : null} live={live} simulations={simulations}
+      warningActions={warningActions}
       connectionCard={live ? undefined : connectionCard} showHistory={Boolean(notificationLink?.incident)}
       history={<IncidentHistory computer={computer} destination={destination} live={live} target={notificationLink?.incident}
         onNotificationClosed={() => setNotificationLink(previous => previous && { ...previous, incident: null })} />} />;

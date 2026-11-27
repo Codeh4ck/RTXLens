@@ -3,7 +3,13 @@ using RTXLens.Plugins.GenericNvidia.Contracts.Devices;
 
 namespace RTXLens.Hardware.Nvidia.Diagnostics;
 
-public sealed class NvmlPowerControl : IDisposable
+public interface INvidiaPowerControl : IDisposable
+{
+    (uint Minimum, uint Maximum, uint Requested, uint? Enforced) Read();
+    void Change(uint expected, uint target);
+}
+
+public sealed class NvmlPowerControl : INvidiaPowerControl
 {
     private readonly NvmlApi _api;
     private readonly nint _device;

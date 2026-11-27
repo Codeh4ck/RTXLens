@@ -38,6 +38,7 @@ internal static class MobileAccessRegistration
         }).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
 
         services.AddSingleton<MobilePushDelivery>();
+        services.AddSingleton<MobileWarningActions>();
         services.AddHostedService(provider => provider.GetRequiredService<MobilePushDelivery>());
 
         services.AddSingleton(provider => new MobileAccessService(
@@ -45,7 +46,8 @@ internal static class MobileAccessRegistration
             provider.GetRequiredService<TimeProvider>(), provider.GetRequiredService<NoIpUpdater>(),
             provider.GetRequiredService<IMobileNetworkAccess>(), provider.GetRequiredService<ILogger<MobileAccessService>>(),
             IPAddress.Any, debugInstance, provider.GetRequiredService<MobileWarningHistory>(),
-            provider.GetRequiredService<MobileHistoryEndpoints>(), provider.GetRequiredService<MobilePushDelivery>()));
+            provider.GetRequiredService<MobileHistoryEndpoints>(), provider.GetRequiredService<MobilePushDelivery>(),
+            provider.GetRequiredService<MobileWarningActions>()));
 
         services.AddHostedService(provider => provider.GetRequiredService<MobileAccessService>());
         services.AddHostedService<MobileNoIpService>();

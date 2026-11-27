@@ -12,6 +12,7 @@ import {
 import { homeCards, homePanelKey, type HomeCardId, type HomePanel } from './mobilePreferences';
 import { ReadingFormatContext } from './mobileSettings';
 import type { SensorFrame, SensorReading } from './protocol';
+import { ActiveWarningActions, type WarningActions } from './warningActions';
 import { Card, Icon, Page, PanelList, Selection, useStyles, type IconName, type Tab } from './ui';
 
 type TelemetryProps = { frame: SensorFrame | null; live: boolean; connectionCard?: ReactNode };
@@ -330,8 +331,8 @@ function linkSpeed(readings: SensorReading[], genMetric: string, widthMetric: st
   };
 }
 
-export function Warnings({ frame, live, connectionCard, simulations, history, showHistory }: TelemetryProps & {
-  simulations: SensorFrame['simulationWarnings']; history: ReactNode; showHistory?: boolean;
+export function Warnings({ frame, live, connectionCard, simulations, history, showHistory, warningActions }: TelemetryProps & {
+  simulations: SensorFrame['simulationWarnings']; history: ReactNode; showHistory?: boolean; warningActions?: WarningActions;
 }) {
   const styles = useStyles();
   const [view, setView] = useState<'active' | 'history'>(showHistory ? 'history' : 'active');
@@ -347,7 +348,10 @@ export function Warnings({ frame, live, connectionCard, simulations, history, sh
         )}
         {warnings.map(warning => <WarningCard key={warning.episodeId} title={warning.title} detail={warning.detail}
           metadata={[sourceName(warning.pluginId), warning.startedAt && time(warning.startedAt)].filter(Boolean).join(' · ')}
-          status={warning.phase} />)}
+          status={warning.phase}>
+          {live && warningActions && frame.warningInstance && warning.phase === 'Active' && !warning.isSimulation &&
+            <ActiveWarningActions warning={warning} instanceId={frame.warningInstance} actions={warningActions} />}
+        </WarningCard>)}
         {simulations.length > 0 && <Text accessibilityRole="header" style={styles.heading}>Simulation</Text>}
         {simulations.map(warning => <WarningCard key={warning.id} title={warning.title} detail={warning.detail}
           metadata={time(warning.startedAt)} status="Simulation" />)}
@@ -356,7 +360,9 @@ export function Warnings({ frame, live, connectionCard, simulations, history, sh
   );
 }
 
-function WarningCard({ title, detail, metadata, status }: { title: string; detail: string; metadata: string; status: string }) {
+function WarningCard({ title, detail, metadata, status, children }: {
+  title: string; detail: string; metadata: string; status: string; children?: ReactNode;
+}) {
   const styles = useStyles();
   const colors = useColors();
   const local = useThemeStyles(createLocalStyles);
@@ -369,6 +375,7 @@ function WarningCard({ title, detail, metadata, status }: { title: string; detai
       </View>
       {detail && <Text style={styles.text}>{detail}</Text>}
       <Text style={styles.caption}>{metadata}</Text>
+      {children}
     </Card>
   );
 }

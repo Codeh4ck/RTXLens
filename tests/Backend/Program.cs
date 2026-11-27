@@ -8,6 +8,11 @@ if (args is ["--verify-warning-history"])
     await MobileAccessTests.PairedPhoneReadsPersistedWarningHistoryAsync();
     return 0;
 }
+if (args is ["--verify-mobile-warning-actions"])
+{
+    await MobileAccessTests.PairedPhoneCanRunAuthorizedWarningActionsAsync();
+    return 0;
+}
 if (args.Contains("--verify-msi-hardware"))
 {
     await MsiHardwareVerification.RunAsync();

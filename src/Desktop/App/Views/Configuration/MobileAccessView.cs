@@ -160,6 +160,7 @@ internal sealed class MobileAccessView : UserControl
 
         var pairingInfo = IconButton("Pairing and remote access information", DesktopIcons.Info, ShowPairingInfoAsync);
         _review = ActionButton("Review pairing request", "qr-code-action", () => OpenPairingWindowAsync(code: null));
+
         RenderDevices([]);
 
         var pairing = Section("Pairing & devices", new StackPanel { Spacing = 12, Children = { _review, _devices } });
@@ -220,8 +221,7 @@ internal sealed class MobileAccessView : UserControl
         }
 
         var opensPort = settings.Enabled && (settings.OpenFirewall || settings.PortForwarding is not null)
-            && (!status.Enabled || settings.Port != status.Port || settings.OpenFirewall != status.OpenFirewall
-                || settings.PortForwarding != status.PortForwarding);
+            && (!status.Enabled || settings.Port != status.Port || settings.OpenFirewall != status.OpenFirewall || settings.PortForwarding != status.PortForwarding);
 
         if (opensPort)
         {
@@ -425,6 +425,15 @@ internal sealed class MobileAccessView : UserControl
         }
     }
 
+    private async Task SetWarningActionAccessAsync(MobileDevice device)
+    {
+        var request = new MobileAccessRequest(MobileAccessOperation.SetWarningActionAccess, Id: device.Id, AllowWarningActions: !device.WarningActionsAllowed);
+        if (await SendAsync(request) is { Success: true })
+        {
+            await RefreshAsync(reloadSettings: false);
+        }
+    }
+
     private async Task SendTestNotificationAsync(MobileDevice device)
     {
         if (await SendAsync(new MobileAccessRequest(MobileAccessOperation.SendTestNotification, Id: device.Id)) is { Success: true })
@@ -442,8 +451,8 @@ internal sealed class MobileAccessView : UserControl
 
         _busy = true;
         UpdateButtons();
-        var cancellationToken = visible.Token;
 
+        var cancellationToken = visible.Token;
         try
         {
             var response = await _send(request, cancellationToken);
@@ -568,14 +577,17 @@ internal sealed class MobileAccessView : UserControl
             var name = new StackPanel { Spacing = 3, VerticalAlignment = VerticalAlignment.Center, Children = { title, Caption(details) } };
             var revoke = ActionButton("Revoke", "cancel-action", () => RevokeAsync(device));
 
-            Control actions = revoke;
+            var warningActions = ActionButton(device.WarningActionsAllowed ? "Disable warning actions" : "Allow warning actions",
+                "settings-action", () => SetWarningActionAccessAsync(device));
+
+            Control actions = Actions(warningActions, revoke);
 
             if (device.LockScreenNotifications)
             {
                 name.Children.Add(Caption("Lock-screen notifications enabled"));
 
                 var test = ActionButton("Send test", "mail-action", () => SendTestNotificationAsync(device));
-                actions = Actions(test, revoke);
+                actions = Actions(test, warningActions, revoke);
             }
 
             actions.VerticalAlignment = VerticalAlignment.Center;

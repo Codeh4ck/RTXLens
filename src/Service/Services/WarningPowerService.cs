@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using RTXLens.Contracts.Configuration;
+using RTXLens.Contracts.Mobile;
+using RTXLens.Plugins.GenericNvidia.Contracts;
 using RTXLens.Contracts.Warnings;
 using RTXLens.Core.Diagnostics;
 using RTXLens.Hardware.Nvidia.Diagnostics;
@@ -29,22 +31,36 @@ internal sealed record PowerLease(string GpuId, uint Original, uint Applied, str
 internal sealed record PowerJournal(DateTimeOffset Boot, PowerLease[] Leases);
 
 internal sealed class WarningPowerService(RuntimeConfigurationFile configuration, ProfileGpuDiscovery discovery,
-    TimeProvider clock, ILogger<WarningPowerService> logger) : BackgroundService
+    TimeProvider clock, ILogger<WarningPowerService> logger, Func<string, INvidiaPowerControl>? openControl = null) : BackgroundService
 {
-    private sealed record Demand(string Id, GpuPowerReaction Reaction, WarningPhase? Phase);
-    private sealed record Frame(long Time, Demand[] Demands);
+    private sealed class MobileDemand(string key, string instance, string episode, GpuPowerReaction reaction)
+    {
+        public string Key { get; } = key;
+        public string Instance { get; } = instance;
+        public string Episode { get; } = episode;
+        public GpuPowerReaction Reaction { get; } = reaction;
+        public volatile MobileWarningActionResult Result = new("requested");
+        public volatile bool MayHaveWritten;
+    }
+
+    private sealed record Demand(string Id, GpuPowerReaction Reaction, WarningPhase? Phase, MobileDemand? Mobile = null);
+    private sealed record Frame(long Time, Demand[] Automatic, WarningSnapshot Warnings, Demand[] Demands);
 
     private readonly string _path = Path.Combine(Path.GetDirectoryName(configuration.Path)!, "warning-power-limits.json");
     private readonly DateTimeOffset _boot = clock.GetUtcNow() - TimeSpan.FromMilliseconds(Environment.TickCount64);
     private readonly Dictionary<string, PowerLease> _leases = [];
-    private readonly Dictionary<string, NvmlPowerControl> _sessions = [];
+    private readonly Dictionary<string, INvidiaPowerControl> _sessions = [];
+    private readonly Func<string, INvidiaPowerControl> _openControl = openControl ?? NvmlPowerControl.Open;
     private long _driverGeneration;
     private readonly Dictionary<string, DateTimeOffset> _retry = [];
     private readonly HashSet<string> _alreadyBelow = [];
     private readonly Dictionary<string, HashSet<string>> _overridden = [];
     private readonly ConcurrentDictionary<string, byte> _restore = new();
+    private readonly Lock _frames = new();
+    private readonly Dictionary<string, MobileDemand> _mobile = [];
     private volatile Frame? _latest;
     private volatile HeldGpuLimit[] _held = [];
+    private volatile bool _journalFailed;
 
     public HeldGpuLimit[] Held => _held;
 
@@ -55,7 +71,7 @@ internal sealed class WarningPowerService(RuntimeConfigurationFile configuration
         {
             try
             {
-                using var control = NvmlPowerControl.Open(gpu.Id);
+                using var control = _openControl(gpu.Id);
                 var range = control.Read();
                 targets.Add(new(gpu.Id, gpu.Name, range.Minimum, range.Maximum));
             }
@@ -80,11 +96,6 @@ internal sealed class WarningPowerService(RuntimeConfigurationFile configuration
     // The snapshot publisher only copies managed data. All driver and disk I/O runs on the worker.
     public void Observe(DeviceWarningProfile[] profiles, IReadOnlyList<ConfiguredWarning> observations, WarningSnapshot warnings)
     {
-        if (!profiles.Any(p => p.Enabled && p.PowerReduction is not null) && _latest is null && Held.Length == 0)
-        {
-            return;
-        }
-
         var phases = warnings.States.ToDictionary(w => w.Id, w => w.Phase);
         var demands = new List<Demand>();
         foreach (var profile in profiles.Where(p => p.Enabled && p.PowerReduction is not null))
@@ -103,7 +114,77 @@ internal sealed class WarningPowerService(RuntimeConfigurationFile configuration
                 demands.Add(new(observation.Id, reaction, phase));
             }
         }
-        _latest = new(clock.GetTimestamp(), [.. demands]);
+        lock (_frames)
+        {
+            var active = warnings.States.Select(warning => warning.EpisodeId).ToHashSet(StringComparer.Ordinal);
+            foreach (var request in _mobile.Values.Where(request =>
+                (request.Instance != warnings.InstanceId || !active.Contains(request.Episode))
+                && !Held.Any(lease => lease.GpuId == request.Reaction.GpuId)).ToArray())
+                _mobile.Remove(request.Key);
+
+            PublishFrame(clock.GetTimestamp(), [.. demands], warnings);
+        }
+    }
+
+    public WarningState? ActiveMobileWarning(string? instance, string? episode)
+    {
+        var frame = _latest;
+        return frame is not null && frame.Warnings.InstanceId == instance
+            && clock.GetElapsedTime(frame.Time) <= TimeSpan.FromSeconds(2)
+            ? frame.Warnings.States.FirstOrDefault(warning => warning.EpisodeId == episode && warning.Phase == WarningPhase.Active
+                && !warning.TypeId.StartsWith("debug/", StringComparison.OrdinalIgnoreCase))
+            : null;
+    }
+
+    public static bool MatchesMobileGpu(WarningState warning, string gpu) =>
+        warning.PluginId is not (AsusIdentity.Id or NvidiaIdentity.Id) || warning.DeviceId == gpu;
+
+    public MobileWarningActionResult RequestMobilePower(Guid phone, string instance, string episode, string gpu, uint milliwatts,
+        bool statusOnly = false)
+    {
+        lock (_frames)
+        {
+            if (_journalFailed)
+                return new("failed", Message: "GPU protection is unavailable. Check the RTX Lens event log.");
+
+            var warning = ActiveMobileWarning(instance, episode);
+            if (warning is null)
+                return new("inactive", Message: "This warning is no longer active.");
+            if (!MatchesMobileGpu(warning, gpu))
+                return new("unavailable", Message: "This warning applies to a different GPU.");
+
+            var key = $"mobile/{phone:N}/{instance}/{episode}";
+            if (_mobile.TryGetValue(key, out var existing))
+                return existing.Result;
+            if (statusOnly)
+                return new("inactive", Message: "This power request is no longer available.");
+            if (_mobile.Count >= 512)
+                return new("unavailable", Message: "The service has too many outstanding power requests.");
+
+            var request = new MobileDemand(key, instance, episode, new(gpu, milliwatts));
+            _mobile.Add(key, request);
+            var frame = _latest!;
+            PublishFrame(frame.Time, frame.Automatic, frame.Warnings);
+            Log("mobile-cap-request", $"Paired phone requested a {Watts(milliwatts)} cap for {warning.Title}.", gpu, LogLevel.Warning);
+            return request.Result;
+        }
+    }
+
+    private void PublishFrame(long time, Demand[] automatic, WarningSnapshot warnings)
+    {
+        if (_mobile.Count == 0)
+        {
+            _latest = new(time, automatic, warnings, automatic);
+            return;
+        }
+
+        var phases = warnings.States.ToDictionary(warning => warning.EpisodeId, warning => warning.Phase);
+        var mobile = _mobile.Values.Where(request => request.Result.State != "failed" || request.MayHaveWritten)
+            .Select(request => new Demand(request.Key, request.Reaction,
+                request.Instance == warnings.InstanceId
+                    ? phases.TryGetValue(request.Episode, out var phase) ? phase : null
+                    : WarningPhase.Unavailable, request));
+        _latest = new(time, automatic, warnings, [.. automatic, .. mobile]);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -128,6 +209,7 @@ internal sealed class WarningPowerService(RuntimeConfigurationFile configuration
         }
         catch (Exception error)
         {
+            _journalFailed = true;
             logger.LogActivity(LogLevel.Error, "power.journal", "GPU protection", "Could not read the power-limit journal. GPU reactions are suspended.", exception: error);
             return;
         }
@@ -201,6 +283,11 @@ internal sealed class WarningPowerService(RuntimeConfigurationFile configuration
                     _retry[gpu] = clock.GetUtcNow().AddSeconds(10);
                     // A transient read or write error is retryable. A detected driver reset
                     // still requires manual restoration and a third-party setting relinquishes ownership.
+                    foreach (var demand in frame.Demands.Where(demand => demand.Reaction.GpuId == gpu))
+                    {
+                        if (demand.Mobile is { MayHaveWritten: false, Result.State: "requested" } mobile)
+                            mobile.Result = new("failed", Message: "The NVIDIA driver could not apply the power limit. Check the RTX Lens event log.");
+                    }
                     logger.LogActivity(LogLevel.Warning, "power.failed", "GPU protection", error.Message, gpu);
                 }
             }
@@ -210,13 +297,14 @@ internal sealed class WarningPowerService(RuntimeConfigurationFile configuration
     private void Process(string gpu, Frame frame)
     {
         var demands = frame.Demands.Where(d => d.Reaction.GpuId == gpu).ToArray();
-        var active = demands.Where(d => d.Phase == WarningPhase.Active).ToArray();
+        var active = demands.Where(d => d.Phase == WarningPhase.Active && d.Mobile?.Result.State != "failed").ToArray();
         if (_overridden.TryGetValue(gpu, out var suppressed))
         {
             suppressed.UnionWith(active.Select(d => d.Id));
             suppressed.IntersectWith(demands.Where(d => d.Phase is not null).Select(d => d.Id));
             if (suppressed.Count > 0)
             {
+                SetMobileResult(active, new("failed", Message: "Another application changed the GPU power limit."));
                 return;
             }
 
@@ -231,7 +319,7 @@ internal sealed class WarningPowerService(RuntimeConfigurationFile configuration
 
         if (!_sessions.TryGetValue(gpu, out var control))
         {
-            control = NvmlPowerControl.Open(gpu);
+            control = _openControl(gpu);
             _sessions.Add(gpu, control);
         }
         var range = control.Read();
@@ -239,6 +327,7 @@ internal sealed class WarningPowerService(RuntimeConfigurationFile configuration
         {
             _overridden[gpu] = active.Select(d => d.Id).ToHashSet();
             Remove(gpu);
+            SetMobileResult(active, new("failed", Message: "Another application changed the GPU power limit."));
             Log("external", $"Configured limit changed to {Watts(range.Requested)}. Released the saved {Watts(lease.Original)} restore target.", gpu);
             return;
         }
@@ -259,14 +348,25 @@ internal sealed class WarningPowerService(RuntimeConfigurationFile configuration
         }
         if (active.Length > 0)
         {
-            var target = active.Min(d => d.Reaction.TargetMilliwatts);
-            if (target < range.Minimum || target > range.Maximum)
+            foreach (var demand in active.Where(d => d.Mobile is not null
+                && (d.Reaction.TargetMilliwatts < range.Minimum || d.Reaction.TargetMilliwatts > range.Maximum)))
+                demand.Mobile!.Result = new("failed", Message: "The saved mobile power limit is outside the current GPU range.");
+
+            var inRange = active.Where(d => d.Reaction.TargetMilliwatts >= range.Minimum && d.Reaction.TargetMilliwatts <= range.Maximum).ToArray();
+            if (inRange.Length == 0)
             {
-                throw new InvalidOperationException("Saved emergency limit is outside the current driver range.");
+                if (active.Any(d => d.Mobile is null))
+                    throw new InvalidOperationException("Saved emergency limit is outside the current driver range.");
+                return;
             }
+
+            active = inRange;
+            var target = active.Min(d => d.Reaction.TargetMilliwatts);
 
             if (lease is null && range.Requested <= target)
             {
+                if ((range.Enforced ?? range.Requested) <= target)
+                    SetMobileResult(active, new("applied", range.Enforced ?? range.Requested));
                 if (_alreadyBelow.Add(gpu))
                 {
                     Log("already-limited", $"Current configured limit is {Watts(range.Requested)}, already at or below {Watts(target)}.", gpu);
@@ -295,8 +395,20 @@ internal sealed class WarningPowerService(RuntimeConfigurationFile configuration
                 {
                     try
                     {
+                        if (!StillCurrent(frame, gpu))
+                        {
+                            if (lease is null) Remove(gpu);
+                            else Save(lease);
+                            return;
+                        }
+
                         Log("cap-requested", $"GPU protection triggered. Requesting Nvidia driver to set power limit to {Watts(cap)}.", gpu, LogLevel.Warning);
                         control.Change(range.Requested, cap);
+                        foreach (var demand in active)
+                        {
+                            if (demand.Mobile is { } mobile)
+                                mobile.MayHaveWritten = true;
+                        }
                     }
                     catch
                     {
@@ -315,6 +427,9 @@ internal sealed class WarningPowerService(RuntimeConfigurationFile configuration
                     }
                 }
             }
+            if (!changing && next.Confirmed && (range.Enforced ?? range.Requested) <= cap)
+                SetMobileResult(active, new("applied", range.Enforced ?? range.Requested));
+
             if (requestedRestore)
             {
                 Log("held", "A warning is active. Keeping the GPU power limit.", gpu);
@@ -365,6 +480,15 @@ internal sealed class WarningPowerService(RuntimeConfigurationFile configuration
             }
 
             throw;
+        }
+    }
+
+    private static void SetMobileResult(Demand[] demands, MobileWarningActionResult result)
+    {
+        foreach (var demand in demands)
+        {
+            if (demand.Mobile is { } mobile)
+                mobile.Result = result;
         }
     }
 

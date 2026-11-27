@@ -33,6 +33,8 @@ export type WarningState = {
   detail: string;
   startedAt: string | null;
   notificationSequence: number;
+  deviceId?: string;
+  isSimulation?: boolean;
 };
 
 export type SimulationWarning = { id: string; title: string; detail: string; startedAt: string };
@@ -240,6 +242,8 @@ export function decodeFrame(json: string): SensorFrame | null {
               title: warning.title, phase: warning.phase, episodeId: warning.episodeId,
               pluginId: typeof warning.pluginId === 'string' ? warning.pluginId : '',
               icon: typeof warning.icon === 'string' ? warning.icon : '',
+              ...(typeof warning.deviceId === 'string' ? { deviceId: warning.deviceId } : {}),
+              ...(typeof warning.typeId === 'string' && warning.typeId.toLowerCase().startsWith('debug/') ? { isSimulation: true } : {}),
               detail: typeof warning.detail === 'string' ? warning.detail : '',
               startedAt: typeof warning.startedAt === 'string' && Number.isFinite(Date.parse(warning.startedAt)) ? warning.startedAt : null,
               notificationSequence: typeof warning.notificationSequence === 'number' && Number.isSafeInteger(warning.notificationSequence)

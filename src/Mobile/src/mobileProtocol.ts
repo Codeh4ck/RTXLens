@@ -6,5 +6,7 @@ export const mobileProtocol = {
     CompletePairing: "/pairing/complete",
     Registration: "/notification-registration",
     RegistrationV2: "/notification-registration/v2",
+    WarningActions: "/warning-actions",
+    RunWarningAction: "/warning-actions/run",
     WarningChannel: "rtxlens-warnings",
 } as const;

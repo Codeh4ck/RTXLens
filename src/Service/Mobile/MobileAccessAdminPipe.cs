@@ -28,6 +28,7 @@ internal sealed class MobileAccessAdminPipe(string pipeName, MobileAccessService
                 {
                     await pipe.WaitForConnectionAsync(stoppingToken);
                     await ServeAsync(pipe, stoppingToken);
+
                     pipe.Disconnect();
                 }
             }
@@ -39,6 +40,7 @@ internal sealed class MobileAccessAdminPipe(string pipeName, MobileAccessService
             {
                 logger.LogActivity(LogLevel.Warning, "mobile.admin-pipe-unavailable", "Mobile access",
                     "The mobile access setup channel is unavailable. The service will retry.");
+
                 await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
             }
         }
@@ -67,7 +69,6 @@ internal sealed class MobileAccessAdminPipe(string pipeName, MobileAccessService
 
             var request = JsonSerializer.Deserialize<MobileAccessRequest>(contents, MobileAccessProtocol.Json);
 
-            // Finish an accepted local command even if its caller disconnects.
             var response = request is null
                 ? new MobileAccessResponse(false, Error: "A mobile access command is required.")
                 : await HandleAsync(request, stoppingToken);
@@ -76,6 +77,7 @@ internal sealed class MobileAccessAdminPipe(string pipeName, MobileAccessService
             try
             {
                 BinaryPrimitives.WriteInt32LittleEndian(header, reply.Length);
+
                 await pipe.WriteAsync(header, deadline.Token);
                 await pipe.WriteAsync(reply, deadline.Token);
             }
@@ -86,7 +88,6 @@ internal sealed class MobileAccessAdminPipe(string pipeName, MobileAccessService
         }
         catch (Exception error) when (error is OperationCanceledException or IOException or JsonException)
         {
-            // A dropped, malformed or timed-out local request does not affect the service
         }
         finally
         {
@@ -119,6 +120,7 @@ internal sealed class MobileAccessAdminPipe(string pipeName, MobileAccessService
                 case { Operation: MobileAccessOperation.Approve, Id: { } approvalId } when pairing.Approve(approvalId):
                 case { Operation: MobileAccessOperation.Reject, Id: { } rejectionId } when pairing.Reject(rejectionId):
                 case { Operation: MobileAccessOperation.Revoke, Id: { } deviceId } when pairing.Revoke(deviceId):
+                case { Operation: MobileAccessOperation.SetWarningActionAccess, Id: { } actionId } when pairing.SetWarningActionAccess(actionId, request.AllowWarningActions):
                     return new MobileAccessResponse(true);
 
                 case { Operation: MobileAccessOperation.PublishSimulationWarning, SimulationWarning: { IsValid: true } warning }:

@@ -2,6 +2,12 @@ using System.Net;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
+using RTXLens.Contracts.Monitoring;
+using RTXLens.Core.Streaming;
+using RTXLens.Hardware.Nvidia.Diagnostics;
+using RTXLens.Service.Configuration;
+using RTXLens.Warnings;
 using RTXLens.Client.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -40,6 +46,7 @@ internal static class MobileAccessTests
         await runner.RunAsync(ReportsPortConflictAndRecoversAsync);
         await runner.RunAsync(NetworkSetupFailureKeepsTheListenerAvailableAsync);
         await runner.RunAsync(PairedPhoneReadsPersistedWarningHistoryAsync);
+        await runner.RunAsync(PairedPhoneCanRunAuthorizedWarningActionsAsync);
         await runner.RunAsync(PairedPhoneReceivesOnlyNewWarningNotificationsAsync);
         await runner.RunAsync(BlockedRecipientDoesNotHoldUpAnotherPhoneAsync);
         await runner.RunAsync(FullReceiptQueueReportsMissedChecksAsync);
@@ -240,6 +247,173 @@ internal static class MobileAccessTests
         finally
         {
             await delivery.StopAsync(CancellationToken.None);
+        }
+    }
+
+    internal static async Task PairedPhoneCanRunAuthorizedWarningActionsAsync()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "rtxlens-mobile-actions-" + Guid.NewGuid().ToString("N"));
+        const string gpuId = "test-gpu";
+        const uint original = 825125;
+        var clock = TimeProvider.System;
+        var driver = new TestPowerControl(original);
+        var actuator = new TestShutdown();
+        var configuration = new RuntimeConfigurationFile(Path.Combine(root, "settings.json"));
+        var discovery = new ProfileGpuDiscovery(clock, NullLogger<ProfileGpuDiscovery>.Instance);
+        using var power = new WarningPowerService(configuration, discovery, clock, NullLogger<WarningPowerService>.Instance,
+            id => id == gpuId ? driver : throw new ArgumentException("Wrong test GPU."));
+        var shutdown = new WarningShutdownCoordinator(configuration, clock, actuator, NullLogger<WarningShutdownCoordinator>.Instance);
+        var paths = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["SettingsProfiles:Directory"] = root }).Build();
+        var settingsStore = new SettingsProfileStore(paths, NullLogger<SettingsProfileStore>.Instance);
+        var profiles = new DeviceWarningProfileStore(TestHardwareCatalog.Installed, settingsStore, NullLogger<DeviceWarningProfileStore>.Instance);
+        var automaticProfile = new DeviceWarningProfile
+        {
+            Id = Guid.NewGuid().ToString("N"), Name = "Astral overcurrent", PluginId = "asus-astral", DeviceId = gpuId,
+            PowerReduction = new(gpuId, 400000)
+        };
+        profiles.Save(automaticProfile);
+        var observed = new WarningObservation(automaticProfile.PluginId, gpuId, "overcurrent", true, true, "") { ProfileId = automaticProfile.Id };
+        var definition = new WarningDefinition(observed.TypeId, observed.PluginId, "Pin overcurrent");
+        var now = clock.GetUtcNow();
+        var automatic = new WarningState(observed.Id, observed.PluginId, gpuId, observed.TypeId, definition.Title,
+            "Pin 2 exceeded its limit", WarningPhase.Active, Guid.NewGuid().ToString("N"), now, new(), 1, now);
+        var mobile = automatic with { Id = "mobile-source", EpisodeId = Guid.NewGuid().ToString("N"), PluginId = "msi-psu", DeviceId = "test-psu" };
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        var ct = timeout.Token;
+
+        try
+        {
+            using var hub = new SensorStreamHub();
+            using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+            using var cert = new MobileAccessCertificate(key.ExportPkcs8PrivateKey(), clock);
+            var pairing = new MobilePairing(new TestStore(), clock, NullLogger.Instance);
+            pairing.Load();
+            pairing.SetListening(true);
+            var actions = new MobileWarningActions(pairing, power, shutdown, profiles);
+            await using var server = await MobileAccessListener.StartAsync(IPAddress.Loopback, GetUnusedPort(), cert, pairing, hub, ct, warningActions: actions);
+            using var client = CreateClient(MobileAccessListener.GetAddress(server), cert.Fingerprint);
+            var request = new MobileWarningActionRequest("test-instance", mobile.EpisodeId, "low-power");
+            using (var anonymous = await client.PostAsJsonAsync(MobileProtocol.RunWarningAction, request, ct))
+                TestAssert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+
+            var credential = await PairAsync(client, pairing, pairing.CreateInvite(cert.Fingerprint)!, ct);
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", credential.Token);
+            using (var forbidden = await client.PostAsJsonAsync(MobileProtocol.RunWarningAction, request, ct))
+                TestAssert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+
+            TestAssert.True(pairing.SetWarningActionAccess(credential.DeviceId, true), "Grant actions on the PC.");
+            var options = await client.GetFromJsonAsync<MobileWarningActionOptions>(MobileProtocol.WarningActions, ct);
+            TestAssert.True(options is { Allowed: true, Settings: { EnableShutdown: false, EnableLowPower: false } }, "Actions start off.");
+            TestAssert.True(options!.Profiles.Any(profile => profile.Name == "Astral overcurrent" && profile.PowerMilliwatts == 400000),
+                "The phone receives the configured warning name and limit.");
+            using (var saved = await client.PostAsJsonAsync(MobileProtocol.WarningActions, new MobileWarningActionSettings(EnableShutdown: true), ct))
+                TestAssert.Equal(HttpStatusCode.NoContent, saved.StatusCode);
+            TestAssert.True(pairing.SetWarningActions(credential.DeviceId, new(true, true, gpuId, 500000)), "Seed the power target for the fake GPU.");
+
+            await power.StartAsync(ct);
+            Publish([], mobile with { Phase = WarningPhase.Recovering });
+            TestAssert.Equal("inactive", (await Run(request)).State);
+            Publish([], mobile with { TypeId = "debug/overcurrent" });
+            TestAssert.Equal("inactive", (await Run(request)).State);
+            TestAssert.Equal("inactive", (await Run(request with { Action = "shutdown" })).State);
+            TestAssert.Equal(0, actuator.Calls);
+
+            Publish([], mobile);
+            TestAssert.Equal("inactive", (await Run(request with { StatusOnly = true })).State);
+            TestAssert.Equal("requested", (await Run(request)).State);
+            await Until(() => driver.Current == 500000, () => Publish([], mobile));
+            TestAssert.Equal("requested", (await Run(request with { Action = "shutdown" })).State);
+            TestAssert.Equal("requested", (await Run(request with { Action = "shutdown" })).State);
+            TestAssert.Equal(1, actuator.Calls);
+
+            var higher = automaticProfile with { PowerReduction = new(gpuId, 650000) };
+            for (var i = 0; i < 7; i++)
+            {
+                Publish([higher], mobile, automatic);
+                await Task.Delay(100, ct);
+            }
+            TestAssert.Equal(500000u, driver.Current);
+
+            await Until(() => driver.Current == 400000, () => Publish([automaticProfile], mobile, automatic));
+            MobileWarningActionResult status = new("requested");
+            while (status.State == "requested" || status.Milliwatts == 500000)
+            {
+                Publish([automaticProfile], mobile, automatic);
+                await Task.Delay(100, ct);
+                status = await Run(request with { StatusOnly = true });
+            }
+            TestAssert.Equal("applied", status.State);
+            TestAssert.Equal<uint?>(400000, status.Milliwatts);
+
+            // Clearing the stricter automatic reaction must not raise the mobile cap while its warning remains active.
+            var clear = new ConfiguredWarning(definition, observed with { Active = false }, null);
+            for (var i = 0; i < 7; i++)
+            {
+                power.Observe([automaticProfile], [clear], new("test-instance", 1, true, [mobile]));
+                await Task.Delay(100, ct);
+            }
+            TestAssert.Equal(400000u, driver.Current);
+
+            await Until(() => driver.Current == original, () => power.Observe([automaticProfile], [clear], new("test-instance", 1, true, [])));
+            TestAssert.True(driver.Writes.ToArray().SequenceEqual(new uint[] { 500000, 400000, original }),
+                "The driver sees each reduction once and the exact pre-warning XOC limit on restoration.");
+            TestAssert.True(pairing.Revoke(credential.DeviceId), "Revocation removes action access.");
+            using var revoked = await client.PostAsJsonAsync(MobileProtocol.RunWarningAction, request, ct);
+            TestAssert.Equal(HttpStatusCode.Unauthorized, revoked.StatusCode);
+
+            void Publish(DeviceWarningProfile[] automaticProfiles, params WarningState[] warnings) =>
+                power.Observe(automaticProfiles, [new(definition, observed, null)], new("test-instance", 1, true, warnings));
+
+            async Task<MobileWarningActionResult> Run(MobileWarningActionRequest command)
+            {
+                using var reply = await client.PostAsJsonAsync(MobileProtocol.RunWarningAction, command, ct);
+                reply.EnsureSuccessStatusCode();
+                return (await reply.Content.ReadFromJsonAsync<MobileWarningActionResult>(ct))!;
+            }
+
+            async Task Until(Func<bool> complete, Action publish)
+            {
+                while (!complete())
+                {
+                    publish();
+                    await Task.Delay(75, ct);
+                }
+            }
+        }
+        finally
+        {
+            await power.StopAsync(CancellationToken.None);
+            if (Directory.Exists(root))
+            {
+                var directory = new DirectoryInfo(root);
+                if (directory.Parent?.FullName == Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.GetTempPath())))
+                    directory.Delete(recursive: true);
+            }
+        }
+    }
+
+    private sealed class TestPowerControl(uint initial) : INvidiaPowerControl
+    {
+        private volatile uint _current = initial;
+        public uint Current => _current;
+        public System.Collections.Concurrent.ConcurrentQueue<uint> Writes { get; } = new();
+        public (uint Minimum, uint Maximum, uint Requested, uint? Enforced) Read() => (300000, 1000000, Current, Current);
+        public void Change(uint expected, uint target)
+        {
+            TestAssert.Equal(expected, Current);
+            Writes.Enqueue(target);
+            _current = target;
+        }
+        public void Dispose() { }
+    }
+
+    private sealed class TestShutdown : IWarningShutdown
+    {
+        public int Calls { get; private set; }
+        public ShutdownOutcome Request()
+        {
+            Calls++;
+            return ShutdownOutcome.Accepted;
         }
     }
 

@@ -5,4 +5,6 @@ enum MobileRoutes {
     static let registrationV2 = "/notification-registration/v2"
     static let pairing = "/pairing"
     static let completePairing = "/pairing/complete"
+    static let warningActions = "/warning-actions"
+    static let runWarningAction = "/warning-actions/run"
 }

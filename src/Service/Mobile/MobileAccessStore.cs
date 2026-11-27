@@ -16,7 +16,8 @@ internal sealed record MobileAccessData(
 }
 
 internal sealed record MobileDeviceCredential(Guid Id, string Name, byte[] TokenHash, string? PushToken = null,
-    MobileNotificationPreferences? NotificationPreferences = null);
+    MobileNotificationPreferences? NotificationPreferences = null, bool WarningActionsAllowed = false,
+    MobileWarningActionSettings? WarningActions = null);
 
 internal sealed record MobileNetworkRules(Guid Id, int LocalPort, bool OpenFirewall, MobilePortForwarding? PortForwarding);
 

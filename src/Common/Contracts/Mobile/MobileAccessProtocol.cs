@@ -27,7 +27,8 @@ public enum MobileAccessOperation
     Reject,
     Revoke,
     PublishSimulationWarning,
-    SendTestNotification
+    SendTestNotification,
+    SetWarningActionAccess
 }
 
 public sealed record MobileAccessRequest(
@@ -35,13 +36,13 @@ public sealed record MobileAccessRequest(
     MobileAccessSettings? Settings = null,
     Guid? Id = null,
     bool KeepNoIpCredentials = false,
-    MobileSimulationWarning? SimulationWarning = null);
+    MobileSimulationWarning? SimulationWarning = null,
+    bool AllowWarningActions = false);
 
 public sealed record MobileSimulationWarning(string Title, string Detail)
 {
     [JsonIgnore]
-    public bool IsValid => !string.IsNullOrWhiteSpace(Title) && Title.Length <= 160
-        && Detail is { Length: <= 480 };
+    public bool IsValid => !string.IsNullOrWhiteSpace(Title) && Title.Length <= 160 && Detail is { Length: <= 480 };
 }
 
 public sealed record MobileAccessResponse(
@@ -68,7 +69,7 @@ public sealed record MobileAccessStatus(
 public sealed record MobilePairingInvite(string Secret, string PublicKeyFingerprint, DateTimeOffset ExpiresAt);
 public sealed record MobilePairingApproval(Guid Id, string DeviceName, DateTimeOffset ExpiresAt);
 public sealed record MobileDevice(Guid Id, string Name, DateTimeOffset? LastConnectedAt, DateTimeOffset? LastExternalConnectionAt = null,
-    bool LockScreenNotifications = false);
+    bool LockScreenNotifications = false, bool WarningActionsAllowed = false);
 
 public sealed record MobilePairingCode(int SchemaVersion, Uri LocalAddress, Uri RemoteAddress, string PublicKeyFingerprint, string Secret, DateTimeOffset ExpiresAt);
 

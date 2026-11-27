@@ -7,4 +7,6 @@ internal object MobileRoutes {
     const val registrationV2 = "/notification-registration/v2"
     const val pairing = "/pairing"
     const val completePairing = "/pairing/complete"
+    const val warningActions = "/warning-actions"
+    const val runWarningAction = "/warning-actions/run"
 }
