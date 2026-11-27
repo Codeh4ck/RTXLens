@@ -27,7 +27,7 @@ internal sealed class DebugConsoleWindow : LensWindow
     private static readonly string[] MetricModes = ["Use source", "Fixed", "Unavailable", "Stale"];
     private static readonly string[] PluginStates = Enum.GetNames<PluginState>();
 
-    public DebugConsoleWindow(DebugSession session)
+    public DebugConsoleWindow(DebugSession session, Func<Task> refreshProfiles)
     {
         Title = "RTX Lens - Debug Console";
         Width = 1020;
@@ -48,19 +48,25 @@ internal sealed class DebugConsoleWindow : LensWindow
             Margin = new Thickness(18),
             RowDefinitions = new RowDefinitions("Auto,Auto,*"),
             RowSpacing = 12,
-            Children = { CreateSessionPanel(session), tabs, page }
+            Children = { CreateSessionPanel(session, refreshProfiles), tabs, page }
         };
         Grid.SetRow(tabs, 1);
         Grid.SetRow(page, 2);
         Body = layout;
     }
 
-    private static SectionPanel CreateSessionPanel(DebugSession session)
+    private static SectionPanel CreateSessionPanel(DebugSession session, Func<Task> refreshProfiles)
     {
         var enable = Switch("Enable telemetry simulation", session, nameof(session.Enabled));
         var reset = ActionButton("Reset all", "refresh", session.ResetAll);
+        var reload = ActionButton("Reload warning profiles", "refresh", refreshProfiles);
+        BindTo(reload, IsEnabledProperty, session, nameof(session.Enabled));
+        var profilesStatus = Caption();
+        BindTo(profilesStatus, TextBlock.TextProperty, session, nameof(session.SavedWarningProfilesStatus));
+        Watch(profilesStatus, session, () => profilesStatus.IsVisible = !string.IsNullOrWhiteSpace(session.SavedWarningProfilesStatus),
+            nameof(session.SavedWarningProfilesStatus));
         var status = Message("Simulation active", tone: "warning", badge: true);
-        ToolTip.SetTip(status, "Overrides apply to this desktop session.");
+        ToolTip.SetTip(status, "Matching connector warnings can apply a saved power limit to the physical GPU.");
         BindTo(status, IsVisibleProperty, session, nameof(session.Enabled));
         var notice = Caption();
         notice.VerticalAlignment = VerticalAlignment.Center;
@@ -70,14 +76,14 @@ internal sealed class DebugConsoleWindow : LensWindow
         {
             ItemSpacing = 12,
             LineSpacing = 5,
-            Children = { status, notice }
+            Children = { status, profilesStatus, Caption("Simulated connector warnings can apply enabled GPU power reactions to your physical GPU."), notice }
         });
         panel.Padding = new Thickness(16, 8);
         panel.HeaderActions = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = 12,
-            Children = { enable, reset }
+            Children = { enable, reload, reset }
         };
         return panel;
     }
@@ -152,6 +158,7 @@ internal sealed class DebugConsoleWindow : LensWindow
         BindTo(state, SelectingItemsControl.SelectedIndexProperty, plugin, nameof(plugin.StateIndex), BindingMode.TwoWay);
         var device = new TextBox { MaxLength = 128 };
         BindTo(device, TextBox.TextProperty, plugin, nameof(plugin.DeviceId), BindingMode.TwoWay);
+        ToolTip.SetTip(device, "The default simulated ID can match one saved device per connector. When multiple devices have profiles on the same connector, enter the device ID from the profile you want to test.");
         var installed = Switch("Installed", plugin, nameof(plugin.Installed));
         var enabled = Switch("Enabled", plugin, nameof(plugin.Enabled));
 

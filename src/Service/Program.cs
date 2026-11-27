@@ -65,6 +65,10 @@ await using var app = builder.Build();
 
 app.UseCors().UseWebSockets();
 app.MapMonitoringEndpoints();
+if (OperatingSystem.IsWindows())
+{
+    MobileHistoryEndpoints.MapDesktop(app);
+}
 app.MapWireViewEndpoints();
 app.MapAsusEndpoints();
 app.MapGenericNvidiaEndpoints();

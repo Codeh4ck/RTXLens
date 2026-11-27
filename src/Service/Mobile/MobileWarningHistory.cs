@@ -2,10 +2,12 @@ using System.Text.Json;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Runtime.Versioning;
-using RTXLens.Contracts.Enums;
+using RTXLens.Contracts.Configuration;
 using RTXLens.Contracts.Sensors;
 using RTXLens.Contracts.Warnings;
 using RTXLens.Core.Diagnostics;
+using RTXLens.Plugins.Msi.Contracts;
+using RTXLens.Plugins.WireView.Contracts;
 
 namespace RTXLens.Service.Mobile;
 
@@ -13,7 +15,6 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
 {
     private const int MaxRecords = 2_000;
     private const long MaxDiskBytes = 64L * 1024 * 1024;
-    private const int MaxReadings = 512;
     private readonly Lock _gate = new();
     private readonly Dictionary<Guid, string> _active = [];
     private Dictionary<Guid, StoredIncident>? _records;
@@ -22,7 +23,7 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
     private DateTimeOffset _nextWrite;
     private int _retention;
 
-    public void Observe(SensorSnapshot snapshot, int retentionDays)
+    public void Observe(SensorSnapshot snapshot, int retentionDays, DebugWarningHistoryFrame? debugHistory = null)
     {
         if (snapshot.Warnings is not { } warnings)
         {
@@ -42,7 +43,13 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
                 var records = Load();
                 var current = new HashSet<Guid>();
 
-                foreach (var warning in warnings.States)
+                // New desktop builds send the original simulation episode, with its own readings.
+                // Older clients can still record the service's synthetic power-reaction episodes.
+                var live = warnings.States.Where(warning => debugHistory is null || !warning.TypeId.StartsWith("debug/", StringComparison.Ordinal))
+                    .Select(warning => (Warning: warning, Readings: snapshot.Sensors));
+                var simulated = debugHistory?.Warnings.Select(warning => (Warning: warning with { Title = "Debug · " + warning.Title },
+                    Readings: debugHistory.Readings)) ?? [];
+                foreach (var (warning, readings) in live.Concat(simulated))
                 {
                     if (!Guid.TryParseExact(warning.EpisodeId, "N", out var id))
                     {
@@ -53,16 +60,8 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
 
                     if (warning.Phase == WarningPhase.Active && !records.ContainsKey(id))
                     {
-                        var readings = snapshot.Sensors
-                            .Where(reading => reading is { Quality: ReadingQuality.Valid, Value: not null } && reading.Identity.PluginId == warning.PluginId && reading.Identity.DeviceId == warning.DeviceId)
-                            .Take(MaxReadings)
-                            .ToArray();
-
-                        var incident = new MobileIncident(id, "warning", warning.Title, warning.PluginId, warning.StartedAt, null, "Active")
-                        {
-                            DeviceId = warning.DeviceId, Detail = warning.Detail, CapturedAt = snapshot.Timestamp, Readings = readings
-                        };
-
+                        var incident = WarningIncident.Capture(id, warning, now, readings,
+                            includeGpuContext: warning.PluginId is WireViewIdentity.Id or MsiIdentity.Id);
                         var stored = Save(incident);
                         records.Add(id, stored);
 
@@ -104,7 +103,7 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
         }
     }
 
-    public MobileIncident[] Summaries(DateTimeOffset cutoff)
+    public WarningIncident[] Summaries(DateTimeOffset cutoff)
     {
         lock (_gate)
         {
@@ -112,7 +111,7 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
         }
     }
 
-    public MobileIncident? Find(Guid id, DateTimeOffset cutoff)
+    public WarningIncident? Find(Guid id, DateTimeOffset cutoff)
     {
         lock (_gate)
         {
@@ -239,7 +238,7 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
 
     private string Location(Guid id) => Path.Combine(directory, id.ToString("N") + ".json");
 
-    private static MobileIncident? Read(string path)
+    private static WarningIncident? Read(string path)
     {
         if (!File.Exists(path) || File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint))
         {
@@ -247,10 +246,10 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
         }
 
         using var stream = File.OpenRead(path);
-        return stream.Length <= MobileHistoryEndpoints.MaximumReportBytes ? JsonSerializer.Deserialize<MobileIncident>(stream, MobileHistoryEndpoints.Json) : null;
+        return stream.Length <= MobileHistoryEndpoints.MaximumReportBytes ? JsonSerializer.Deserialize<WarningIncident>(stream, MobileHistoryEndpoints.Json) : null;
     }
 
-    private StoredIncident Save(MobileIncident record)
+    private StoredIncident Save(WarningIncident record)
     {
         var path = Location(record.Id);
         var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
@@ -258,7 +257,11 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
 
         if (bytes.Length > MobileHistoryEndpoints.MaximumReportBytes)
         {
-            bytes = JsonSerializer.SerializeToUtf8Bytes(record with { Readings = [] }, MobileHistoryEndpoints.Json);
+            bytes = JsonSerializer.SerializeToUtf8Bytes(record with { GpuReadings = [] }, MobileHistoryEndpoints.Json);
+            if (bytes.Length > MobileHistoryEndpoints.MaximumReportBytes)
+            {
+                bytes = JsonSerializer.SerializeToUtf8Bytes(record with { Readings = [], GpuReadings = [] }, MobileHistoryEndpoints.Json);
+            }
         }
 
         try
@@ -274,7 +277,7 @@ internal sealed class MobileWarningHistory(string directory, ILogger<MobileWarni
         }
     }
 
-    private static StoredIncident Summarize(MobileIncident record, long size) => new(record with { Readings = [], Detail = null }, size);
+    private static StoredIncident Summarize(WarningIncident record, long size) => new(record with { Readings = [], GpuReadings = [], Detail = null, Thresholds = [] }, size);
 
-    private sealed record StoredIncident(MobileIncident Summary, long Size);
+    private sealed record StoredIncident(WarningIncident Summary, long Size);
 }

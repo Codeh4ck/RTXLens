@@ -116,7 +116,7 @@ internal static class ServiceLogEndpoints
         await response.Body.FlushAsync(deadline.Token);
     }
 
-    private static bool IsLocalClient(HttpContext context)
+    internal static bool IsLocalClient(HttpContext context)
     {
         var request = context.Request;
         var host = request.Host.Host.Trim('[', ']');

@@ -16,7 +16,7 @@ namespace RTXLens.App.Views.Hardware;
 
 internal static class GpuStatusPanel
 {
-    public static SectionPanel Create(GpuStatusViewModel gpu, HardwarePanelViewModel? wireView, bool isDedicatedTab)
+    public static SectionPanel Create(GpuStatusViewModel gpu, HardwarePanelViewModel? wireView, bool isDedicatedTab, bool captured = false)
     {
         var device = Caption();
         BindTo(device, TextBlock.TextProperty, gpu, nameof(gpu.DeviceText));
@@ -25,19 +25,39 @@ internal static class GpuStatusPanel
         BindTo(unavailable, ContentControl.ContentProperty, gpu, nameof(gpu.State));
         BindTo(unavailable, Visual.IsVisibleProperty, gpu, nameof(gpu.IsUnavailable));
 
-        var readings = new StackPanel
+        var usage = Inset(ReadingRow(IconLabel("GPU usage", "boost-limit", 24), Reading(gpu, nameof(gpu.GpuUsageText))), 44);
+        var voltage = Inset(ReadingRow(IconLabel("Core voltage", "voltage", 24), Reading(gpu, nameof(gpu.CoreVoltageText))), 44);
+        var clocks = CreateClocks(gpu, isDedicatedTab);
+        var vram = CreateVram(gpu);
+        var temperatures = CreateTemperatures(gpu);
+        var fans = CreateFans(gpu);
+        var readings = new StackPanel { Spacing = 8, Children = { usage, voltage, clocks, vram, temperatures, fans } };
+
+        if (captured)
         {
-            Spacing = 8,
-            Children =
+            usage.IsVisible = IsReported(gpu.GpuUsageText);
+            voltage.IsVisible = IsReported(gpu.CoreVoltageText);
+            clocks.IsVisible = IsReported(gpu.CoreClock.Value) || IsReported(gpu.MemoryClock.Value)
+                || gpu.HasCrossbarClock || gpu.HasSystemClock;
+            vram.IsVisible = gpu.HasVramUsage;
+            temperatures.IsVisible = IsReported(gpu.CoreTemperature.Value) || IsReported(gpu.MemoryTemperature.Value)
+                || gpu.HasHotspotTemperature;
+            fans.IsVisible = IsReported(gpu.Fan1.Value) || IsReported(gpu.Fan2.Value);
+
+            if (IsReported(gpu.BoardPowerText))
             {
-                Inset(ReadingRow(IconLabel("GPU usage", "boost-limit", 24), Reading(gpu, nameof(gpu.GpuUsageText))), 44),
-                Inset(ReadingRow(IconLabel("Core voltage", "voltage", 24), Reading(gpu, nameof(gpu.CoreVoltageText))), 44),
-                CreateClocks(gpu, isDedicatedTab),
-                CreateVram(gpu),
-                CreateTemperatures(gpu),
-                CreateFans(gpu)
+                readings.Children.Insert(readings.Children.IndexOf(clocks),
+                    Inset(ReadingRow(IconLabel("Board power", "power", 24), Reading(gpu, nameof(gpu.BoardPowerText))), 44));
             }
-        };
+
+            if (IsReported(gpu.VramFreeText))
+            {
+                readings.Children.Insert(readings.Children.IndexOf(vram) + 1,
+                    Inset(ReadingRow(IconLabel("VRAM free", "vram", 24), Reading(gpu, nameof(gpu.VramFreeText))), 44));
+            }
+
+            return DashboardSection("GPU status", "vcore", readings);
+        }
 
         if (wireView is not null)
         {
@@ -47,6 +67,8 @@ internal static class GpuStatusPanel
         return DashboardSection("GPU status", "vcore",
             new StackPanel { Spacing = 12, Children = { device, unavailable, readings } });
     }
+
+    private static bool IsReported(string value) => value != "Unavailable";
 
     private static Border CreateClocks(GpuStatusViewModel gpu, bool isDedicatedTab)
     {

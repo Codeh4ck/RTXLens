@@ -18,9 +18,10 @@ using static RTXLens.App.Views.Shell.DesktopControls;
 
 namespace RTXLens.App.Views.Configuration;
 
-internal sealed class DeviceWarningProfilesView : ProfileRequestView
+internal sealed partial class DeviceWarningProfilesView : ProfileRequestView
 {
     private KeyValuePair<string, PluginHardwareMetadata>[] _sources = [];
+    private HashSet<string> _availableSources = new(StringComparer.Ordinal);
     private KeyValuePair<string, PluginHardwareMetadata>? SelectedSource =>
         _source.SelectedIndex >= 0 && _source.SelectedIndex < _sources.Length ? _sources[_source.SelectedIndex] : null;
 
@@ -75,6 +76,7 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
     public DeviceWarningProfilesView(ShellViewModel shell) : base(shell)
     {
         AutomationProperties.SetName(_profiles, "Warning profile");
+        AutomationProperties.SetName(_source, "Reading source");
         AutomationProperties.SetName(_enabled, "Profile enabled");
         _enabled.Margin = new Thickness(0, 0, 12, 0);
         _enabled.VerticalAlignment = VerticalAlignment.Center;
@@ -84,7 +86,13 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
             if (TopLevel.GetTopLevel(this) is Window owner &&
                 await RequestProfileNameAsync(owner, "New warning profile") is { } name)
             {
-                var draft = new DeviceWarningProfile { PluginId = _sources[0].Key, Id = Guid.NewGuid().ToString("N"), Name = name };
+                var source = _sources.FirstOrDefault(item => _availableSources.Contains(item.Key)).Key;
+                if (source is null)
+                {
+                    return;
+                }
+
+                var draft = new DeviceWarningProfile { PluginId = source, Id = Guid.NewGuid().ToString("N"), Name = name };
                 _profiles.ItemsSource = _catalog!.Profiles.Append(draft).Select(profile => new ProfileOption(profile)).ToArray();
                 _profiles.SelectedIndex = _profiles.ItemCount - 1;
                 Report(null);
@@ -125,7 +133,7 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
                 Field("Imbalance duration (ms)", _imbalanceDuration)),
             _voltageFields));
 
-        var advanced = Section("Notifications and shutdown", Stack(_overridePolicy, _policyFields, _shutdown, _shutdownFields));
+        var advanced = Section("Notifications", Stack(_overridePolicy, _policyFields));
 
         var info = IconButton("How warning profiles work", DesktopIcons.Info, async () =>
         {
@@ -140,8 +148,8 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
                     $"Keep detected GPU defaults to use {defaults}, or turn them off to set your own limits. "
                         + "Current warnings require the configured duration to elapse. "
                         + "The imbalance check also requires at least one pin to reach the activation current.",
-                    "Use the Notifications and shutdown panel to override notification timing for this profile. "
-                        + "You can also request a Windows shutdown after a warning persists for the delay you set. "
+                    "Use Notifications to override notification timing for this profile. In Warning reactions, "
+                        + "you can request a Windows shutdown after a warning persists for the delay you set. "
                         + "Recovery or unavailable readings reset the shutdown countdown.",
                     "Turn on Enabled and select Save profile configuration to save the profile shown in the selector."));
             }
@@ -157,7 +165,9 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
             _save.Margin = compact ? new Thickness(0, 10, 0, 0) : new Thickness(12, 0, 0, 0);
         };
 
-        var deviceBody = Stack(_legacyDeviceNotice, _deviceFields, Status);
+        var simulationNotice = Alert("Simulation uses saved warning profiles. Saving changes updates live monitoring too.");
+        Watch(simulationNotice, Shell, () => simulationNotice.IsVisible = Shell.IsSimulation, nameof(Shell.IsSimulation));
+        var deviceBody = Stack(simulationNotice, _legacyDeviceNotice, _deviceFields, Status);
         var panel = Section("Device warning profiles", deviceBody);
 
         var profileActions = new WrapPanel
@@ -185,8 +195,8 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
             }
         };
 
-        _editor = Stack(thresholds, advanced);
-        Content = Stack(panel, _editor);
+        _editor = Stack(thresholds, advanced, BuildReactions());
+        Content = Stack(panel, _editor, _heldActions);
 
         _profiles.SelectionChanged += (_, _) =>
         {
@@ -201,16 +211,10 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
         {
             if (!_loading && _source.SelectedIndex >= 0)
             {
-                PopulateDevices(null);
-                PopulateConnectors(null);
-                if (_useDefaults.IsChecked == true)
-                {
-                    SetLimits(DefaultLimits());
-                }
-
-                UpdateAvailability();
+                UpdateSourceFields();
             }
         };
+        Watch(_source, Shell, RefreshSources, nameof(Shell.SimulatedWarningSources));
 
         _useDefaults.IsCheckedChanged += (_, _) =>
         {
@@ -228,7 +232,15 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
         _overridePolicy.IsCheckedChanged += (_, _) => UpdateAvailability();
         _shutdown.IsCheckedChanged += (_, _) => UpdateAvailability();
         _enabled.IsCheckedChanged += (_, _) => UpdateSaveState();
-        _device.SelectionChanged += (_, _) => UpdateSaveState();
+        _device.SelectionChanged += (_, _) =>
+        {
+            if (!_loading)
+            {
+                PopulatePowerTargets(null);
+            }
+
+            UpdateSaveState();
+        };
         _connector.SelectionChanged += (_, _) => UpdateSaveState();
         _policy.Edited += UpdateSaveState;
 
@@ -248,11 +260,13 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
         };
     }
 
+    protected override IMonitoringApi ProfileApi => Shell.WarningProfileApi;
+
     private string? PluginId => SelectedSource?.Key;
 
     protected override void UpdateAvailability()
     {
-        _add.IsEnabled = !IsBusy && _sources.Length > 0;
+        _add.IsEnabled = !IsBusy && _sources.Any(source => _availableSources.Contains(source.Key));
         _profiles.IsEnabled = !IsBusy && _catalog is not null;
         _editor.IsEnabled = _deviceFields.IsEnabled = _enabled.IsEnabled = !IsBusy && _draft is not null;
         _delete.IsEnabled = !IsBusy && _draft is not null;
@@ -270,6 +284,7 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
             input.IsEnabled = _useDefaults.IsChecked != true;
         }
 
+        UpdatePowerAvailability();
         _policyFields.IsEnabled = _overridePolicy.IsChecked == true;
         _shutdownFields.IsEnabled = _shutdown.IsChecked == true;
 
@@ -303,7 +318,7 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
 
     private async Task LoadAsync(IMonitoringApi api, string? selectedId = null)
     {
-        var catalog = await api.GetDeviceWarningProfilesAsync(Shell.StopToken);
+        var catalog = await Shell.LoadWarningProfilesAsync(api);
         LoadCatalog(catalog, selectedId);
     }
 
@@ -313,6 +328,7 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
         var selected = options.FirstOrDefault(option => option.Profile.Id == selectedId) ?? options.FirstOrDefault();
 
         _catalog = catalog;
+        ShowHeld(catalog.HeldLimits);
         var affected = catalog.Profiles.Where(profile => NeedsGpuReselection(profile, catalog.Targets)).Select(profile => profile.Name).ToArray();
         var notice = affected.Length == 0 ? null
             : $"Select a GPU again for {string.Join(", ", affected)}. These profiles use an older GPU number and cannot match pin readings reported under the new GPU ID. "
@@ -320,10 +336,6 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
             + "If only one Astral reports readings, you can choose Automatic.";
         SetAlert(_legacyDeviceNotice, notice, "warning");
         _loading = true;
-        _sources = [.. (catalog.Sources ?? LegacyHardwareCatalog.Sources).Where(source => source.Value.PinProfiles is not null)
-            .OrderByDescending(source => source.Value.PinProfiles?.DefaultProfile is not null)
-            .ThenBy(source => source.Value.DisplayName, StringComparer.Ordinal)];
-        _source.ItemsSource = _sources.Select(source => source.Value.DisplayName).ToArray();
         _profiles.ItemsSource = options;
         _profiles.SelectedItem = selected;
         _loading = false;
@@ -341,18 +353,90 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
             && !targets.Any(target => target.PluginId == profile.PluginId && target.DeviceId == id);
     }
 
+    private void RefreshSources()
+    {
+        if (_catalog is null)
+        {
+            return;
+        }
+
+        var previousSource = PluginId;
+        var saved = _catalog.Profiles.FirstOrDefault(profile => profile.Id == _draft?.Id);
+        PopulateSources(previousSource ?? _draft?.PluginId, saved?.PluginId);
+        if (_draft is not null && previousSource != PluginId)
+        {
+            UpdateSourceFields(saved?.PluginId == PluginId ? saved : null);
+        }
+        else
+        {
+            UpdateAvailability();
+        }
+    }
+
+    private void PopulateSources(string? preferredSource, string? savedSource)
+    {
+        var catalog = _catalog!;
+        var detected = catalog.Targets.Select(target => target.PluginId).ToHashSet(StringComparer.Ordinal);
+        var simulated = Shell.SimulatedWarningSources.ToHashSet(StringComparer.Ordinal);
+        _availableSources = [.. detected, .. simulated];
+        _sources = [.. (catalog.Sources ?? LegacyHardwareCatalog.Sources)
+            .Where(source => source.Value.PinProfiles is not null && (_availableSources.Contains(source.Key) || source.Key == savedSource))
+            .OrderByDescending(source => source.Value.PinProfiles?.DefaultProfile is not null)
+            .ThenBy(source => source.Value.DisplayName, StringComparer.Ordinal)];
+
+        var wasLoading = _loading;
+        _loading = true;
+        try
+        {
+            _source.ItemsSource = _sources.Select(source => source.Value.DisplayName + (detected.Contains(source.Key) ? ""
+                : simulated.Contains(source.Key) ? " (simulated)" : " (unavailable)")).ToArray();
+            var selected = Array.FindIndex(_sources, source => source.Key == preferredSource);
+            _source.SelectedIndex = selected >= 0 ? selected : Array.FindIndex(_sources, source => source.Key == savedSource);
+        }
+        finally
+        {
+            _loading = wasLoading;
+        }
+    }
+
+    private void UpdateSourceFields(DeviceWarningProfile? saved = null)
+    {
+        // Selection changes from these dependent pickers must see the same source and connector list.
+        _loading = true;
+        try
+        {
+            PopulateDevices(saved?.DeviceId);
+            PopulateConnectors(saved?.ConnectorId);
+            PopulatePowerTargets(saved?.PowerReduction);
+            if (_useDefaults.IsChecked == true)
+            {
+                SetLimits(DefaultLimits());
+            }
+        }
+        finally
+        {
+            _loading = false;
+        }
+
+        UpdateAvailability();
+    }
+
     private void ShowDraft(DeviceWarningProfile? profile)
     {
         _draft = profile;
+        var savedSource = _catalog?.Profiles.FirstOrDefault(saved => saved.Id == profile?.Id)?.PluginId;
+        PopulateSources(profile?.PluginId, savedSource);
         if (profile is not null)
         {
             _loading = true;
             try
             {
                 _enabled.IsChecked = profile.Enabled;
-                _source.SelectedIndex = Array.FindIndex(_sources, source => source.Key == profile.PluginId);
                 PopulateDevices(profile.DeviceId);
                 PopulateConnectors(profile.ConnectorId);
+                _reducePower.IsChecked = profile.PowerReduction is not null;
+                _autoRestore.IsChecked = profile.PowerReduction?.AutoRestore ?? true;
+                PopulatePowerTargets(profile.PowerReduction);
                 _useDefaults.IsChecked = profile.Limits is null;
                 SetLimits(profile.Limits ?? DefaultLimits());
                 _overridePolicy.IsChecked = profile.NotificationPolicy is not null;
@@ -408,7 +492,7 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
 
     private DeviceWarningProfile BuildProfile(DeviceWarningProfile draft, string pluginId)
     {
-        var device = _device.SelectedIndex < 0 ? null : _devices[_device.SelectedIndex].DeviceId;
+        var device = _devices.ElementAtOrDefault(_device.SelectedIndex)?.DeviceId;
         var limits = _useDefaults.IsChecked == true ? null : new ConnectorWarningLimits(ReadNumber(_overcurrent, "per-pin overcurrent"),
             Whole(_overcurrentDuration, "Overcurrent duration"), Whole(_activation, "Imbalance activation"),
             Whole(_imbalance, "Imbalance percentage"), Whole(_imbalanceDuration, "Imbalance duration"),
@@ -418,10 +502,11 @@ internal sealed class DeviceWarningProfilesView : ProfileRequestView
         {
             PluginId = pluginId,
             DeviceId = string.IsNullOrEmpty(device) ? null : device,
-            ConnectorId = _connector.SelectedIndex >= 0 ? SelectedSupport?.Connectors[_connector.SelectedIndex] : null,
+            ConnectorId = SelectedSupport?.Connectors.ElementAtOrDefault(_connector.SelectedIndex),
             Enabled = _enabled.IsChecked == true,
             Limits = limits,
             NotificationPolicy = _overridePolicy.IsChecked == true ? _policy.Build() : null,
+            PowerReduction = ReadReaction(),
             ShutdownAfterSeconds = _shutdown.IsChecked == true ? Whole(_minutes, "Minutes") * 60 + Whole(_seconds, "Seconds") : null
         };
     }

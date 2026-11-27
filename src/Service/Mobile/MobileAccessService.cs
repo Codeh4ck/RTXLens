@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using RTXLens.Core.Diagnostics;
 using RTXLens.Core.Streaming;
+using RTXLens.Contracts.Configuration;
 using RTXLens.Contracts.Mobile;
 using RTXLens.Contracts.Sensors;
 using Microsoft.AspNetCore.Connections;
@@ -30,11 +31,11 @@ internal sealed class MobileAccessService(
     private string? _error;
     private volatile bool _stateLoaded;
 
-    public void ObserveWarnings(SensorSnapshot snapshot)
+    public void ObserveWarnings(SensorSnapshot snapshot, DebugWarningHistoryFrame? debugHistory = null)
     {
         if (_stateLoaded)
         {
-            warningHistory?.Observe(snapshot, pairing.Data.Settings.WarningHistoryDays);
+            warningHistory?.Observe(snapshot, pairing.Data.Settings.WarningHistoryDays, debugHistory);
             if (snapshot.Warnings is { } warnings)
             {
                 push?.Observe(warnings);

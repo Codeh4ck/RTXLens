@@ -3,6 +3,11 @@ using RTXLens.Tests.Infrastructure;
 using RTXLens.Tests.Service;
 
 var runner = new TestRunner();
+if (args is ["--verify-warning-history"])
+{
+    await MobileAccessTests.PairedPhoneReadsPersistedWarningHistoryAsync();
+    return 0;
+}
 if (args.Contains("--verify-msi-hardware"))
 {
     await MsiHardwareVerification.RunAsync();
@@ -17,6 +22,7 @@ if (args.Contains("--verify-msi-curve-hardware"))
 
 using var profileServices = TestHardwareCatalog.Services;
 GenericNvidiaTests.Run(runner);
+runner.Run(PowerLimitReadbackTests.KeepsRestoreTargetWhenOnlyEnforcedLimitChanges);
 ConnectorProfileTests.Run(runner);
 SettingsProfileTests.Run(runner);
 await DeviceWarningProfileTests.RunAsync(runner);

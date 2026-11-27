@@ -9,6 +9,7 @@ public static class ServiceRoutes
     public const string SettingsProfiles = "settings-profiles";
     public const string WarningProfiles = "warning-profiles";
     public const string WarningShutdown = "warning-shutdown";
+    public const string WarningHistory = "warnings/history";
     public const string WarningStream = "warnings/stream";
     public const string Sensors = "sensors";
     public const string Logs = "logs";

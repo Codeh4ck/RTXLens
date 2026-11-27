@@ -71,7 +71,12 @@ public sealed class WarningEngine
             {
                 var definition = configured.GetValueOrDefault(observation.Id)?.Definition ?? _definitions[observation.TypeId];
                 var policy = configured.GetValueOrDefault(observation.Id)?.Policy ?? options.PolicyFor(observation.TypeId);
-                _entries.Add(observation.Id, new WarningEntry(observation, definition, policy, now));
+                // Keep the readings and limits from the frame that started this episode.
+                var thresholds = observations.Values.Where(item => item.PluginId == observation.PluginId
+                    && item.DeviceId == observation.DeviceId && item.ProfileId == observation.ProfileId
+                    && item.ConnectorId == observation.ConnectorId && item.Threshold is not null)
+                    .Select(item => item.Threshold! with { Detected = item.Available ? item.Active : null }).ToArray();
+                _entries.Add(observation.Id, new WarningEntry(observation, definition, policy, now, thresholds));
             }
         }
 

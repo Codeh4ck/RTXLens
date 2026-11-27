@@ -1,4 +1,8 @@
 using System.Net;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using RTXLens.Client.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Net.Sockets;
@@ -9,6 +13,7 @@ using System.Text.Json;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using RTXLens.Contracts.Configuration;
 using RTXLens.Contracts.Enums;
 using RTXLens.Contracts.Sensors;
 using RTXLens.Contracts.Warnings;
@@ -238,7 +243,7 @@ internal static class MobileAccessTests
         }
     }
 
-    private static async Task PairedPhoneReadsPersistedWarningHistoryAsync()
+    internal static async Task PairedPhoneReadsPersistedWarningHistoryAsync()
     {
         var root = Path.Combine(Path.GetTempPath(), "rtxlens-mobile-history-tests-" + Guid.NewGuid().ToString("N"));
         try
@@ -247,8 +252,17 @@ internal static class MobileAccessTests
             var now = clock.GetUtcNow();
             var reading = new SensorReading(new SensorIdentity("wireview-pro2", "test-device", SensorComponent.GpuPin, SensorMetric.Current, 2),
                 SensorUnit.Amperes, 9.2, now);
+            var gpu = new SensorReading(new("generic-nvidia", "test-gpu", SensorComponent.GpuCore, SensorMetric.Utilization),
+                SensorUnit.Percent, 75, now);
+            var pcie = new SensorReading(new("generic-nvidia", "test-gpu", SensorComponent.GpuPcie, SensorMetric.LinkGeneration),
+                SensorUnit.Count, 5, now);
+            var power = new SensorReading(new("generic-nvidia", "test-gpu", SensorComponent.GpuPowerLimits, SensorMetric.EnforcedPowerLimit),
+                SensorUnit.Watts, 600, now);
+            var staleGpu = gpu with { Identity = gpu.Identity with { DeviceId = "stale-gpu" }, Quality = ReadingQuality.Stale };
+            var otherGpu = gpu with { Identity = gpu.Identity with { PluginId = "asus-astral", DeviceId = "second-gpu" }, Value = 15 };
             var history = new MobileWarningHistory(root, NullLogger<MobileWarningHistory>.Instance);
             var ids = new List<Guid>();
+            var simulation = new DebugPowerSimulation(TestHardwareCatalog.Installed, clock);
 
             for (var i = 0; i < 26; i++)
             {
@@ -256,10 +270,37 @@ internal static class MobileAccessTests
                 ids.Add(id);
                 var start = now.AddMinutes(i - 27);
                 var warning = new WarningState("warning", "wireview-pro2", "test-device", "overcurrent", "Wire overcurrent",
-                    "Pin 2 exceeded its limit", WarningPhase.Active, id.ToString("N"), start, new WarningPolicy(), 1, start);
-                history.Observe(Frame(start, warning), 30);
-                history.Observe(Frame(start.AddSeconds(1), warning with { Phase = WarningPhase.Recovering }), 30);
-                history.Observe(Frame(start.AddSeconds(3)), 30);
+                    "Pin 2 exceeded its limit", WarningPhase.Active, id.ToString("N"), start, new WarningPolicy(), 1, start)
+                {
+                    Thresholds = [new("Pin overcurrent", SensorUnit.Amperes, 9, 9.2, true) { Pin = 2 }]
+                };
+                if (i < 24)
+                {
+                    history.Observe(Frame(start, warning), 30);
+                    history.Observe(Frame(start.AddSeconds(1), warning with { Phase = WarningPhase.Recovering }), 30);
+                    history.Observe(Frame(start.AddSeconds(3)), 30);
+                    continue;
+                }
+
+                var type = i == 24 ? "Pin overcurrent" : "Current imbalance";
+                var debug = warning with
+                {
+                    PluginId = "msi-psu", TypeId = i == 24 ? "msi-psu/monitor-overcurrent" : "msi-psu/monitor-imbalance",
+                    Title = $"MSI PSU connector 2 · {type}", ConnectorId = "2", Detail = "P1: 9 A / P2: 0.4 A",
+                    Thresholds = i == 24 ? [new(type, SensorUnit.Amperes, 8, 9, true) { Pin = 1 }]
+                        : [new("Imbalance", SensorUnit.Percent, 30, 182.98, true)]
+                };
+                var simulatedReading = new SensorReading(new SensorIdentity("msi-psu", "test-device", SensorComponent.PsuPin,
+                    SensorMetric.Current, 1, "2"), SensorUnit.Amperes, 9, start);
+                var shadow = debug with { TypeId = "debug/" + debug.TypeId, EpisodeId = Guid.NewGuid().ToString("N") };
+                var live = Frame(start, shadow) with { Sensors = [simulatedReading with { Value = 0.4 }, gpu] };
+
+                simulation.Receive(new([], []) { History = new([debug], [simulatedReading, gpu with { Value = 99 }, pcie, power]) });
+                history.Observe(live, 30, simulation.GetHistory());
+                simulation.Receive(new([], []) { History = new([debug with { Phase = WarningPhase.Recovering }], []) });
+                history.Observe(Frame(start.AddSeconds(1)), 30, simulation.GetHistory());
+                simulation.Receive(new([], []) { History = new([], []) });
+                history.Observe(Frame(start.AddSeconds(3)), 30, simulation.GetHistory());
             }
 
             var restarted = new MobileWarningHistory(root, NullLogger<MobileWarningHistory>.Instance);
@@ -274,6 +315,44 @@ internal static class MobileAccessTests
             var ct = timeout.Token;
             var retention = 30;
             var endpoints = new MobileHistoryEndpoints(restarted, safeguard, clock, () => retention);
+            var builder = WebApplication.CreateSlimBuilder();
+            builder.WebHost.ConfigureKestrel(server => server.Listen(IPAddress.Loopback, 0));
+            builder.Services.AddCors();
+            builder.Services.AddSingleton(endpoints);
+            await using var desktop = builder.Build();
+            desktop.UseCors();
+            MobileHistoryEndpoints.MapDesktop(desktop);
+            await desktop.StartAsync(ct);
+            using var http = new HttpClient { BaseAddress = new Uri(desktop.Urls.Single()) };
+            var desktopApi = new MonitoringApiClient(http);
+            var desktopHistory = await desktopApi.GetWarningHistoryAsync(ct);
+            TestAssert.Equal(ids.Count, desktopHistory.Length);
+            var saved = await desktopApi.GetWarningIncidentAsync("warning", ids[0], ct);
+            TestAssert.Equal("Cleared", saved.Status);
+            TestAssert.Equal(9.2, saved.Readings.Single().Value!.Value);
+            TestAssert.True(saved.GpuReadings.SequenceEqual(new[] { gpu, pcie, power, otherGpu }),
+                "WireView history must preserve valid GPU statistics and exclude stale GPU readings.");
+            TestAssert.Equal(9d, saved.Thresholds.Single().Limit);
+            TestAssert.Equal<int?>(2, saved.Thresholds.Single().Pin);
+            var debugRecords = desktopHistory.Where(item => item.Source == "msi-psu").ToArray();
+            TestAssert.Equal(2, debugRecords.Length);
+            foreach (var record in debugRecords)
+            {
+                var simulated = await desktopApi.GetWarningIncidentAsync("warning", record.Id, ct);
+                TestAssert.True(simulated.Title.StartsWith("Debug · MSI PSU connector 2", StringComparison.Ordinal), "Simulation is identified in history.");
+                TestAssert.Equal("Cleared", simulated.Status);
+                TestAssert.Equal<int?>(2, simulated.Connector);
+                TestAssert.Equal(9d, simulated.Readings.Single().Value!.Value);
+                TestAssert.True(simulated.GpuReadings.SequenceEqual(new[] { gpu with { Value = 99 }, pcie, power }),
+                    "Simulated MSI history must use GPU statistics from the simulated frame.");
+                TestAssert.Equal(1, simulated.Thresholds.Length);
+            }
+            TestAssert.True(desktopHistory.All(incident => incident.Thresholds.Length == 0 && incident.GpuReadings.Length == 0),
+                "History summaries omit the captured thresholds and GPU statistics.");
+            http.DefaultRequestHeaders.Add("Origin", "http://example.test");
+            using var forbidden = await http.GetAsync("warnings/history", ct);
+            TestAssert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+
             await using var listener = await MobileAccessListener.StartAsync(IPAddress.Loopback, GetUnusedPort(), cert, pairing,
                 local.SensorHub, ct, history: endpoints);
             pairing.SetListening(true);
@@ -296,15 +375,16 @@ internal static class MobileAccessTests
             TestAssert.Equal(ids[0], older.RootElement.GetProperty("items")[0].GetProperty("id").GetGuid());
 
             using var detail = JsonDocument.Parse(await remote.GetStringAsync($"/incidents/warning/{ids[^1]}", ct));
-            TestAssert.Equal("Pin 2 exceeded its limit", detail.RootElement.GetProperty("detail").GetString());
-            TestAssert.Equal(9.2, detail.RootElement.GetProperty("readings")[0].GetProperty("value").GetDouble());
+            TestAssert.Equal("P1: 9 A / P2: 0.4 A", detail.RootElement.GetProperty("detail").GetString());
+            TestAssert.Equal(9d, detail.RootElement.GetProperty("readings")[0].GetProperty("value").GetDouble());
             restarted.Observe(Frame(now.AddDays(2)), 1);
             TestAssert.False(Directory.EnumerateFiles(root, "*.json").Any(), "The retention change should remove expired incidents.");
             TestAssert.True(pairing.Revoke(credential.DeviceId), "The test phone should be revoked.");
             using var revoked = await remote.GetAsync("/session", ct);
             TestAssert.Equal(HttpStatusCode.Unauthorized, revoked.StatusCode);
 
-            SensorSnapshot Frame(DateTimeOffset time, params WarningState[] states) => new(1, 1, time, [reading], [], [])
+            SensorSnapshot Frame(DateTimeOffset time, params WarningState[] states) => new(1, 1, time,
+                [reading, gpu, pcie, power, otherGpu, staleGpu], [], [])
             {
                 Warnings = new WarningSnapshot("test", 1, true, states)
             };

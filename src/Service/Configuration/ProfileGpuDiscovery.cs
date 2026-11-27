@@ -10,6 +10,8 @@ internal sealed class ProfileGpuDiscovery(TimeProvider clock, ILogger<ProfileGpu
     private readonly Channel<bool> _requests = Channel.CreateBounded<bool>(1);
     private DeviceList? _latest;
 
+    public long DriverGeneration => reader?.DriverGeneration ?? 0;
+
     public NvidiaDevice[] GetCachedDevices()
     {
         if (reader is null)

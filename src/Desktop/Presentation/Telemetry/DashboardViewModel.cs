@@ -21,22 +21,27 @@ public sealed class DashboardViewModel : ObservableObject
     private AppPreferences _preferences = new();
 
     public ObservableCollection<Contracts.Warnings.WarningState> CurrentWarnings { get; } = [];
-    private string _warningBanner = string.Empty;
+
     public string WarningBanner
     {
-        get => _warningBanner;
-        private set { if (Set(ref _warningBanner, value))
+        get;
+        private set
+        {
+            if (Set(ref field, value))
             {
                 Raise(nameof(HasWarningBanner));
             }
         }
-    }
+    } = string.Empty;
+
     public bool HasWarningBanner => WarningBanner.Length > 0;
+    public bool HasWarningSnapshot { get; private set; }
     public string WarningSummary { get; private set; } = "Waiting for shared warning state";
     public ObservableCollection<HardwarePanelViewModel> Panels { get; } = [];
     public GpuStatusViewModel GpuStatus { get; } = new();
     public ObservableCollection<HardwarePanelViewModel> ReportingPanels { get; } = [];
     public bool HasAlternativeGpuStatus { get; private set; }
+
     public string PluginWarning
     {
         get;
@@ -48,17 +53,21 @@ public sealed class DashboardViewModel : ObservableObject
             }
         }
     } = string.Empty;
+
     public bool HasPluginWarning => !string.IsNullOrEmpty(PluginWarning);
+
     public string Connection
     {
         get;
         set => Set(ref field, value);
     } = "Connecting…";
+
     public string Summary
     {
         get;
         private set => Set(ref field, value);
     } = "Discovering plugins";
+
     public HardwarePanelViewModel? SelectedPanel
     {
         get;
@@ -69,10 +78,7 @@ public sealed class DashboardViewModel : ObservableObject
                 return;
             }
 
-            if (field is not null)
-            {
-                field.IsSelected = false;
-            }
+            field?.IsSelected = false;
 
             if (Set(ref field, value) && value is not null)
             {
@@ -106,6 +112,7 @@ public sealed class DashboardViewModel : ObservableObject
         }
 
         Summary = $"{Panels.Count} plugins installed";
+
         ConfigurePanels();
         RefreshReportingPanels();
         RefreshPsuComparisons(DateTimeOffset.UtcNow);
@@ -119,16 +126,16 @@ public sealed class DashboardViewModel : ObservableObject
         RefreshPsuComparisons(DateTimeOffset.UtcNow);
     }
 
-    public void Apply(SensorSnapshot snapshot, AppPreferences preferences, DateTimeOffset now, bool updateDetails = true,
-        string? detailPanelId = null)
+    public void Apply(SensorSnapshot snapshot, AppPreferences preferences, DateTimeOffset now, bool updateDetails = true, string? detailPanelId = null)
     {
         if (_configuration is { } configured)
         {
             var options = configured.Configuration.Plugins.GetValueOrDefault(AsusIdentity.Id)?.Options?.Deserialize(ClientJsonContext.Default.AsusOptions)
                 ?? new RTXLens.Plugins.Asus.Contracts.Configuration.AsusOptions();
-            preferences = preferences with { CoreTemperatureWarningC = options.EffectiveCoreTemperatureWarningC,
-                MemoryTemperatureWarningC = options.EffectiveMemoryTemperatureWarningC };
+
+            preferences = preferences with { CoreTemperatureWarningC = options.EffectiveCoreTemperatureWarningC, MemoryTemperatureWarningC = options.EffectiveMemoryTemperatureWarningC };
         }
+
         var states = snapshot.Warnings?.States ?? [];
         for (var index = CurrentWarnings.Count - 1; index >= states.Length; index--)
         {
@@ -146,6 +153,7 @@ public sealed class DashboardViewModel : ObservableObject
                 CurrentWarnings[index] = states[index];
             }
         }
+
         if (states.Length == 0)
         {
             WarningBanner = string.Empty;
@@ -153,30 +161,41 @@ public sealed class DashboardViewModel : ObservableObject
         else
         {
             var first = states.FirstOrDefault(s => s.Phase == Contracts.Warnings.WarningPhase.Active) ?? states[0];
+
             var phase = first.Phase switch
             {
                 Contracts.Warnings.WarningPhase.Active => "",
                 Contracts.Warnings.WarningPhase.Recovering => " · Recovering",
                 _ => " · Unable to verify"
             };
+
             var count = states.Length > 1 ? $" (+{states.Length - 1} more)" : "";
             WarningBanner = $"{first.Title} · {first.Detail}{phase}{count}";
         }
-        WarningSummary = snapshot.Warnings is null ? "Update the backend service to enable shared warning policies."
+
+        HasWarningSnapshot = snapshot.Warnings is not null;
+
+        WarningSummary = !HasWarningSnapshot
+            ? "Update the backend service to enable shared warning policies."
             : states.Length == 0 ? "No active warnings" : $"{states.Length} warning conditions - shared service state";
+
         Raise(nameof(WarningSummary));
+
         if (updateDetails && detailPanelId != MsiIdentity.Id)
         {
             GpuStatus.Apply(snapshot, _configuration, preferences, now);
         }
+
         _lastSnapshot = snapshot;
         _preferences = preferences;
+
         foreach (var panel in Panels)
         {
             panel.Apply(snapshot, preferences, now, updateDetails && (detailPanelId is null || detailPanelId == panel.Id));
         }
 
         RefreshReportingPanels();
+
         if (updateDetails && detailPanelId != MsiIdentity.Id)
         {
             RefreshPsuComparisons(now);
@@ -187,10 +206,12 @@ public sealed class DashboardViewModel : ObservableObject
     {
         GpuStatus.MarkExpired(now);
         _preferences = preferences;
+
         foreach (var panel in Panels)
         {
             panel.MarkExpired(now, preferences);
         }
+
         RefreshReportingPanels();
         RefreshPsuComparisons(now);
     }
@@ -198,6 +219,7 @@ public sealed class DashboardViewModel : ObservableObject
     public void Disconnect(AppPreferences preferences)
     {
         GpuStatus.Clear();
+
         if (CurrentWarnings.Count > 0)
         {
             WarningBanner = $"Unable to verify · {CurrentWarnings[0].Title} · Service disconnected";
@@ -210,10 +232,15 @@ public sealed class DashboardViewModel : ObservableObject
                 }
             }
         }
+
+        HasWarningSnapshot = false;
         WarningSummary = "Service unavailable - warning recovery cannot be evaluated.";
+
         Raise(nameof(WarningSummary));
+
         _lastSnapshot = null;
         _preferences = preferences;
+
         foreach (var panel in Panels)
         {
             panel.MarkDisconnected(preferences);
@@ -227,10 +254,12 @@ public sealed class DashboardViewModel : ObservableObject
     {
         var source = Panels.FirstOrDefault(panel => panel.IsMsi);
         var staleAfterMs = _configuration?.Configuration.Plugins.GetValueOrDefault(MsiIdentity.Id)?.StaleAfterMs ?? 5000;
+
         var readings = source is { Enabled: true, IsReporting: true, State: "Ready" } && _lastSnapshot is { } snapshot
             ? snapshot.Sensors.Where(reading => reading is { Identity: { PluginId: MsiIdentity.Id, Component: SensorComponent.PsuPin, Metric: SensorMetric.Current }, Unit: SensorUnit.Amperes, Quality: ReadingQuality.Valid, Value: { } value and >= 0 }
                                                 && double.IsFinite(value) && now - reading.ObservedAt <= TimeSpan.FromMilliseconds(staleAfterMs)).ToArray()
             : [];
+
         if (readings.Select(reading => reading.Identity.DeviceId).Distinct().Skip(1).Any())
         {
             readings = [];
@@ -246,6 +275,7 @@ public sealed class DashboardViewModel : ObservableObject
     {
         var available = Panels.Where(panel => panel is { Enabled: true, IsReporting: true }).ToArray();
         HasAlternativeGpuStatus = available.Any(panel => panel.IsWireView || panel.IsAsus);
+
         var reporting = available.Where(panel => !panel.IsNvidia || _preferences.ShowSeparateGpuStatusTab || !HasAlternativeGpuStatus)
             .OrderBy(panel => panel.Id switch
             {
@@ -256,6 +286,7 @@ public sealed class DashboardViewModel : ObservableObject
                 _ => 4
             })
             .ThenBy(panel => panel.Id, StringComparer.Ordinal).ToArray();
+
         if (SelectedPanel is not null && !reporting.Contains(SelectedPanel))
         {
             SelectedPanel = null;
@@ -278,6 +309,7 @@ public sealed class DashboardViewModel : ObservableObject
                 ReportingPanels.Move(currentIndex, index);
             }
         }
+
         Summary = $"{Panels.Count} plugins installed · {available.Length} reporting";
         PluginWarning = string.Join(Environment.NewLine, Panels.Where(panel => panel.Enabled && panel.State != "Disabled" && !panel.IsReporting)
             .Select(panel => $"{panel.Name}: {panel.State} · {panel.Message}"));
@@ -299,6 +331,7 @@ public sealed class DashboardViewModel : ObservableObject
 
             var options = panel.IsAsus && settings.Options is { } json ? json.Deserialize(ClientJsonContext.Default.AsusOptions) : null;
             panel.Enabled = settings.Enabled;
+
             panel.Configure(settings.StaleAfterMs, panel.IsAsus ? options?.WireOvercurrentAmperageThreshold ?? 9.2 : null);
         }
     }

@@ -5,6 +5,8 @@ using RTXLens.Contracts.Configuration;
 using RTXLens.Core.Diagnostics;
 using RTXLens.Service.Configuration;
 
+using RTXLens.Warnings;
+
 namespace RTXLens.Service.Services;
 
 internal enum ShutdownOutcome { Accepted, Rejected, Unconfirmed, RetryableFailure }

@@ -10,6 +10,9 @@ public sealed class NvidiaTelemetryReader(INvidiaHardwareSource source, TimeProv
     private NvidiaDevice[] _devices = [];
     private DateTimeOffset _discoveredAt = DateTimeOffset.MinValue;
     private bool _disposed;
+    private long _driverGeneration;
+
+    public long DriverGeneration => Interlocked.Read(ref _driverGeneration);
     private NvidiaSample? _latestGpu;
     private TimeSpan _gpuFreshness;
     private SensorReading[] _lastGpuReadings = [];
@@ -92,6 +95,7 @@ public sealed class NvidiaTelemetryReader(INvidiaHardwareSource source, TimeProv
 
                 var sample = new NvidiaSample(device, clock.GetUtcNow(), sensors);
                 NvidiaSensor[] clocks;
+
                 using (timings?.Measure("internal clocks"))
                 {
                     clocks = source.ReadDomainClocks(device);
@@ -124,6 +128,7 @@ public sealed class NvidiaTelemetryReader(INvidiaHardwareSource source, TimeProv
                         status = [.. status, .. _lastGpuReadings.Where(reading => !current.Contains(reading.Identity))
                             .Select(reading => reading with { Quality = Contracts.Enums.ReadingQuality.Unavailable, Value = null })];
                     }
+
                     _lastGpuReadings = status;
                 }
                 else
@@ -210,6 +215,7 @@ public sealed class NvidiaTelemetryReader(INvidiaHardwareSource source, TimeProv
 
     private void InvalidateSession(string? deviceId)
     {
+        Interlocked.Increment(ref _driverGeneration);
         _latestGpu = null;
         _lastGpuReadings = [];
         _devices = [];

@@ -1,4 +1,5 @@
 using RTXLens.Contracts.Discovery;
+using RTXLens.Contracts.Warnings;
 using RTXLens.Core.Plugins;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
@@ -32,7 +33,7 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
 
     public void Observe(SensorSnapshot snapshot) => _telemetry.Observe(snapshot);
 
-    internal MobileIncident? ReadMobileIncident(Guid id)
+    internal WarningIncident? ReadMobileIncident(Guid id)
     {
         if (!OperatingSystem.IsWindows() || Notices?.Any(notice => notice.Id == id) != true)
         {
@@ -57,9 +58,9 @@ internal sealed class SafeguardJournalService(TimeProvider clock, ILogger<Safegu
             var delivery = storage.Read<SafeguardDelivery>(SafeguardArea.Delivery, id);
             var status = SafeguardStorage.DisplayStatus(execution, now);
 
-            return new MobileIncident(id, "safeguard", execution.Name, "Safeguard+", execution.StartedAt, execution.FinishedAt, status)
+            return new WarningIncident(id, "safeguard", execution.Name, "Safeguard+", execution.StartedAt, execution.FinishedAt, status)
             {
-                Connector = execution.Connector, DelayMs = execution.DelayMs, Steps = execution.Steps ?? [], DeliveryStatus = delivery?.Status,
+                Connector = execution.Connector, DelayMs = execution.DelayMs, Steps = execution.Steps?.Select(s => new IncidentStep(s.Timestamp, s.Name, s.Result, s.ExitCode)).ToArray() ?? [], DeliveryStatus = delivery?.Status,
                 CapturedAt = telemetry?.CapturedAt, Readings = telemetry?.Readings ?? []
             };
         }

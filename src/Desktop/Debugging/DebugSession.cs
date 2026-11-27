@@ -40,11 +40,33 @@ public sealed class DebugSession : ObservableObject
     private WidgetConfiguration? _widgetOverride;
     private RTXLens.Contracts.Warnings.WarningOptions? _warningOverride;
     private WarningEngine _warningEngine = new(DebugWarningCatalog.Registry);
+    private DebugProfileWarnings _profileWarnings;
 
     public event Action<bool>? Changed;
 
+    public string? SavedWarningProfilesStatus { get; private set => Set(ref field, value); }
+
+    public void ReportWarningProfilesStatus(string status) => SavedWarningProfilesStatus = status;
+
+    public void SetWarningProfiles(DeviceWarningProfileCatalog? catalog, string? status)
+    {
+        _profileWarnings.Catalog = catalog;
+        SavedWarningProfilesStatus = status;
+
+        if (Enabled)
+        {
+            Changed?.Invoke(false);
+        }
+    }
+
     public string LastNotification { get; private set => Set(ref field, value); } = "No debug notifications yet.";
-    public DebugPluginViewModel[] Plugins { get; } = [new(WireViewIdentity.Id, "WireView Pro II"), new(AsusIdentity.Id, "ROG Astral"), new(MsiIdentity.Id, "MSI PSU"), new(NvidiaIdentity.Id, "GenericNvidia")];
+
+    public DebugPluginViewModel[] Plugins { get; } =
+    [
+        new(WireViewIdentity.Id, "WireView Pro II"),
+        new(AsusIdentity.Id, "ROG Astral"), new(MsiIdentity.Id, "MSI PSU"),
+        new(NvidiaIdentity.Id, "GenericNvidia")
+    ];
 
     public void ReportNotification(string title, string message) => LastNotification = "DEBUG · " + title + " · " + message;
 
@@ -64,6 +86,8 @@ public sealed class DebugSession : ObservableObject
             _asus.Reset();
 
             _warningEngine = new WarningEngine(DebugWarningCatalog.Registry);
+            _profileWarnings = new DebugProfileWarnings(Plugins);
+            SavedWarningProfilesStatus = null;
             _revision++;
 
             Changed?.Invoke(true);
@@ -72,6 +96,7 @@ public sealed class DebugSession : ObservableObject
 
     public DebugSession()
     {
+        _profileWarnings = new DebugProfileWarnings(Plugins);
         foreach (var plugin in Plugins)
         {
             plugin.Edited += structural => Edited(structural, plugin.Id);
@@ -396,7 +421,7 @@ public sealed class DebugSession : ObservableObject
         var snapshot = new SensorSnapshot(1, ++_sequence, now, [.. readings], [.. health], selections, _revision) { Alerts = [.. alerts] };
 
         snapshot = _connectorProfiles.Resolve(snapshot, configuration.Configuration);
-        snapshot = snapshot with { Warnings = _warningEngine.Evaluate(snapshot, configuration.Configuration, now) };
+        snapshot = _profileWarnings.Apply(snapshot, configuration.Configuration, _warningEngine);
 
         foreach (var plugin in Plugins)
         {
@@ -405,7 +430,7 @@ public sealed class DebugSession : ObservableObject
                 var live = _liveSnapshot?.Sensors.FirstOrDefault(reading => reading.Identity.PluginId == plugin.Id && metric.Definition.Matches(reading.Identity));
                 metric.UpdateLive(live is { Quality: ReadingQuality.Valid } ? live.Value : null);
 
-                var effective = readings.FirstOrDefault(reading => reading.Identity.PluginId == plugin.Id && metric.Definition.Matches(reading.Identity));
+                var effective = snapshot.Sensors.FirstOrDefault(reading => reading.Identity.PluginId == plugin.Id && metric.Definition.Matches(reading.Identity));
                 metric.UpdateEffective(effective?.Value, effective?.Quality.ToString() ?? DebugMetricViewModel.NotReported);
             }
         }

@@ -101,7 +101,7 @@ public sealed class AppSettingsViewModel(AppPreferences preferences) : Observabl
         }
     }
 
-    private static readonly string[] StartupTabs = ["", WireViewIdentity.Id, AsusIdentity.Id, NvidiaIdentity.Id, MsiIdentity.Id, "performance", "event-log"];
+    private static readonly string[] StartupTabs = ["", WireViewIdentity.Id, AsusIdentity.Id, NvidiaIdentity.Id, MsiIdentity.Id, "warnings", "performance", "event-log"];
 
     public int StartupTabIndex
     {

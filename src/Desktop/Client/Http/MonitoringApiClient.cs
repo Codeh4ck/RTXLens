@@ -42,6 +42,12 @@ public sealed class MonitoringApiClient(HttpClient http) : IMonitoringApi
             && Contracts.Updates.SemanticVersion.TryParse(value.Version, out _) ? value : null;
     }
 
+    public Task<RTXLens.Contracts.Warnings.WarningIncident[]> GetWarningHistoryAsync(CancellationToken token) =>
+        GetAsync(ServiceRoutes.WarningHistory, ClientJsonContext.Default.WarningIncidentArray, token);
+
+    public Task<RTXLens.Contracts.Warnings.WarningIncident> GetWarningIncidentAsync(string kind, Guid id, CancellationToken token) =>
+        GetAsync($"{ServiceRoutes.WarningHistory}/{Uri.EscapeDataString(kind)}/{id:D}", ClientJsonContext.Default.WarningIncident, token);
+
     public Task<HealthResponse> GetHealthAsync(CancellationToken token) => GetAsync(ServiceRoutes.Health, ClientJsonContext.Default.HealthResponse, token);
     public Task<PluginCatalog> GetPluginsAsync(CancellationToken token) => GetAsync(ServiceRoutes.Plugins, ClientJsonContext.Default.PluginCatalog, token);
     public Task<SettingsProfileCatalog> GetSettingsProfilesAsync(CancellationToken token) =>
@@ -75,6 +81,22 @@ public sealed class MonitoringApiClient(HttpClient http) : IMonitoringApi
 
     public Task<DeviceWarningProfileCatalog> GetDeviceWarningProfilesAsync(CancellationToken token) =>
         GetAsync(ServiceRoutes.WarningProfiles, ClientJsonContext.Default.DeviceWarningProfileCatalog, token);
+
+    public async Task PublishDebugPowerFrameAsync(DebugPowerFrame frame, CancellationToken token)
+    {
+        using var response = await http.PostAsJsonAsync($"{ServiceRoutes.WarningProfiles}/debug-power", frame,
+            ClientJsonContext.Default.DebugPowerFrame, token);
+        await EnsureSuccessAsync(response, token);
+    }
+
+    public Task RestoreGpuPowerAsync(string gpuId, CancellationToken token) =>
+        PostPowerActionAsync($"{ServiceRoutes.WarningProfiles}/restore-power?gpuId={Uri.EscapeDataString(gpuId)}", token);
+
+    private async Task PostPowerActionAsync(string path, CancellationToken token)
+    {
+        using var response = await http.PostAsync(path, null, token);
+        await EnsureSuccessAsync(response, token);
+    }
 
     public async Task SaveDeviceWarningProfileAsync(DeviceWarningProfile profile, CancellationToken token)
     {

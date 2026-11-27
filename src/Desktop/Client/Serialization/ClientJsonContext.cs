@@ -19,6 +19,7 @@ namespace RTXLens.Client.Serialization;
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     PropertyNameCaseInsensitive = true, UseStringEnumConverter = true, WriteIndented = true)]
 [JsonSerializable(typeof(SensorSnapshot))]
+[JsonSerializable(typeof(RTXLens.Contracts.Warnings.WarningIncident[]))]
 [JsonSerializable(typeof(ServiceLogPage))]
 [JsonSerializable(typeof(HealthResponse))]
 [JsonSerializable(typeof(RTXLens.Contracts.Updates.ServiceVersionResponse))]
@@ -41,6 +42,7 @@ namespace RTXLens.Client.Serialization;
 [JsonSerializable(typeof(SettingsProfileCatalog))]
 [JsonSerializable(typeof(SettingsProfileRequest))]
 [JsonSerializable(typeof(SettingsProfile))]
+[JsonSerializable(typeof(DebugPowerFrame))]
 [JsonSerializable(typeof(DeviceWarningProfile))]
 [JsonSerializable(typeof(DeviceWarningProfileCatalog))]
 [JsonSerializable(typeof(WarningShutdownReason))]

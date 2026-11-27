@@ -1,16 +1,52 @@
 <Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        x:Class="RTXLens.WarningUI.WarningPopup" Title="RTX Lens warning" Width="390" SizeToContent="Height"
+        xmlns:ui="using:RTXLens.WarningUI" x:Class="RTXLens.WarningUI.WarningPopup"
+        Title="RTX Lens warning" Width="410" SizeToContent="Height"
         WindowDecorations="None" CanResize="False" ShowActivated="False" ShowInTaskbar="False" Topmost="True"
         Background="{DynamicResource PanelBrush}">
-    <Border Padding="16,12" BorderThickness="3,1,1,1" BorderBrush="{DynamicResource WarningBrush}">
-        <StackPanel Spacing="6">
-            <TextBlock Text="RTX Lens" FontWeight="SemiBold" Foreground="{DynamicResource WarningBrush}"/>
-            <TextBlock Name="Heading" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}"/>
-            <TextBlock Name="Details" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}"/>
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,5,0,0">
+    <Border Padding="14,12" BorderThickness="3,1,1,1" BorderBrush="{DynamicResource WarningBrush}">
+        <Grid RowDefinitions="Auto,*,Auto" RowSpacing="10">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="RTX Lens" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}"/>
+                <TextBlock Grid.Column="1" Name="CountLabel" Foreground="{DynamicResource WarningBrush}" FontWeight="SemiBold"/>
+            </Grid>
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl Name="Cards">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="ui:PopupWarning">
+                            <Border Background="{DynamicResource InsetBrush}" CornerRadius="5" Padding="12,9" Margin="0,0,0,4">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="{Binding Source}" IsVisible="{Binding Source, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource PrimaryBrush}" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap"/>
+                                    <ItemsControl ItemsSource="{Binding Readings}" IsVisible="{Binding HasReadings}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="ui:PopupReading">
+                                                <Border Background="{DynamicResource WarningSurfaceBrush}" CornerRadius="4"
+                                                        Padding="8,4" Margin="0,2,6,2">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <TextBlock Text="{Binding Label}" Foreground="{DynamicResource TextBrush}"/>
+                                                        <TextBlock Text="{Binding Value}" FontWeight="Bold" Foreground="{DynamicResource WarningBrush}"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <TextBlock Text="{Binding Detail}" IsVisible="{Binding Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}"/>
+                                    <TextBlock Text="{Binding Context}" IsVisible="{Binding Context, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" TextWrapping="Wrap" Foreground="{DynamicResource MutedTextBrush}"/>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
                 <Button Name="ViewWarnings" Content="View warnings"/>
                 <Button Name="Dismiss" Content="Dismiss"/>
             </StackPanel>
-        </StackPanel>
+        </Grid>
     </Border>
 </Window>

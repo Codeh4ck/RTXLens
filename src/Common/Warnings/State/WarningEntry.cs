@@ -2,7 +2,7 @@ using RTXLens.Contracts.Warnings;
 
 namespace RTXLens.Warnings.State;
 
-internal sealed class WarningEntry(WarningObservation observation, WarningDefinition definition, WarningPolicy policy, DateTimeOffset now)
+internal sealed class WarningEntry(WarningObservation observation, WarningDefinition definition, WarningPolicy policy, DateTimeOffset now, WarningThreshold[] thresholds)
 {
     public WarningObservation Observation { get; set; } = observation;
     public bool NotificationsEnabled { get; set; } = true;
@@ -15,5 +15,8 @@ internal sealed class WarningEntry(WarningObservation observation, WarningDefini
     public long NotificationSequence { get; set; }
 
     public WarningState Snapshot() => new(Observation.Id, Observation.PluginId, Observation.DeviceId, Observation.TypeId,
-        definition.Title, Observation.Detail, Phase, EpisodeId, StartedAt, Policy, NotificationSequence, LastNotificationAt) { Icon = definition.Icon, ProfileId = Observation.ProfileId };
+        definition.Title, Observation.Detail, Phase, EpisodeId, StartedAt, Policy, NotificationSequence, LastNotificationAt)
+    {
+        Icon = definition.Icon, ProfileId = Observation.ProfileId, ConnectorId = Observation.ConnectorId, Thresholds = thresholds
+    };
 }

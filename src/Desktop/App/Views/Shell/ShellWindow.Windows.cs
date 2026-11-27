@@ -78,10 +78,26 @@ internal sealed partial class ShellWindow
     }
 
     private WarningPopup? _localPopup;
+    private WarningPopup? _safeguardPopup;
+    private readonly HashSet<string> _localEpisodes = [];
     private bool _simulationSoundLooping;
 
     private void OnLocalWarningStateChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
     {
+        if (_localPopup is { } popup && args.PropertyName == nameof(_model.Dashboard.WarningSummary))
+        {
+            var rows = _model.Dashboard.CurrentWarnings.Where(s => _localEpisodes.Contains(s.EpisodeId)).ToArray();
+            _localEpisodes.IntersectWith(rows.Select(s => s.EpisodeId));
+            if (rows.Length == 0 || !_model.IsSimulation || !_model.Preferences.WarningNotifications)
+            {
+                popup.Close();
+            }
+            else
+            {
+                popup.Update(rows, simulation: true);
+            }
+        }
+
         if (_simulationSoundLooping && args.PropertyName == nameof(_model.Dashboard.WarningSummary) &&
             (!_model.IsSimulation || !_model.Preferences.PlayWarningSound || !_model.Preferences.LoopWarningSound ||
              _model.Configuration.CurrentConfiguration?.Warnings.NotificationsEnabled != true || _model.Dashboard.CurrentWarnings.All(s => s.Phase != WarningPhase.Active)))
@@ -117,27 +133,44 @@ internal sealed partial class ShellWindow
             return;
         }
 
-        if (_localPopup is null)
+        if (notification.Key == "safeguard")
         {
-            _localPopup = new WarningPopup(() =>
+            if (_safeguardPopup is null)
             {
-                RestoreWindow();
-
-                if (OperatingSystem.IsWindows() && _localPopup?.Tag is "safeguard")
+                _safeguardPopup = new WarningPopup(() =>
                 {
-                    _model.OpenSafeguardHistory(this);
-                }
-                else
-                {
-                    ShowCurrentWarnings();
-                }
-            });
+                    RestoreWindow();
+                    if (OperatingSystem.IsWindows())
+                    {
+                        _model.OpenSafeguardHistory(this);
+                    }
+                });
+                _safeguardPopup.Closed += (_, _) => _safeguardPopup = null;
+            }
+            _safeguardPopup.Update(notification.Title, notification.Message, "MSI PSU");
+            if (!_safeguardPopup.IsVisible)
+            {
+                _safeguardPopup.Show();
+            }
 
-            _localPopup.Closed += (_, _) => { _localPopup = null; StopLocalWarningSound(); };
+            return;
         }
 
-        _localPopup.Tag = notification.Key;
-        _localPopup.Update(notification.Title, notification.Message);
+        if (_localPopup is null)
+        {
+            _localPopup = new WarningPopup(() => { RestoreWindow(); ShowCurrentWarnings(); });
+            _localPopup.Closed += (_, _) =>
+            {
+                _localPopup = null;
+                _localEpisodes.Clear();
+                StopLocalWarningSound();
+            };
+        }
+
+        _localEpisodes.UnionWith(notification.Episodes.Select(s => s.EpisodeId));
+        var rows = _model.Dashboard.CurrentWarnings.Where(s => _localEpisodes.Contains(s.EpisodeId))
+            .Concat(notification.Episodes).DistinctBy(s => s.EpisodeId).ToArray();
+        _localPopup.Update(rows, simulation: true);
 
         if (!_localPopup.IsVisible)
         {

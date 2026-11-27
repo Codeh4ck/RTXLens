@@ -28,7 +28,7 @@ public sealed class WarningTransitionTracker
             message += $"{Environment.NewLine}+{due.Length - 3} more warnings";
         }
 
-        return [new WarningNotification(feed!.InstanceId + "/" + feed.Sequence, title, message)];
+        return [new WarningNotification(feed!.InstanceId + "/" + feed.Sequence, title, message) { Episodes = due }];
     }
 
     public WarningState[] TakeDue(WarningSnapshot? feed, bool enabled)

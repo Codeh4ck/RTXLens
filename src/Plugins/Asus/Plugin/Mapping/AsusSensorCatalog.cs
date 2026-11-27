@@ -19,6 +19,8 @@ public static class AsusSensorCatalog
             new("GPU Memory", SensorType.Clock, "GPU Memory Clock", SensorComponent.GpuMemory, SensorMetric.Clock),
             new("GPU Fan 1", SensorType.Fan, "Fan 1 Speed", SensorComponent.GpuFan, SensorMetric.FanSpeed, 1),
             new("GPU Fan 2", SensorType.Fan, "Fan 2 Speed", SensorComponent.GpuFan, SensorMetric.FanSpeed, 2),
+            new("GPU Fan 1", SensorType.Control, "Fan 1 Duty", SensorComponent.GpuFan, SensorMetric.FanDuty, 1),
+            new("GPU Fan 2", SensorType.Control, "Fan 2 Duty", SensorComponent.GpuFan, SensorMetric.FanDuty, 2),
             new("GPU Core", SensorType.Load, "GPU Usage", SensorComponent.GpuCore, SensorMetric.Utilization),
             new("GPU Memory Junction", SensorType.Temperature, "VRAM Temp", SensorComponent.GpuMemory, SensorMetric.Temperature),
             new("GPU Memory Total", SensorType.SmallData, "VRAM Total", SensorComponent.GpuMemory, SensorMetric.MemoryTotal),

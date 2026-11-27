@@ -48,6 +48,9 @@ public static class MonitoringServices
         services.AddSingleton<DeviceWarningProfileStore>();
         services.AddSingleton<IWarningShutdown, WindowsWarningShutdown>();
         services.AddSingleton<WarningShutdownCoordinator>();
+        services.AddSingleton<DebugPowerSimulation>();
+        services.AddSingleton<WarningPowerService>();
+        services.AddHostedService(provider => provider.GetRequiredService<WarningPowerService>());
         services.AddSingleton<SafeguardJournalService>();
 
         if (!debugInstance)

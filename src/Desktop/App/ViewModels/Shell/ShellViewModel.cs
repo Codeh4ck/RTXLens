@@ -38,6 +38,32 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
     private bool _started;
     private bool _disposed;
 
+    internal MonitoringApiClient HistoryApi => _liveApi;
+    internal MonitoringApiClient WarningProfileApi => _liveApi;
+
+    internal async Task<DeviceWarningProfileCatalog> LoadWarningProfilesAsync(IMonitoringApi api)
+    {
+#if TELEMETRY_DEBUG
+        var simulationApi = _simulationApi;
+        var request = ++_warningProfileRequest;
+#endif
+
+        var catalog = await api.GetDeviceWarningProfilesAsync(StopToken);
+        if (catalog.Profiles is null || catalog.Targets is null || catalog.Defaults is null || catalog.AstralDefaults is null)
+        {
+            throw new InvalidDataException("The monitoring service returned an incomplete warning profile catalog.");
+        }
+
+#if TELEMETRY_DEBUG
+        if (simulationApi is not null && ReferenceEquals(simulationApi, _simulationApi) && ReferenceEquals(api, _liveApi) && request == _warningProfileRequest && !StopToken.IsCancellationRequested)
+        {
+            var count = catalog.Profiles.Count(profile => profile.Enabled);
+            Simulation.SetWarningProfiles(catalog, count == 1 ? "1 enabled saved warning profile loaded." : $"{count} enabled saved warning profiles loaded.");
+        }
+#endif
+
+        return catalog;
+    }
     public ServiceLogClient Logs { get; private set; } = null!;
     public AppearanceViewModel Appearance { get; }
     public CancellationToken StopToken => _stop.Token;
@@ -65,7 +91,7 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
             OperationStatus = error;
         }
 
-        _configuration = new ConfigurationEditorViewModel(() => _liveApi);
+        Configuration = new ConfigurationEditorViewModel(() => _liveApi);
 
         InitializeSettings();
         Connect(Preferences.ServiceAddress);
@@ -132,6 +158,7 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
             Post(session, () =>
             {
                 _liveCatalog = catalog;
+
 #if TELEMETRY_DEBUG
                 _simulation?.ReceiveCatalog(catalog);
 #endif
@@ -150,6 +177,7 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
             Post(session, () =>
             {
                 _liveConfiguration = configuration;
+
 #if TELEMETRY_DEBUG
                 _simulation?.ReceiveConfiguration(configuration);
 #endif
@@ -196,13 +224,12 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     public DashboardViewModel Dashboard { get; } = new();
     public PerformanceRecorder Recorder { get; } = new();
-    private readonly ConfigurationEditorViewModel _configuration;
 
     public ConfigurationEditorViewModel Configuration =>
 #if TELEMETRY_DEBUG
         _simulationConfiguration ??
 #endif
-        _configuration;
+        field;
     public IMonitoringApi Api =>
 #if TELEMETRY_DEBUG
         (IMonitoringApi?)Volatile.Read(ref _simulationApi) ??
@@ -210,6 +237,22 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
         _liveApi;
 
     public bool IsSimulation => !ReferenceEquals(Api, _liveApi);
+
+    internal IEnumerable<string> SimulatedWarningSources
+    {
+        get
+        {
+
+#if TELEMETRY_DEBUG
+            if (IsSimulation)
+            {
+                return Simulation.Plugins.Where(plugin => plugin is
+                    { IsSimulated: true, Installed: true, Enabled: true, State: Contracts.Enums.PluginState.Ready }).Select(plugin => plugin.Id);
+            }
+#endif
+            return [];
+        }
+    }
 
     public bool CanOpenWireViewSettings =>
 #if TELEMETRY_DEBUG
@@ -222,6 +265,7 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(Api));
         OnPropertyChanged(nameof(IsSimulation));
+        OnPropertyChanged(nameof(SimulatedWarningSources));
         OnPropertyChanged(nameof(CanOpenWireViewSettings));
     }
 
@@ -439,7 +483,7 @@ internal sealed partial class ShellViewModel : ObservableObject, IDisposable
 #endif
         _stop.Cancel();
         StopConnection();
-        
+
         _updateTimer.Stop();
 
         Updates.Cancel();

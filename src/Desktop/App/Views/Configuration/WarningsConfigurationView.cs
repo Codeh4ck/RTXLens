@@ -7,7 +7,6 @@ using Avalonia.Controls.Templates;
 using Avalonia.Layout;
 using Avalonia.Styling;
 using RTXLens.App.ViewModels.Shell;
-using RTXLens.Contracts.Warnings;
 using RTXLens.Presentation.Configuration;
 using static RTXLens.App.Views.Configuration.ConfigurationPage;
 using static RTXLens.App.Views.Shell.DesktopControls;
@@ -16,7 +15,7 @@ namespace RTXLens.App.Views.Configuration;
 
 internal sealed class WarningsConfigurationView : UserControl
 {
-    public WarningsConfigurationView(ShellViewModel shell, bool currentWarnings = false)
+    public WarningsConfigurationView(ShellViewModel shell)
     {
         var sections = new TabControl
         {
@@ -41,11 +40,10 @@ internal sealed class WarningsConfigurationView : UserControl
             WarningTab("Device warning profiles", () => new DeviceWarningProfilesView(shell)),
             WarningTab("GPU temperatures", () => CreateTemperatureWarnings(shell.Configuration)),
             WarningTab("Notifications", () => Stack(CreateNotifications(shell.Configuration), LocalWarningSettings.Create(shell))),
-            WarningTab("Per-warning overrides", () => CreateOverrides(shell.Configuration)),
-            WarningTab("Current warnings", () => CreateCurrentWarnings(shell))
+            WarningTab("Per-warning overrides", () => CreateOverrides(shell.Configuration))
         };
 
-        sections.SelectedIndex = currentWarnings ? sections.ItemCount - 1 : 0;
+        sections.SelectedIndex = 0;
         Content = sections;
     }
 
@@ -154,33 +152,6 @@ internal sealed class WarningsConfigurationView : UserControl
         BindTo(overrideBody, IsEnabledProperty, editor, nameof(editor.CanEdit));
 
         return Section("Per-warning overrides", overrideBody);
-    }
-
-    private static Control CreateCurrentWarnings(ShellViewModel shell)
-    {
-        var summary = Alert();
-        var dashboard = shell.Dashboard;
-
-        Watch(summary, dashboard, () =>
-        {
-            var message = dashboard.WarningSummary;
-            SetAlert(summary, message, message.StartsWith("Service unavailable", StringComparison.Ordinal) ? "warning" : "info");
-        }, nameof(dashboard.WarningSummary));
-
-        var current = new ItemsControl
-        {
-            ItemsSource = shell.Dashboard.CurrentWarnings,
-            ItemsPanel = new FuncTemplate<Panel?>(() => new StackPanel { Spacing = 6 }),
-            ItemTemplate = new FuncDataTemplate<WarningState>((warning, _) => warning is null ? null : new Border
-            {
-                Classes = { "panel-frame" },
-                Padding = new Thickness(12),
-                Child = Stack(Setting(warning.Title, Message(warning.Phase.ToString(), badge: true)), Caption(warning.Detail))
-            })
-        };
-
-        return Section("Current warnings", Stack(summary, current,
-            Alert("Recovering pauses reminders until the clear duration is confirmed. Unavailable readings cannot establish recovery.")));
     }
 
     private static Control Temperature(string label, GenericNvidiaSettingsEditorViewModel model, string enable, string threshold)

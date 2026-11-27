@@ -23,7 +23,7 @@ namespace RTXLens.UI.Tests.Controls;
 
 internal static class AvaloniaControlsTests
 {
-    public static int Run(string? screenshotDirectory)
+    public static int Run(string? screenshotDirectory, bool warningsOnly = false)
     {
         AppBuilder.Configure<RTXLens.App.App>()
             .UseSkia()
@@ -31,6 +31,11 @@ internal static class AvaloniaControlsTests
             .SetupWithoutStarting();
 
         var runner = new TestRunner();
+        runner.Run(() => AvaloniaDashboardTests.OpensWarningHistory(screenshotDirectory));
+#if TELEMETRY_DEBUG
+        runner.Run(AvaloniaDashboardTests.SimulationUsesSavedMsiConnectorProfile);
+#endif
+        if (warningsOnly) { runner.PrintSummary(); return runner.FailedCount == 0 ? 0 : 1; }
         runner.Run(() => RunPreviewChecks(screenshotDirectory));
         runner.Run(SavedAppearanceRoundTrips);
         runner.Run(() => DiagnosticPickersFollowPalette(screenshotDirectory));

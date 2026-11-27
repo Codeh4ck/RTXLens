@@ -26,6 +26,8 @@ public sealed class GpuStatusViewModel : ObservableObject
     public string PowerText { get; private set => Set(ref field, value); } = "Unavailable";
     public string CurrentText { get; private set => Set(ref field, value); } = "Unavailable";
     public string VoltageText { get; private set => Set(ref field, value); } = "Unavailable";
+    public string BoardPowerText { get; private set; } = "Unavailable";
+    public string VramFreeText { get; private set; } = "Unavailable";
     public string DeviceText { get; private set => Set(ref field, value); } = "Selected GeForce RTX GPU";
     public string State { get; private set => Set(ref field, value); } = "Waiting for telemetry";
 
@@ -103,10 +105,6 @@ public sealed class GpuStatusViewModel : ObservableObject
         DeviceText = health.Message ?? devices[0];
 
         _lastObservedAt = readings.Where(Valid).Max(reading => reading.ObservedAt);
-        GpuUsageText = Format(Value(SensorComponent.GpuCore, SensorMetric.Utilization), "%", 0);
-        CoreVoltageText = Format(Value(SensorComponent.GpuCore, SensorMetric.Voltage) * 1000, "mV", 1);
-
-        Diagnostics.Apply(Value);
 
         var electrical = options.ElectricalSource switch
         {
@@ -122,62 +120,14 @@ public sealed class GpuStatusViewModel : ObservableObject
         PowerText = Format(Input(SensorMetric.Power), "W", 1);
         CurrentText = Format(Input(SensorMetric.Current), "A", 2);
         VoltageText = Format(Input(SensorMetric.Voltage), "V", 2);
-        CoreClock.Value = Format(Value(SensorComponent.GpuCore, SensorMetric.Clock), "MHz", 0);
-        MemoryClock.Value = Format(Value(SensorComponent.GpuMemory, SensorMetric.Clock), "MHz", 0);
-        HasCrossbarClock = ApplyDomainClock(SensorComponent.GpuCrossbar, CrossbarClock);
-        HasSystemClock = ApplyDomainClock(SensorComponent.GpuSystem, SystemClock);
 
-        var used = Value(SensorComponent.GpuMemory, SensorMetric.MemoryUsed);
-        var total = Value(SensorComponent.GpuMemory, SensorMetric.MemoryTotal);
-        var reportedVramPercent = Value(SensorComponent.GpuMemory, SensorMetric.Utilization);
-        var vramPercent = reportedVramPercent ?? (total is > 0 ? used / total * 100 : null);
-
-        if (used is { } usedMb && total is > 0 and var totalMb)
-        {
-            HasVramUsage = vramPercent is { } percent && double.IsFinite(percent);
-            VramUsagePercent = vramPercent is { } value && HasVramUsage ? Math.Clamp(value, 0, 100) : 0;
-            VramUsage.Value = $"{Format(usedMb / 1024, "GB", 2)} / {Format(totalMb / 1024, "GB", 2)} ({Format(vramPercent, "%", 0)})";
-        }
-        else
-        {
-            HasVramUsage = false;
-            VramUsagePercent = 0;
-            VramUsage.Value = "Unavailable";
-        }
-
-        var chips = readings.Where(reading => reading.Identity is
-                { Component: SensorComponent.GpuMemoryChip, Metric: SensorMetric.Temperature, Channel: > 0 } && Valid(reading))
-            .OrderBy(reading => reading.Identity.Channel)
-            .Select(reading => new MemoryChipRow(reading.Identity.Channel!.Value, Temperature(reading.Value))).ToArray();
-
-        if (!MemoryChipTemperatures.SequenceEqual(chips))
-        {
-            MemoryChipTemperatures = chips;
-        }
-
-        HasMemoryChipTemperatures = chips.Length > 0;
-
-        var hotspot = Value(SensorComponent.GpuHotspot, SensorMetric.Temperature);
-
-        CoreTemperature.Value = Temperature(Value(SensorComponent.GpuCore, SensorMetric.Temperature));
-        MemoryTemperature.Value = Temperature(Value(SensorComponent.GpuMemory, SensorMetric.Temperature));
-        HotspotTemperature.Value = Temperature(hotspot);
-        HasHotspotTemperature = hotspot.HasValue;
+        ApplyGpuReadings(readings, Valid, preferences.Fahrenheit);
 
         CoreTemperature.IsWarning = snapshot.Warnings?.States.Any(warning => warning.PluginId == PluginId
             && warning.DeviceId == devices[0] && warning is { Phase: Contracts.Warnings.WarningPhase.Active, TypeId: GenericNvidiaWarningIds.CoreTemperature }) == true;
 
         MemoryTemperature.IsWarning = snapshot.Warnings?.States.Any(warning => warning.PluginId == PluginId
             && warning.DeviceId == devices[0] && warning is { Phase: Contracts.Warnings.WarningPhase.Active, TypeId: GenericNvidiaWarningIds.MemoryTemperature }) == true;
-
-        var fans = readings
-            .Where(reading => reading.Identity is { Component: SensorComponent.GpuFan, Metric: SensorMetric.FanSpeed, Channel: > 0 })
-            .OrderBy(reading => reading.Identity.Channel).Take(2).ToArray();
-
-        Fan1.Label = fans.Length == 0 ? "Fans" : "Fan 1";
-        Fan1.Value = Fan(fans.ElementAtOrDefault(0));
-        Fan2.Value = Fan(fans.ElementAtOrDefault(1));
-        HasSecondFan = fans.Length > 1;
 
         return;
 
@@ -206,6 +156,78 @@ public sealed class GpuStatusViewModel : ObservableObject
                                                                                   && now - reading.ObservedAt <= TimeSpan.FromMilliseconds(electricalAge) ? value : null;
         }
 
+        bool Valid(SensorReading reading) => reading is { Quality: ReadingQuality.Valid, Value: { } value } && double.IsFinite(value)
+            && now - reading.ObservedAt <= TimeSpan.FromMilliseconds(_staleAfterMs);
+    }
+
+    public void ApplyCapturedReadings(SensorReading[] readings, bool fahrenheit)
+    {
+        IsUnavailable = false;
+        ApplyGpuReadings(readings, reading => reading is { Quality: ReadingQuality.Valid, Value: { } value } && double.IsFinite(value), fahrenheit);
+    }
+
+    private void ApplyGpuReadings(SensorReading[] readings, Func<SensorReading, bool> isValid, bool fahrenheit)
+    {
+        GpuUsageText = Format(Value(SensorComponent.GpuCore, SensorMetric.Utilization), "%", 0);
+        CoreVoltageText = Format(Value(SensorComponent.GpuCore, SensorMetric.Voltage) * 1000, "mV", 1);
+        BoardPowerText = Format(Value(SensorComponent.GpuBoard, SensorMetric.Power), "W", 1);
+        VramFreeText = Format(Value(SensorComponent.GpuMemory, SensorMetric.MemoryFree) / 1024, "GB", 2);
+
+        Diagnostics.Apply(Value);
+
+        CoreClock.Value = Format(Value(SensorComponent.GpuCore, SensorMetric.Clock), "MHz", 0);
+        MemoryClock.Value = Format(Value(SensorComponent.GpuMemory, SensorMetric.Clock), "MHz", 0);
+        HasCrossbarClock = ApplyDomainClock(SensorComponent.GpuCrossbar, CrossbarClock);
+        HasSystemClock = ApplyDomainClock(SensorComponent.GpuSystem, SystemClock);
+
+        var used = Value(SensorComponent.GpuMemory, SensorMetric.MemoryUsed);
+        var total = Value(SensorComponent.GpuMemory, SensorMetric.MemoryTotal);
+        var reportedVramPercent = Value(SensorComponent.GpuMemory, SensorMetric.Utilization);
+        var vramPercent = reportedVramPercent ?? (total is > 0 ? used / total * 100 : null);
+
+        if (used is { } usedMb && total is > 0 and var totalMb)
+        {
+            HasVramUsage = vramPercent is { } percent && double.IsFinite(percent);
+            VramUsagePercent = vramPercent is { } value && HasVramUsage ? Math.Clamp(value, 0, 100) : 0;
+            VramUsage.Value = $"{Format(usedMb / 1024, "GB", 2)} / {Format(totalMb / 1024, "GB", 2)} ({Format(vramPercent, "%", 0)})";
+        }
+        else
+        {
+            HasVramUsage = false;
+            VramUsagePercent = 0;
+            VramUsage.Value = "Unavailable";
+        }
+
+        var chips = readings
+            .Where(reading => reading.Identity is { Component: SensorComponent.GpuMemoryChip, Metric: SensorMetric.Temperature, Channel: > 0 } && isValid(reading))
+            .OrderBy(reading => reading.Identity.Channel)
+            .Select(reading => new MemoryChipRow(reading.Identity.Channel!.Value, Temperature(reading.Value))).ToArray();
+
+        if (!MemoryChipTemperatures.SequenceEqual(chips))
+        {
+            MemoryChipTemperatures = chips;
+        }
+
+        HasMemoryChipTemperatures = chips.Length > 0;
+
+        var hotspot = Value(SensorComponent.GpuHotspot, SensorMetric.Temperature);
+
+        CoreTemperature.Value = Temperature(Value(SensorComponent.GpuCore, SensorMetric.Temperature));
+        MemoryTemperature.Value = Temperature(Value(SensorComponent.GpuMemory, SensorMetric.Temperature));
+        HotspotTemperature.Value = Temperature(hotspot);
+        HasHotspotTemperature = hotspot.HasValue;
+
+        var fans = readings
+            .Where(reading => reading.Identity is { Component: SensorComponent.GpuFan, Metric: SensorMetric.FanSpeed, Channel: > 0 })
+            .OrderBy(reading => reading.Identity.Channel).Take(2).ToArray();
+
+        Fan1.Label = fans.Length == 0 ? "Fans" : "Fan 1";
+        Fan1.Value = Fan(fans.ElementAtOrDefault(0));
+        Fan2.Value = Fan(fans.ElementAtOrDefault(1));
+        HasSecondFan = fans.Length > 1;
+
+        return;
+
         string Fan(SensorReading? fan)
         {
             if (fan is null)
@@ -219,27 +241,23 @@ public sealed class GpuStatusViewModel : ObservableObject
             return duty is null ? rpm : $"{rpm} ({Format(duty, "%", 0)})";
         }
 
-        bool Valid(SensorReading reading) => reading is { Quality: ReadingQuality.Valid, Value: { } value } && double.IsFinite(value)
-            && now - reading.ObservedAt <= TimeSpan.FromMilliseconds(_staleAfterMs);
-
         double? Value(SensorComponent component, SensorMetric metric, int? channel = null)
         {
             var reading = readings.FirstOrDefault(reading => reading.Identity.Component == component && reading.Identity.Metric == metric
                 && reading.Identity.Channel == channel);
 
-            return reading is not null && Valid(reading) ? reading.Value : null;
+            return reading is not null && isValid(reading) ? reading.Value : null;
         }
 
         bool ApplyDomainClock(SensorComponent component, MetricViewModel metric)
         {
             var reading = readings.FirstOrDefault(item => item.Identity.Component == component && item.Identity.Metric == SensorMetric.Clock);
-            metric.Value = reading is not null && Valid(reading) ? Format(reading.Value, "MHz", 0) : "—";
+            metric.Value = reading is not null && isValid(reading) ? Format(reading.Value, "MHz", 0) : "—";
 
             return reading is not null;
         }
 
-        string Temperature(double? value) => Format(preferences.Fahrenheit ? value * 9 / 5 + 32 : value,
-            preferences.Fahrenheit ? "°F" : "°C", 1);
+        string Temperature(double? value) => FormatTemperature(value, fahrenheit);
     }
 
     public void MarkExpired(DateTimeOffset now)
@@ -257,12 +275,14 @@ public sealed class GpuStatusViewModel : ObservableObject
         _lastObservedAt = null;
         PowerText = CurrentText = VoltageText = "Unavailable";
         GpuUsageText = CoreVoltageText = "-";
+        BoardPowerText = VramFreeText = "Unavailable";
         HasCrossbarClock = HasSystemClock = false;
         MemoryChipTemperatures = [];
         HasMemoryChipTemperatures = false;
         HasVramUsage = HasHotspotTemperature = HasSecondFan = false;
         VramUsagePercent = 0;
         Fan1.Label = "Fans";
+
         Diagnostics.Clear();
 
         foreach (var metric in _metrics)
@@ -272,6 +292,8 @@ public sealed class GpuStatusViewModel : ObservableObject
         }
     }
 
-    private static string Format(double? value, string unit, int decimals) => value is { } number && double.IsFinite(number)
+    public static string FormatTemperature(double? value, bool fahrenheit) => Format(fahrenheit ? (value * 9 / 5) + 32 : value, fahrenheit ? "°F" : "°C", 1);
+
+    public static string Format(double? value, string unit, int decimals) => value is { } number && double.IsFinite(number)
         ? number.ToString("F" + decimals, CultureInfo.CurrentCulture) + (unit == "%" ? "" : " ") + unit : "Unavailable";
 }
